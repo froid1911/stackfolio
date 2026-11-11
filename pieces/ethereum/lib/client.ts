@@ -47,6 +47,18 @@ export interface ClientBundle {
 }
 
 /**
+ * A step's resolved auth bundle, or empty when the engine attached none.
+ * Every auth field is optional by design - empty means the localhost node
+ * defaults - so a missing auth must fail to the defaults, not crash on a
+ * property read.
+ */
+export function authProps(
+  auth: { props: Partial<EthereumAuth> } | undefined,
+): Partial<EthereumAuth> {
+  return auth?.props ?? {};
+}
+
+/**
  * A viem-backed bundle for the auth's RPC URL. `overrides` replaces any
  * subset — the seam the action tests use; production passes nothing.
  */

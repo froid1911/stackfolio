@@ -1,6 +1,7 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { beaconGet, beaconPost } from "../beacon.js";
 import { ethereumAuth } from "../auth.js";
+import { authProps } from "../client.js";
 import { parseJsonish } from "../jsonish.js";
 
 const FAR_FUTURE = 1n << 63n;
@@ -116,7 +117,7 @@ export const ethereumFetchValidatorsAction = createAction({
     const day = hour.slice(0, 10);
 
     const baseUrl =
-      context.auth.props.beaconUrl?.trim() || "http://127.0.0.1:5052";
+      authProps(context.auth).beaconUrl?.trim() || "http://127.0.0.1:5052";
 
     const validators: ValidatorRow[] = [];
     const balances: Array<{

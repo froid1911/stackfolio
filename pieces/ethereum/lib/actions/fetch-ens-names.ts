@@ -1,7 +1,7 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { namehash } from "viem";
 import { ethereumAuth } from "../auth.js";
-import { createClientBundle } from "../client.js";
+import { authProps, createClientBundle } from "../client.js";
 import { resolveEnsName } from "../ens.js";
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
@@ -33,7 +33,7 @@ export const ethereumFetchEnsNamesAction = createAction({
     if (!Array.isArray(parsed)) {
       throw new Error("addressesJson must be a JSON array.");
     }
-    const clients = createClientBundle(context.auth.props);
+    const clients = createClientBundle(authProps(context.auth));
     const labels: Record<string, string> = {};
     for (const entry of parsed) {
       if (typeof entry !== "string" || !ADDRESS.test(entry)) continue;

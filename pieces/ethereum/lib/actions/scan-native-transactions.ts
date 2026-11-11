@@ -1,6 +1,7 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { ethereumAuth } from "../auth.js";
 import {
+  authProps,
   createClientBundle,
   type BlockView,
   type ReceiptView,
@@ -162,7 +163,7 @@ export const ethereumScanNativeTransactionsAction = createAction({
     }
 
     const maxBlocks = props.maxBlocks ?? 500;
-    const clients = createClientBundle(context.auth.props);
+    const clients = createClientBundle(authProps(context.auth));
     const head = Number(await clients.getBlockNumber());
 
     const fromBlock =

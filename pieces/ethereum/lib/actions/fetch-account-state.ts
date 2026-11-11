@@ -1,6 +1,6 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { ethereumAuth } from "../auth.js";
-import { createClientBundle } from "../client.js";
+import { authProps, createClientBundle } from "../client.js";
 
 const WALLET_ACCOUNT_TYPE = "stackfolio/wallet-account";
 
@@ -37,7 +37,7 @@ export const ethereumFetchAccountStateAction = createAction({
         `Document ${documentId} has no address yet — set the account details first.`,
       );
     }
-    const clients = createClientBundle(context.auth.props);
+    const clients = createClientBundle(authProps(context.auth));
     const [balance, blockNumber, nonce] = await Promise.all([
       clients.getBalance(address),
       clients.getBlockNumber(),

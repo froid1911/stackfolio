@@ -1,6 +1,6 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { ethereumAuth } from "../auth.js";
-import { createClientBundle } from "../client.js";
+import { authProps, createClientBundle } from "../client.js";
 import { erc20Asset } from "../decode.js";
 import { parseBytesString } from "../ens.js";
 
@@ -87,7 +87,7 @@ export const ethereumFetchTokenMetadataAction = createAction({
       throw new Error("tokensJson must be a JSON array.");
     }
     const chainId = context.propsValue.chainId ?? 1;
-    const clients = createClientBundle(context.auth.props);
+    const clients = createClientBundle(authProps(context.auth));
 
     const tokens = [];
     for (const entry of parsed) {

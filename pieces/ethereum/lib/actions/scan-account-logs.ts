@@ -1,6 +1,6 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { ethereumAuth } from "../auth.js";
-import { createClientBundle, type ClientBundle } from "../client.js";
+import { authProps, createClientBundle, type ClientBundle } from "../client.js";
 import {
   TRANSFER_TOPIC,
   chunkRange,
@@ -161,8 +161,8 @@ export const ethereumScanAccountLogsAction = createAction({
       );
     }
     const chainId =
-      state.global?.chainId ?? (context.auth.props.chainId) ?? 1;
-    const clients = createClientBundle(context.auth.props);
+      state.global?.chainId ?? authProps(context.auth).chainId ?? 1;
+    const clients = createClientBundle(authProps(context.auth));
     const page = await scanLogsPage(clients, {
       account,
       chainId,

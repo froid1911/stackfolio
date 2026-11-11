@@ -88,18 +88,25 @@ describe("import-tokens-to-registry", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it("mints a native asset for foreign chains too", async () => {
+  it("prices a known foreign native and leaves an unknown one honest", async () => {
     get.mockResolvedValue(registryDoc([]));
 
-    await run([token("eip155:137/erc20:0x2222222222222222222222222222222222222222", 137)]);
+    await run([
+      token("eip155:137/erc20:0x2222222222222222222222222222222222222222", 137),
+      token("eip155:167000/erc20:0x3333333333333333333333333333333333333333", 167000),
+    ]);
 
     const [, , actions] = execute.mock.calls[0] as [
       string,
       string,
-      Array<{ input: { identifier: string; chainId: number; coingeckoId: string | null } }>,
+      Array<{ input: { identifier: string; chainId: number; symbol: string; coingeckoId: string | null } }>,
     ];
-    expect(actions[0].input.identifier).toBe("eip155:137/slip44:60");
-    expect(actions[0].input.chainId).toBe(137);
-    expect(actions[0].input.coingeckoId).toBeNull();
+    const poly = actions.find((a) => a.input.chainId === 137)!;
+    expect(poly.input.identifier).toBe("eip155:137/slip44:60");
+    expect(poly.input.symbol).toBe("POL");
+    expect(poly.input.coingeckoId).toBe("polygon-ecosystem-token");
+    const taiko = actions.find((a) => a.input.chainId === 167000)!;
+    expect(taiko.input.symbol).toBe("NATIVE");
+    expect(taiko.input.coingeckoId).toBeNull();
   });
 });

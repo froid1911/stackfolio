@@ -6,7 +6,7 @@ const OTHER = "0x5c647ca5e2bc5bd17c40410fcB8003d38879ae50";
 
 describe("mapEtherscanRows", () => {
   it("maps a received native transfer", () => {
-    const { events } = mapEtherscanRows(ADDR, {
+    const { events } = mapEtherscanRows(1, ADDR, {
       txs: [
         {
           hash: "0xaa",
@@ -35,8 +35,44 @@ describe("mapEtherscanRows", () => {
     });
   });
 
+  it("scopes asset ids to the chain, so Polygon USDC is not Ethereum USDC", () => {
+    const { events } = mapEtherscanRows(137, ADDR, {
+      txs: [
+        {
+          hash: "0xc1",
+          timeStamp: "1730000000",
+          from: OTHER,
+          to: ADDR,
+          value: "5",
+          gasUsed: "21000",
+          gasPrice: "1",
+          status: "1",
+        },
+      ],
+      internal: [],
+      tokentxs: [
+        {
+          hash: "0xc2",
+          timeStamp: "1730000001",
+          from: OTHER,
+          to: ADDR,
+          contractAddress: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+          tokenSymbol: "USDC",
+          value: "7",
+          decimals: "6",
+        },
+      ],
+    });
+    const assets = new Set(events.map((e) => e.asset));
+    expect(assets.has("eip155:137/slip44:60")).toBe(true);
+    expect(assets.has("eip155:137/erc20:0x3c499c542cef5e3811e1192ce70d8cc03d5c3359")).toBe(true);
+    for (const asset of assets) {
+      expect(asset.startsWith("eip155:137/")).toBe(true);
+    }
+  });
+
   it("adds the fee row for a sent successful tx and orders it after the transfer", () => {
-    const { events } = mapEtherscanRows(ADDR, {
+    const { events } = mapEtherscanRows(1, ADDR, {
       txs: [
         {
           hash: "0xbb",
@@ -73,7 +109,7 @@ describe("mapEtherscanRows", () => {
   });
 
   it("a failed sent tx yields only the fee row", () => {
-    const { events } = mapEtherscanRows(ADDR, {
+    const { events } = mapEtherscanRows(1, ADDR, {
       txs: [
         {
           hash: "0xcc",
@@ -98,7 +134,7 @@ describe("mapEtherscanRows", () => {
   });
 
   it("a zero-value successful tx yields no transfer row", () => {
-    const { events } = mapEtherscanRows(ADDR, {
+    const { events } = mapEtherscanRows(1, ADDR, {
       txs: [
         {
           hash: "0xdd",
@@ -119,7 +155,7 @@ describe("mapEtherscanRows", () => {
   });
 
   it("skips the internal msg.value mirror but keeps real internal transfers", () => {
-    const { events } = mapEtherscanRows(ADDR, {
+    const { events } = mapEtherscanRows(1, ADDR, {
       txs: [
         {
           hash: "0xee",
@@ -182,7 +218,7 @@ describe("mapEtherscanRows", () => {
   });
 
   it("maps tokentx to the CAIP-19 erc20 asset, lowercased", () => {
-    const { events } = mapEtherscanRows(ADDR, {
+    const { events } = mapEtherscanRows(1, ADDR, {
       txs: [],
       internal: [],
       tokentxs: [
@@ -206,7 +242,7 @@ describe("mapEtherscanRows", () => {
   });
 
   it("maps approvals to INFORMATIONAL/APPROVE", () => {
-    const { events } = mapEtherscanRows(ADDR, {
+    const { events } = mapEtherscanRows(1, ADDR, {
       txs: [],
       internal: [],
       tokentxs: [],
@@ -267,8 +303,8 @@ describe("mapEtherscanRows", () => {
         },
       ],
     };
-    const a = mapEtherscanRows(ADDR, input).events;
-    const b = mapEtherscanRows(ADDR, input).events;
+    const a = mapEtherscanRows(1, ADDR, input).events;
+    const b = mapEtherscanRows(1, ADDR, input).events;
     expect(a).toEqual(b);
     expect(new Set(a.map((e) => `${e.eventIdentifier}:${e.sequenceIndex}`)).size).toBe(
       a.length,

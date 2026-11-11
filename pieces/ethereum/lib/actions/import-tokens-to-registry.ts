@@ -30,9 +30,29 @@ function asTokenRow(raw: unknown): TokenRow | null {
   };
 }
 
-export function nativeIdentifier(chainId: number): string {
-  return `eip155:${chainId}/slip44:60`;
-}
+import { nativeIdentifier } from "../decode.js";
+
+export { nativeIdentifier };
+
+/**
+ * Natives we can name and price without asking anybody. Etherscan-free
+ * L2s (Arbitrum, Linea) settle in bridged ETH - same coin, same price.
+ * Anything unlisted registers honestly unnamed and unpriced.
+ */
+const NATIVE_CHAINS: Record<
+  number,
+  { symbol: string; name: string; coingeckoId: string }
+> = {
+  1: { symbol: "ETH", name: "Ether", coingeckoId: "ethereum" },
+  42161: { symbol: "ETH", name: "Ether (Arbitrum)", coingeckoId: "ethereum" },
+  59144: { symbol: "ETH", name: "Ether (Linea)", coingeckoId: "ethereum" },
+  137: {
+    symbol: "POL",
+    name: "Polygon Ecosystem Token",
+    coingeckoId: "polygon-ecosystem-token",
+  },
+  42220: { symbol: "CELO", name: "Celo", coingeckoId: "celo" },
+};
 
 /**
  * File scanned tokens (and each chain's native coin) onto the asset
@@ -95,16 +115,17 @@ export const ethereumImportTokensToRegistryAction = createAction({
       const identifier = nativeIdentifier(chainId);
       if (held.has(identifier)) continue;
       held.add(identifier);
+      const known = NATIVE_CHAINS[chainId];
       actions.push(
         toGlobalAction("REGISTER_ASSET", {
           id: `native-${chainId}`,
           identifier,
-          symbol: "ETH",
-          name: chainId === 1 ? "Ether" : `Chain ${chainId} native`,
+          symbol: known?.symbol ?? "NATIVE",
+          name: known?.name ?? `Chain ${chainId} native`,
           decimals: 18,
           kind: "NATIVE",
           chainId,
-          coingeckoId: chainId === 1 ? "ethereum" : null,
+          coingeckoId: known?.coingeckoId ?? null,
           custom: false,
           addedAt: p.addedAt,
         }),

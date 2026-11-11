@@ -1,3 +1,4 @@
+import { erc20Asset, nativeIdentifier } from "./decode.js";
 import type { EtherscanRow } from "./etherscan.js";
 
 /**
@@ -18,8 +19,6 @@ import type { EtherscanRow } from "./etherscan.js";
  *   hash, so re-imports dedupe and reruns are no-ops.
  */
 
-const NATIVE_ASSET = "eip155:1/slip44:60";
-
 export interface LedgerEventRow {
   eventIdentifier: string;
   sequenceIndex: number;
@@ -36,15 +35,12 @@ function unixToIso(seconds: string | undefined): string {
   return new Date(Number(seconds ?? "0") * 1000).toISOString();
 }
 
-function erc20Asset(contractAddress: string | undefined): string {
-  return `eip155:1/erc20:${(contractAddress ?? "").toLowerCase()}`;
-}
-
 function lower(address: string | undefined): string {
   return (address ?? "").toLowerCase();
 }
 
 export function mapEtherscanRows(
+  chainId: number,
   address: string,
   input: {
     txs: EtherscanRow[];
@@ -54,6 +50,7 @@ export function mapEtherscanRows(
   },
 ): { events: LedgerEventRow[] } {
   const self = lower(address);
+  const nativeAsset = nativeIdentifier(chainId);
   const groups = new Map<string, LedgerEventRow[]>();
   const push = (eventIdentifier: string, row: Omit<LedgerEventRow, "sequenceIndex">) => {
     const rows = groups.get(eventIdentifier) ?? [];
@@ -74,7 +71,7 @@ export function mapEtherscanRows(
         timestamp: unixToIso(tx.timeStamp),
         type: sent ? "SPEND" : "RECEIVE",
         subtype: "NONE",
-        asset: NATIVE_ASSET,
+        asset: nativeAsset,
         amount: value.toString(),
         counterparty: lower(sent ? tx.to : tx.from),
       });
@@ -87,7 +84,7 @@ export function mapEtherscanRows(
         timestamp: unixToIso(tx.timeStamp),
         type: "SPEND",
         subtype: "FEE",
-        asset: NATIVE_ASSET,
+        asset: nativeAsset,
         amount: fee.toString(),
         counterparty: lower(tx.to),
         notes: "gas",
@@ -111,7 +108,7 @@ export function mapEtherscanRows(
       timestamp: unixToIso(trace.timeStamp),
       type: sent ? "SPEND" : "RECEIVE",
       subtype: "NONE",
-      asset: NATIVE_ASSET,
+      asset: nativeAsset,
       amount: value.toString(),
       counterparty: lower(sent ? trace.to : trace.from),
       notes: "internal",
@@ -131,7 +128,7 @@ export function mapEtherscanRows(
       timestamp: unixToIso(row.timeStamp),
       type: sent ? "SPEND" : "RECEIVE",
       subtype: "NONE",
-      asset: erc20Asset(row.contractAddress),
+      asset: erc20Asset(chainId, row.contractAddress ?? ""),
       amount: value.toString(),
       counterparty: lower(sent ? row.to : row.from),
     });
@@ -145,7 +142,7 @@ export function mapEtherscanRows(
       timestamp: unixToIso(row.approvalDate ?? row.timeStamp),
       type: "INFORMATIONAL",
       subtype: "APPROVE",
-      asset: erc20Asset(row.tokenContract ?? row.tokenContractAddress),
+      asset: erc20Asset(chainId, row.tokenContract ?? row.tokenContractAddress ?? ""),
       amount: row.value ?? "0",
       counterparty: lower(row.spender),
       notes: row.tokenSymbol ?? row.tokenName ?? undefined,

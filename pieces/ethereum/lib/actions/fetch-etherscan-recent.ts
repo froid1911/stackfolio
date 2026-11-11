@@ -29,6 +29,7 @@ export async function fetchEtherscanRecent(
   client: RecentClient,
   opts: {
     address: string;
+    chainId: number;
     fromBlock: number;
     confirmations: number;
     pageSize: number;
@@ -72,7 +73,7 @@ export async function fetchEtherscanRecent(
     address: opts.address,
     tag: "latest",
   })) as string;
-  const { events } = mapEtherscanRows(opts.address, {
+  const { events } = mapEtherscanRows(opts.chainId, opts.address, {
     txs,
     internal,
     tokentxs,
@@ -149,6 +150,7 @@ export const ethereumFetchEtherscanRecentAction = createAction({
       (cursorBlock === null || cursorBlock === undefined ? 0 : cursorBlock + 1);
     return fetchEtherscanRecent(client, {
       address,
+      chainId: global.chainId ?? 1,
       fromBlock,
       confirmations: props.confirmations ?? 9,
       pageSize: props.pageSize ?? 10_000,

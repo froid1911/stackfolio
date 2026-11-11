@@ -32,6 +32,7 @@ export async function fetchEtherscanHistory(
   client: HistoryClient,
   opts: {
     address: string;
+    chainId: number;
     startBlock: number;
     confirmations: number;
     windowBlocks: number;
@@ -96,7 +97,7 @@ export async function fetchEtherscanHistory(
     const internal = await grab("internal", "txlistinternal");
     const tokentxs = await grab("tokens", "tokentx");
     const approvals = await grab("approvals", "tokenApprovals");
-    const { events } = mapEtherscanRows(opts.address, {
+    const { events } = mapEtherscanRows(opts.chainId, opts.address, {
       txs,
       internal,
       tokentxs,
@@ -194,6 +195,7 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
       props.startBlock ?? (cursor === null || cursor === undefined ? 0 : cursor);
     const walk = {
       address,
+      chainId: global.chainId ?? 1,
       confirmations: props.confirmations ?? 9,
       windowBlocks: props.windowBlocks ?? 100_000,
       pageSize: props.pageSize ?? 10_000,

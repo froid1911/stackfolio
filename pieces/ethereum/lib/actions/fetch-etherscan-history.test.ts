@@ -51,6 +51,7 @@ describe("fetchEtherscanHistory", () => {
     const { client } = scriptClient({ head: 200_000, txs: [TX] });
     const out = await fetchEtherscanHistory(client, {
       address: ADDR,
+      chainId: 1,
       startBlock: 0,
       confirmations: 9,
       windowBlocks: 100_000,
@@ -69,6 +70,7 @@ describe("fetchEtherscanHistory", () => {
     const { client, calls } = scriptClient({ head: 50_000 });
     const out = await fetchEtherscanHistory(client, {
       address: ADDR,
+      chainId: 1,
       startBlock: 49_992,
       confirmations: 9,
       windowBlocks: 100_000,
@@ -87,6 +89,7 @@ describe("fetchEtherscanHistory", () => {
     });
     const out = await fetchEtherscanHistory(client, {
       address: ADDR,
+      chainId: 1,
       startBlock: 0,
       confirmations: 9,
       windowBlocks: 100_000,
@@ -109,6 +112,7 @@ describe("fetchEtherscanHistory", () => {
     await expect(
       fetchEtherscanHistory(client, {
         address: ADDR,
+      chainId: 1,
         startBlock: 0,
         confirmations: 9,
         windowBlocks: 100_000,
@@ -135,6 +139,7 @@ describe("fetchEtherscanHistory", () => {
     });
     const out = await fetchEtherscanHistory(client, {
       address: ADDR,
+      chainId: 1,
       startBlock: 0,
       confirmations: 9,
       windowBlocks: 100_000,
@@ -151,6 +156,7 @@ describe("fetchEtherscanHistory", () => {
     const { client, calls } = scriptClient({ head: 300_000, txs: [TX] });
     const out = await fetchEtherscanHistory(client, {
       address: ADDR,
+      chainId: 1,
       startBlock: 0,
       confirmations: 9,
       windowBlocks: 100_000,
@@ -169,6 +175,7 @@ describe("fetchEtherscanHistory", () => {
     const { client, calls } = scriptClient({ head: 500_000, txs: [TX] });
     const out = await fetchEtherscanHistory(client, {
       address: ADDR,
+      chainId: 1,
       startBlock: 0,
       confirmations: 9,
       windowBlocks: 100_000,

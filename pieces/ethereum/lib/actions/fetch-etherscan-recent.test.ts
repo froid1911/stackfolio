@@ -53,6 +53,7 @@ describe("fetchEtherscanRecent", () => {
     });
     const out = await fetchEtherscanRecent(client, {
       address: ADDR,
+      chainId: 1,
       fromBlock: 90,
       confirmations: 9,
       pageSize: 10_000,
@@ -67,6 +68,7 @@ describe("fetchEtherscanRecent", () => {
     const { client } = scriptClient({ head: 95, balance: "0x1" });
     const out = await fetchEtherscanRecent(client, {
       address: ADDR,
+      chainId: 1,
       fromBlock: 90,
       confirmations: 9,
       pageSize: 10_000,
@@ -84,6 +86,7 @@ describe("fetchEtherscanRecent", () => {
     });
     const out = await fetchEtherscanRecent(client, {
       address: ADDR,
+      chainId: 1,
       fromBlock: 90,
       confirmations: 9,
       pageSize: 10_000,
@@ -104,6 +107,7 @@ describe("fetchEtherscanRecent", () => {
     await expect(
       fetchEtherscanRecent(client, {
         address: ADDR,
+      chainId: 1,
         fromBlock: 90,
         confirmations: 9,
         pageSize: 10_000,

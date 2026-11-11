@@ -18,6 +18,11 @@ export function erc20Asset(chainId: number, token: string): string {
   return `eip155:${chainId}/erc20:${token.toLowerCase()}`;
 }
 
+/** CAIP-19-style identifier of a chain's native coin, as the registry stores it. */
+export function nativeIdentifier(chainId: number): string {
+  return `eip155:${chainId}/slip44:60`;
+}
+
 /** The uint256 payload of a Transfer log as an unsigned decimal string. */
 export function amountFromData(data: string): string {
   return BigInt(data).toString();

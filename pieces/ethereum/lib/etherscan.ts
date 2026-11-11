@@ -9,6 +9,10 @@
  * never part of any message that leaves this file.
  */
 
+// Shared pacing and per-key gates so Etherscan and Blockscout clients
+// meter by key, the way the providers meter.
+import { keyGates, RETRY_DELAYS_MS } from "./gate.js";
+
 export type EtherscanRow = Record<string, string | undefined>;
 
 export class EtherscanError extends Error {
@@ -20,16 +24,6 @@ export class EtherscanError extends Error {
     this.name = "EtherscanError";
   }
 }
-
-const RETRY_DELAYS_MS = [2_000, 8_000, 32_000];
-
-/**
- * One call gate per API key, process-wide. The free plan allows five
- * calls per second per key across all chains, so clients built for
- * different chains (or different runs in the same worker) must share
- * the spacing, not each pace themselves.
- */
-const keyGates = new Map<string, Promise<void>>();
 
 interface Envelope {
   status?: string;

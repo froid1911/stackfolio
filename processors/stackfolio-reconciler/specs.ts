@@ -119,16 +119,19 @@ const firedAt = "{{trigger.payload.firedAt}}";
  * cursor, so quiet minutes no-op instead of tripping the regression
  * guard.
  */
-export function liveEtherscanSpec(walletDocumentId: string): WorkflowSpec {
+export function liveEtherscanSpec(
+  walletDocumentId: string,
+  provider: "etherscan" | "blockscout" = "etherscan",
+): WorkflowSpec {
   return {
-    key: `live-etherscan-${walletDocumentId}`,
-    displayName: `Live Etherscan ${walletDocumentId.slice(0, 8)}`,
+    key: `live-${provider}-${walletDocumentId}`,
+    displayName: `Live ${provider[0].toUpperCase()}${provider.slice(1)} ${walletDocumentId.slice(0, 8)}`,
     trigger: { kind: "interval", seconds: 120 },
     steps: [
       {
         name: "poll",
         piece: "ethereum",
-        action: "fetch-etherscan-recent",
+        action: provider === "etherscan" ? "fetch-etherscan-recent" : "fetch-blockscout-recent",
         timeoutSeconds: 120,
         config: { accountDocumentId: walletDocumentId },
       },
@@ -162,16 +165,19 @@ export function liveEtherscanSpec(walletDocumentId: string): WorkflowSpec {
  * walk at DONE. Plan-gated categories skip with a note; nothing else
  * stops a window from importing.
  */
-export function etherscanBackfillSpec(walletDocumentId: string): WorkflowSpec {
+export function etherscanBackfillSpec(
+  walletDocumentId: string,
+  provider: "etherscan" | "blockscout" = "etherscan",
+): WorkflowSpec {
   return {
-    key: `etherscan-backfill-${walletDocumentId}`,
-    displayName: `Etherscan backfill ${walletDocumentId.slice(0, 8)}`,
+    key: `${provider}-backfill-${walletDocumentId}`,
+    displayName: `${provider[0].toUpperCase()}${provider.slice(1)} backfill ${walletDocumentId.slice(0, 8)}`,
     trigger: { kind: "interval", seconds: 60 },
     steps: [
       {
         name: "walk",
         piece: "ethereum",
-        action: "fetch-etherscan-history",
+        action: provider === "etherscan" ? "fetch-etherscan-history" : "fetch-blockscout-history",
         timeoutSeconds: 300,
         config: { accountDocumentId: walletDocumentId },
       },

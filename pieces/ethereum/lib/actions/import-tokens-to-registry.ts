@@ -52,6 +52,8 @@ const NATIVE_CHAINS: Record<
     coingeckoId: "polygon-ecosystem-token",
   },
   42220: { symbol: "CELO", name: "Celo", coingeckoId: "celo" },
+  10: { symbol: "ETH", name: "Ether (OP Mainnet)", coingeckoId: "ethereum" },
+  100: { symbol: "xDAI", name: "xDai", coingeckoId: "xdai" },
 };
 
 /**

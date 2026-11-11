@@ -24,6 +24,11 @@ import {
   stakingSpec,
 } from "./specs.js";
 
+import {
+  providerForChain,
+  unsupportedChainMessage,
+} from "../../pieces/ethereum/lib/providers.js";
+
 export const PORTFOLIO_TYPE = "stackfolio/portfolio";
 export const WALLET_TYPE = "stackfolio/wallet-account";
 export const REGISTRY_TYPE = "stackfolio/asset-registry";
@@ -196,11 +201,23 @@ export async function reconcilePortfolio(
   const stallKeys = new Map<WorkflowSpec, string>();
   for (const wallet of wallets) {
     if (wallet.state.ignored) continue;
-    const live = liveEtherscanSpec(wallet.id);
+    const chainId = wallet.state.chainId ?? 1;
+    const provider = providerForChain(chainId);
+    if (provider === null) {
+      issues.push({
+        code: "UNSUPPORTED_CHAIN",
+        severity: "WARNING",
+        subject: wallet.id,
+        message: `Wallet ${wallet.state.label ?? wallet.state.address ?? wallet.id.slice(0, 8)}: ${unsupportedChainMessage(chainId)}`,
+      });
+      continue;
+    }
+    const live = liveEtherscanSpec(wallet.id, provider);
     specs.push(live);
     stallKeys.set(live, wallet.state.cursor?.lastRunAt ?? "never");
     let backfill = wallet.state.backfill;
     if (
+      provider === "etherscan" &&
       backfill &&
       backfill.state === "DONE" &&
       (backfill.startBlock ?? 0) !== 0
@@ -223,7 +240,7 @@ export async function reconcilePortfolio(
       backfill = { state: "NATIVE", startBlock: 0, nextBlock: 0 };
     }
     if (!backfill || backfill.state !== "DONE") {
-      const walk = etherscanBackfillSpec(wallet.id);
+      const walk = etherscanBackfillSpec(wallet.id, provider);
       specs.push(walk);
       stallKeys.set(walk, String(backfill?.nextBlock ?? 0));
     }

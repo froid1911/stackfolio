@@ -141,3 +141,49 @@
 - [ ] **Step 3:** Watch `frankp.eth`: full lifetime rows arrive; existing two `withdrawal-*` ledger rows untouched (assert total grows, those two ids never duplicated); approvals land as INFORMATIONAL if any exist.
 - [ ] **Step 4:** Live round: send nothing, verify `lastNativeScanBlock` advances and `Open issues` stays 0; kill the key env (temporarily corrupt it via UI) once -> expect exactly one BLOCKING issue with the Task 1 error wording (Review Focus 1), restore.
 - [ ] **Step 5:** Update README screenshots (dashboard/transactions now showing multi-year history), commit `docs: etherscan history screenshots`, push both refs.
+
+---
+
+## Increment: multi-provider import (Etherscan free + Blockscout)
+
+Etherscan's free tier does not cover every chain (OP Mainnet, Gnosis,
+Base, BSC, Avalanche are paid there). Blockscout's hosted gateway
+(`https://api.blockscout.com/{chainid}/api/v2`) with the user's key
+answers OP (10) and Gnosis (100) that Etherscan charges for; BSC and
+Avax are not Blockscout chains; Base is plan-gated on both - honest
+"unsupported", not a silent gap.
+
+Verified live (this key, this hour): gateway OK on 1, 10, 100, 42161,
+480, 130, 42220, 11155111; plan-gated 137/8453/324; unsupported 56,
+43114, 59144, 146, 999, 5000, 534, 80094, 252, 167000.
+API v2 shape: newest-first cursor pages (`next_page_params` echoed
+back as query params); NO block or date filters (start_block,
+filter_by_date_* silently ignored) - so Blockscout backfill is a
+descending crawl inside the walk budget, re-importing what it re-sees
+(hash-keyed import makes that cheap and correct), `done` when the last
+page is reached. Live poll = crawl until below the cursor block.
+
+### Task 8: Blockscout provider
+
+**Files:** `pieces/ethereum/lib/blockscout.ts` (client: cursor pages,
+gate per key, BlockscoutError), `providers.ts` (chain -> provider
+table + honest message for unsupported), `blockscout-rows.ts` (items
+-> LedgerEventRow, chain-scoped ids), `actions/fetch-blockscout-history.ts`,
+`actions/fetch-blockscout-recent.ts`, `auth.ts` (+`blockscoutApiKey`
+property), `actions/import-tokens-to-registry.ts` (natives: OP=ETH,
+Gnosis=xDAI), specs/reconcile (per-wallet provider choice, step names
+from the table), `processors/stackfolio-reconciler` tests.
+
+- [ ] Step 1: providers.ts table + tests (free-etherscan chains, the
+      two blockscout chains, null + message for Base/BSC/Avax).
+- [ ] Step 2: blockscout.ts client + tests (cursor pagination, 429
+      transient, key-gate shared, error categories).
+- [ ] Step 3: blockscout-rows.ts + tests (same taxonomy as etherscan-
+      rows: value, fee, internal, erc20 transfers; error txs).
+- [ ] Step 4: history + recent actions + tests (descending crawl,
+      budget, cursor semantics, done at last page).
+- [ ] Step 5: auth property + natives table; reconciler picks the
+      provider's action names per wallet chainId; drift repair follows
+      the same specs.
+- [ ] Step 6: gates; set `blockscoutApiKey` on the bound connection;
+      create an OP or Gnosis wallet live and watch its rows.

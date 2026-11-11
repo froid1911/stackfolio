@@ -112,13 +112,13 @@ describe("createEtherscanClient", () => {
       createEtherscanClient({
         apiKey: "gate-test-shared-key",
         baseUrl: "https://x/api",
-        fetchImpl: (async () => {
+        fetchImpl: async () => {
           events.push("fetch");
           return new Response(
             JSON.stringify({ status: "1", result: [], message: "OK" }),
             { status: 200, headers: { "content-type": "application/json" } },
           );
-        }) as unknown as typeof fetch,
+        },
         sleepFn: async () => {
           events.push("sleep");
         },
@@ -145,11 +145,11 @@ describe("createEtherscanClient", () => {
       fetchImpl: impl,
       sleepFn: noSleep,
     });
-    const rows = (await client.call({
+    const rows = await client.call({
       module: "account",
       action: "txlist",
       address: "0xabc",
-    })) as EtherscanRow[];
+    });
     expect(rows).toEqual([]);
   });
 

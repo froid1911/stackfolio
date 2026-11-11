@@ -49,15 +49,20 @@ Live against a local Geth node - real wallet, real chain data.
 
 ## Nodes and history
 
-Portfolio chain data - history and live - comes from the Etherscan V2
-API with your own API key, kept on the ethereum connection document and
-never echoed anywhere else. History imports from block 0, so no archive
-node is needed: every wallet's complete lifetime lands in the ledger,
-and events are keyed by transaction hash, so imports are idempotent and
+Portfolio chain data - history and live - comes from indexers with your
+keys kept on the ethereum connection document, never echoed anywhere
+else. Etherscan V2 answers the chains its free plan covers (Ethereum,
+Polygon, Arbitrum, Linea, Celo, Sonic, World, and more); the Blockscout
+gateway answers the ones Etherscan charges for and Blockscout serves
+(OP Mainnet, Gnosis). A chain neither covers for free - Base, BSC,
+Avalanche with current plans - is reported as unsupported instead of
+imported half-way. History imports from block 0, so no archive node is
+needed: every wallet's complete lifetime lands in the ledger, and
+events are keyed by transaction hash, so imports are idempotent and
 re-run safely. Your own `geth --http` (127.0.0.1:8545) still serves the
 private parts - ENS lookups, the validator's world - and the local beacon
-API (127.0.0.1:5052) serves staking reads. Other than Etherscan and
-CoinGecko (prices), nothing talks to the internet.
+API (127.0.0.1:5052) serves staking reads. Other than Etherscan,
+Blockscout and CoinGecko (prices), nothing talks to the internet.
 
 ## Commands
 

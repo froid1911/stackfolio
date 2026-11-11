@@ -12,6 +12,8 @@ import { ethereumImportPricesToBookAction } from "./lib/actions/import-prices-to
 import { ethereumImportStakingToDocAction } from "./lib/actions/import-staking-to-doc.js";
 import { ethereumImportTokensToRegistryAction } from "./lib/actions/import-tokens-to-registry.js";
 import { ethereumScanAccountLogsAction } from "./lib/actions/scan-account-logs.js";
+import { ethereumFetchBlockscoutHistoryAction } from "./lib/actions/fetch-blockscout-history.js";
+import { ethereumFetchBlockscoutRecentAction } from "./lib/actions/fetch-blockscout-recent.js";
 import { ethereumScanNativeTransactionsAction } from "./lib/actions/scan-native-transactions.js";
 import { ethereumSnapshotPortfolioAction } from "./lib/actions/snapshot-portfolio.js";
 import { ethereumOnIntervalTrigger } from "./lib/triggers/on-interval.js";
@@ -36,6 +38,8 @@ export const ethereum = createPiece({
     ethereumFetchPricesAction,
     ethereumFetchEtherscanHistoryAction,
     ethereumFetchEtherscanRecentAction,
+    ethereumFetchBlockscoutHistoryAction,
+    ethereumFetchBlockscoutRecentAction,
     ethereumFetchValidatorsAction,
     ethereumImportEventsToWalletAccountAction,
     ethereumImportTokensToRegistryAction,

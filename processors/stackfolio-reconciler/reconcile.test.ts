@@ -378,6 +378,45 @@ describe("reconcilePortfolio", () => {
     expect(resets).toEqual([]);
     expect(fake.created.map((c) => c.key)).toContain("etherscan-backfill-w1");
   });
+
+  it("routes a Blockscout chain to Blockscout actions", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [wallet("w1", { chainId: 10 })];
+    fake.connectionStatus["eth-1"] = "OK";
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: [] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+    const live = fake.created.find((c) => c.key === "live-blockscout-w1");
+    expect(live).toBeDefined();
+    const wiring = JSON.stringify(live?.actions);
+    expect(wiring).toContain("fetch-blockscout-recent");
+    expect(wiring).not.toContain("fetch-etherscan-recent");
+  });
+
+  it("warns, and builds nothing, for a chain no free plan covers", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [wallet("w1", { chainId: 8453, label: "Base user" })];
+    fake.connectionStatus["eth-1"] = "OK";
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: [] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+    const check = fake.dispatched
+      .flatMap((d) => d.actions)
+      .find((a) => (a as { type: string }).type === "RECORD_CHECK") as {
+      input: { issues: Array<{ code: string; message: string }> };
+    };
+    const unsupported = check.input.issues.find(
+      (i) => i.code === "UNSUPPORTED_CHAIN",
+    );
+    expect(unsupported?.message).toContain("Base");
+    expect(fake.created.filter((c) => c.key.includes("w1"))).toEqual([]);
+  });
 });
 
 /** Same doc builder, by keyword: the reducers above need real inputs. */

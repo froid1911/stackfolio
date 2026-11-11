@@ -41,6 +41,12 @@ export const ethereumAuth = PieceAuth.CustomAuth({
       description: "Override for mirrors; defaults to https://api.etherscan.io/v2/api.",
       required: false,
     }),
+    blockscoutApiKey: Property.ShortText({
+      displayName: "Blockscout API key",
+      description:
+        "Key for the Blockscout hosted gateway (api.blockscout.com) - answers the chains Etherscan's free plan charges for (OP Mainnet, Gnosis). Kept on this connection.",
+      required: false,
+    }),
   },
   validate: async ({ auth }) => {
     if (auth.etherscanApiKey !== undefined && auth.etherscanApiKey.trim() !== "") {
@@ -115,4 +121,20 @@ export function etherscanConfig(auth: {
     baseUrl:
       auth.etherscanBaseUrl?.trim() || DEFAULT_ETHERSCAN_BASE_URL,
   };
+}
+
+/**
+ * The Blockscout gateway settings from a connection's auth. Same rule
+ * as Etherscan: the key lives on the connection and is never echoed.
+ */
+export function blockscoutConfig(auth: {
+  blockscoutApiKey?: string;
+}): { apiKey: string } {
+  const apiKey = auth.blockscoutApiKey?.trim() ?? "";
+  if (apiKey === "") {
+    throw new Error(
+      "Blockscout API key is not set - set blockscoutApiKey on the ethereum connection (Stackfolio reads it from there)",
+    );
+  }
+  return { apiKey };
 }

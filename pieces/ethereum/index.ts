@@ -18,6 +18,7 @@ import { ethereumFetchAnkrHistoryAction } from "./lib/actions/fetch-ankr-history
 import { ethereumFetchAnkrRecentAction } from "./lib/actions/fetch-ankr-recent.js";
 import { ethereumScanNativeTransactionsAction } from "./lib/actions/scan-native-transactions.js";
 import { ethereumSnapshotPortfolioAction } from "./lib/actions/snapshot-portfolio.js";
+import { ethereumSyncHyperliquidAction } from "./lib/actions/sync-hyperliquid.js";
 import { ethereumOnIntervalTrigger } from "./lib/triggers/on-interval.js";
 import { ethereumAuth } from "./lib/auth.js";
 import { ETHEREUM_LOGO } from "./lib/logo.js";
@@ -51,6 +52,7 @@ export const ethereum = createPiece({
     ethereumImportPricesToBookAction,
     ethereumHoldingsFromLedgerAction,
     ethereumSnapshotPortfolioAction,
+    ethereumSyncHyperliquidAction,
   ],
   triggers: [ethereumOnIntervalTrigger],
 });

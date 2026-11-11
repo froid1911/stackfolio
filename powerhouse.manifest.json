@@ -26,6 +26,10 @@
     {
       "id": "stackfolio/price-book",
       "name": "Price Book"
+    },
+    {
+      "id": "stackfolio/hyperliquid-account",
+      "name": "Hyperliquid Account"
     }
   ],
   "apps": [

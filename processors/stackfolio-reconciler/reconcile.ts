@@ -19,6 +19,7 @@ import {
   buildWorkflow,
   disableAction,
   etherscanBackfillSpec,
+  hyperliquidSpec,
   liveEtherscanSpec,
   pricesSpec,
   stakingSpec,
@@ -34,6 +35,7 @@ export const WALLET_TYPE = "stackfolio/wallet-account";
 export const REGISTRY_TYPE = "stackfolio/asset-registry";
 export const PRICE_BOOK_TYPE = "stackfolio/price-book";
 export const STAKING_TYPE = "stackfolio/eth-staking";
+export const HYPERLIQUID_TYPE = "stackfolio/hyperliquid-account";
 export const CONNECTION_TYPE = "powerhouse/connection";
 
 /** What the pass could not do; `subject` names the document, if any. */
@@ -174,6 +176,7 @@ export async function reconcilePortfolio(
   const registry = await io.findSingleton(REGISTRY_TYPE);
   const priceBook = await io.findSingleton(PRICE_BOOK_TYPE);
   const staking = await io.findSingleton(STAKING_TYPE);
+  const hyperliquid = await io.findSingleton(HYPERLIQUID_TYPE);
   if (!registry) {
     issues.push({
       code: "MISSING_REGISTRY",
@@ -271,6 +274,9 @@ export async function reconcilePortfolio(
         autoSnapshotEnabled: s.autoSnapshot.enabled,
       }),
     );
+  }
+  if (hyperliquid) {
+    specs.push(hyperliquidSpec(hyperliquid.id));
   }
 
   // Every spec has at least one step that reads or writes documents, and

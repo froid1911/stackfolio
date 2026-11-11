@@ -54,4 +54,5 @@ export interface EthereumAuth {
   etherscanBaseUrl?: string;
   blockscoutApiKey?: string;
   ankrApiKey?: string;
+  hyperliquidUrl?: string;
 }

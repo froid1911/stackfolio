@@ -179,6 +179,28 @@ describe("reconcilePortfolio", () => {
     ]);
   });
 
+  it("adds the Hyperliquid sync workflow when a Hyperliquid document exists", async () => {
+    const fake = new FakeIO();
+    fake.singletons["stackfolio/hyperliquid-account"] = {
+      id: "h1",
+      name: "Hyperliquid",
+    };
+    const doc = portfolioDocWith({ grant: true });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+
+    expect(fake.created.map((c) => c.key)).toContain("hyperliquid-sync");
+    const built = fake.created.find((c) => c.key === "hyperliquid-sync");
+    const actions = built!.actions as {
+      type: string;
+      input?: { actionName?: string; config?: Record<string, unknown> };
+    }[];
+    const step = actions.find((a) => a.type === "ADD_STEP");
+    expect(step?.input).toMatchObject({
+      actionName: "sync-hyperliquid",
+      config: { hyperliquidDocumentId: "h1" },
+    });
+  });
+
   it("does nothing when the drive already matches the portfolio", async () => {
     const fake = new FakeIO();
     fake.wallets = [wallet("w1")];

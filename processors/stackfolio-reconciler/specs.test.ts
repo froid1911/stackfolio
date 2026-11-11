@@ -5,7 +5,9 @@ import {
   etherscanBackfillSpec,
   liveEtherscanSpec,
   pricesSpec,
+  hyperliquidSpec,
   stakingSpec,
+  connectionOf,
   withPublish,
   type Connections,
   type WorkflowSpec,
@@ -157,5 +159,24 @@ describe("specs", () => {
     expect(statusAt).toBe(publishAt + 1); // policy, publish, then status
     const publish = repaired[publishAt] as { input: Record<string, unknown> };
     expect(publish.input).toEqual({ publishedAt: "2026-11-12T00:00:00.000Z" });
+  });
+  it("syncs every Hyperliquid account the document tracks", () => {
+    const spec = hyperliquidSpec("h1");
+    expect(spec.key).toBe("hyperliquid-sync");
+    expect(spec.trigger).toEqual({ kind: "interval", seconds: 900 });
+    expect(spec.steps).toHaveLength(1);
+    expect(spec.steps[0]).toMatchObject({
+      piece: "ethereum",
+      action: "sync-hyperliquid",
+      config: {
+        hyperliquidDocumentId: "h1",
+        ranAt: "{{trigger.payload.firedAt}}",
+      },
+    });
+    // The step writes documents: it needs the reactor connection.
+    expect(connectionOf(spec.steps[0], connections)).toEqual({
+      connectionId: "eth-1",
+      reactorConnectionId: "reactor-1",
+    });
   });
 });

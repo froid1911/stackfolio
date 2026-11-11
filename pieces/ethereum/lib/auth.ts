@@ -53,6 +53,12 @@ export const ethereumAuth = PieceAuth.CustomAuth({
         "Key for the Ankr multichain API (rpc.ankr.com) - answers Base, BNB Smart Chain and Avalanche, the chains the other indexers' free plans refuse. Kept on this connection.",
       required: false,
     }),
+    hyperliquidUrl: Property.ShortText({
+      displayName: "Hyperliquid info URL",
+      description:
+        "Override for the Hyperliquid public info API; defaults to https://api.hyperliquid.xyz.",
+      required: false,
+    }),
   },
   validate: async ({ auth }) => {
     if (auth.etherscanApiKey !== undefined && auth.etherscanApiKey.trim() !== "") {

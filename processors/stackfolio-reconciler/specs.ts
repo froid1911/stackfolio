@@ -332,6 +332,33 @@ export function stakingSpec(
   };
 }
 
+/**
+ * The Hyperliquid round, a quarter hour apart: refresh every account the
+ * Hyperliquid account document tracks (the document holds the address
+ * list; the walk adds nothing). Addresses without Hyperliquid activity
+ * answer empty and cost one round each - the list is deliberately the
+ * user's own, not derived from the wallets.
+ */
+export function hyperliquidSpec(hyperliquidDocumentId: string): WorkflowSpec {
+  return {
+    key: "hyperliquid-sync",
+    displayName: "Hyperliquid sync",
+    trigger: { kind: "interval", seconds: 900 },
+    steps: [
+      {
+        name: "sync",
+        piece: "ethereum",
+        action: "sync-hyperliquid",
+        config: {
+          hyperliquidDocumentId,
+          ranAt: firedAt,
+        },
+        timeoutSeconds: 240,
+      },
+    ],
+  };
+}
+
 /** Switches a workflow off, leaving who published it as it is. */
 export function disableAction() {
   return wf.setWorkflowStatus({ status: "DISABLED" });

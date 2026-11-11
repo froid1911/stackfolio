@@ -131,7 +131,7 @@ describe("import-events-to-wallet-account", () => {
       ...baseProps,
       eventsJson: "[]",
       backfillDone: true,
-      backfillNextBlockJson: "250",
+      backfillNextBlock: 250,
     });
 
     const [, , actions] = execute.mock.calls[0] as [
@@ -164,7 +164,7 @@ describe("import-events-to-wallet-account", () => {
       ...baseProps,
       eventsJson: "[]",
       backfillDone: false,
-      backfillNextBlockJson: "1100100",
+      backfillNextBlock: 1100100,
     });
 
     const [, , actions] = execute.mock.calls[0] as [

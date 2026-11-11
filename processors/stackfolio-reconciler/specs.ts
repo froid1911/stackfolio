@@ -213,7 +213,7 @@ export function nativeBackfillSpec(walletDocumentId: string): WorkflowSpec {
           importedAt: firedAt,
           eventsJson: "{{steps.walk.output.rows}}",
           backfillDone: "{{steps.walk.output.done}}",
-          backfillNextBlockJson: "{{steps.walk.output.nextBlock}}",
+          backfillNextBlock: "{{steps.walk.output.nextBlock}}",
           scanProgressJson: {
             lastNativeScanBlock: "{{steps.walk.output.nextBlock}}",
             ranAt: firedAt,

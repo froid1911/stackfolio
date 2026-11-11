@@ -78,10 +78,10 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
       required: false,
       defaultValue: false,
     }),
-    backfillNextBlockJson: Property.Json({
-      displayName: "Backfill cursor (JSON)",
+    backfillNextBlock: Property.Number({
+      displayName: "Backfill cursor (next block)",
       description:
-        "The walk step's nextBlock as a JSON number: advances backfill.nextBlock so the next run continues instead of repeating the window.",
+        "The walk step's nextBlock: advances backfill.nextBlock so the next run continues instead of repeating the window.",
       required: false,
     }),
   },
@@ -154,13 +154,7 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
         }),
       );
     }
-    const backfillNext =
-      p.backfillNextBlockJson == null
-        ? null
-        : (parseJsonish(
-            p.backfillNextBlockJson,
-            "backfillNextBlockJson",
-          ) as number);
+    const backfillNext = p.backfillNextBlock ?? null;
     if (p.backfillDone || backfillNext !== null) {
       const backfill = globalState<{
         backfill?: {

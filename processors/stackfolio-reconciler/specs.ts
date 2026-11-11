@@ -214,10 +214,11 @@ export function nativeBackfillSpec(walletDocumentId: string): WorkflowSpec {
           eventsJson: "{{steps.walk.output.rows}}",
           backfillDone: "{{steps.walk.output.done}}",
           backfillNextBlock: "{{steps.walk.output.nextBlock}}",
-          scanProgressJson: {
-            lastNativeScanBlock: "{{steps.walk.output.nextBlock}}",
-            ranAt: firedAt,
-          },
+          // No scanProgressJson here: the live scanner owns
+          // lastNativeScanBlock and already sits at the head - writing the
+          // walk's lagging cursor from here would trip the regression guard
+          // and fail the whole import. Backfill progress lives in
+          // backfill.nextBlock alone.
         },
       },
     ],

@@ -1,0 +1,130 @@
+import { createAction, Property } from "@powerhousedao/pieces-framework";
+import { ethereumAuth, etherscanConfig } from "../auth.js";
+import { authProps } from "../client.js";
+import {
+  createEtherscanClient,
+  etherscanHeadBlock,
+  EtherscanError,
+  fetchWindow,
+  type EtherscanRow,
+} from "../etherscan.js";
+import {
+  mapEtherscanRows,
+  type LedgerEventRow,
+} from "../etherscan-rows.js";
+
+export type RecentClient = {
+  call(params: Record<string, string | number>): Promise<unknown>;
+};
+
+/**
+ * The live round: everything that happened to the address since the
+ * cursor, plus its current balance. Never moves the block cursor back -
+ * an empty window answers the previous block - so the import action's
+ * regression guard never fires on a quiet minute.
+ */
+export async function fetchEtherscanRecent(
+  client: RecentClient,
+  opts: {
+    address: string;
+    fromBlock: number;
+    confirmations: number;
+    pageSize: number;
+  },
+): Promise<{
+  rows: LedgerEventRow[];
+  balanceWei: string;
+  lastBlock: number;
+  skippedCategories: string[];
+}> {
+  const head = await etherscanHeadBlock(client);
+  const safeHead = head - opts.confirmations;
+  const skippedCategories: string[] = [];
+  const grab = async (
+    category: string,
+    action: string,
+  ): Promise<EtherscanRow[]> => {
+    if (opts.fromBlock > safeHead) return [];
+    try {
+      return await fetchWindow(client, {
+        address: opts.address,
+        action,
+        startBlock: opts.fromBlock,
+        endBlock: safeHead,
+        pageSize: opts.pageSize,
+      });
+    } catch (error) {
+      if (error instanceof EtherscanError && error.category === "unavailable") {
+        skippedCategories.push(category);
+        return [];
+      }
+      throw error;
+    }
+  };
+  const txs = await grab("transactions", "txlist");
+  const internal = await grab("internal", "txlistinternal");
+  const tokentxs = await grab("tokens", "tokentx");
+  const balanceRaw = (await client.call({
+    module: "account",
+    action: "balance",
+    address: opts.address,
+    tag: "latest",
+  })) as string;
+  const { events } = mapEtherscanRows(opts.address, {
+    txs,
+    internal,
+    tokentxs,
+  });
+  return {
+    rows: events,
+    balanceWei: (BigInt(balanceRaw)).toString(),
+    lastBlock: Math.max(opts.fromBlock - 1, safeHead),
+    skippedCategories,
+  };
+}
+
+export const ethereumFetchEtherscanRecentAction = createAction({
+  auth: ethereumAuth,
+  name: "fetch-etherscan-recent",
+  displayName: "Fetch Etherscan Recent",
+  description:
+    "The live round from the Etherscan V2 API: transfers, internal moves and token rows since the cursor, plus the current native balance. Confirmed blocks only; the answered block never goes backwards.",
+  props: {
+    address: Property.ShortText({
+      displayName: "Address",
+      description: "The 0x address to poll.",
+      required: true,
+    }),
+    fromBlock: Property.Number({
+      displayName: "From block",
+      description: "The block after the last imported one (cursor + 1).",
+      required: true,
+    }),
+    confirmations: Property.Number({
+      displayName: "Confirmations",
+      description: "Only import blocks this far behind the head. Default 9.",
+      required: false,
+      defaultValue: 9,
+    }),
+    pageSize: Property.Number({
+      displayName: "Page size (rows)",
+      description: "Etherscan page size. Default 10000.",
+      required: false,
+      defaultValue: 10_000,
+    }),
+  },
+  async run(context) {
+    const auth = etherscanConfig(authProps(context.auth));
+    const client = createEtherscanClient({
+      apiKey: auth.apiKey,
+      baseUrl: auth.baseUrl,
+    });
+    const props = context.propsValue;
+    return fetchEtherscanRecent(client, {
+      address: props.address,
+      fromBlock: props.fromBlock,
+      confirmations: props.confirmations ?? 9,
+      pageSize: props.pageSize ?? 10_000,
+    });
+  },
+});

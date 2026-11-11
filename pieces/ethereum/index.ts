@@ -3,6 +3,7 @@ import { ethereumFetchAccountStateAction } from "./lib/actions/fetch-account-sta
 import { ethereumFetchEnsNamesAction } from "./lib/actions/fetch-ens-names.js";
 import { ethereumFetchPricesAction } from "./lib/actions/fetch-prices.js";
 import { ethereumFetchEtherscanHistoryAction } from "./lib/actions/fetch-etherscan-history.js";
+import { ethereumFetchEtherscanRecentAction } from "./lib/actions/fetch-etherscan-recent.js";
 import { ethereumFetchTokenMetadataAction } from "./lib/actions/fetch-token-metadata.js";
 import { ethereumFetchValidatorsAction } from "./lib/actions/fetch-validators.js";
 import { ethereumHoldingsFromLedgerAction } from "./lib/actions/holdings-from-ledger.js";
@@ -34,6 +35,7 @@ export const ethereum = createPiece({
     ethereumFetchTokenMetadataAction,
     ethereumFetchPricesAction,
     ethereumFetchEtherscanHistoryAction,
+    ethereumFetchEtherscanRecentAction,
     ethereumFetchValidatorsAction,
     ethereumImportEventsToWalletAccountAction,
     ethereumImportTokensToRegistryAction,

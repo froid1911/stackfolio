@@ -174,7 +174,12 @@ Modules: `identity` (`SET_PORTFOLIO_DETAILS`), `address-book`
 `SET_ADDRESS_IGNORED`), `pricing` (`SET_PRICE_OVERRIDE`,
 `REMOVE_PRICE_OVERRIDE`, `SET_ASSET_IGNORED`), `snapshots`
 (`TAKE_SNAPSHOT` err `EMPTY_SNAPSHOT`; `DELETE_SNAPSHOT`; `IMPORT_SNAPSHOT`
-for the scheduled one — same validation).
+for the scheduled one — same validation), `reconciler` — the sektar lesson
+that a reconciler must persist what it manages inside a document, not in
+memory: `RECORD_RESOURCES` (managed workflow ids, the connection id),
+`RECORD_CHECK` (per-pass issues `[{code, severity, message, accountId?}]`
+and fixes, shown in Accounts), `SET_GRANT` / `CLEAR_GRANT` (the person
+workflows publish as — see Import pipeline).
 
 ### `stackfolio/wallet-account` (one per address × chainId)
 
@@ -285,15 +290,22 @@ scaled down): watches `portfolio` + `wallet-account` docs; keeps four
 workflow specs published:
 
 1. **live-scan-<address>** — trigger: interval (default 5 min), one per
-   non-ignored wallet-account: `scan-account-logs → fetch-account-state →
+   non-ignored wallet-account: `scan-account-logs →
+   scan-native-transactions (head chunk) → fetch-account-state →
    fetch-ens-names → import-events-to-wallet-account`. Steps carry sektar's
-   `STEP_RETRY`.
-2. **native-backfill-<address>** — manual trigger with range form:
-   `scan-native-transactions (chunked step) → import-events…`, the user
-   starts it once, restarts it until `DONE` (or interval + auto-stop when
-   `backfill=DONE`). Honest cost note: walking ~23M blocks reads ~23M block
-   bodies; from a user-chosen start block it's hours, resumable, parallel
-   only across accounts.
+   `STEP_RETRY`. The native step is in the live chain on purpose: measured
+   against the local node (1035 blocks/s with 16 parallel fetches), walking
+   one new 12-second block per run is free, and its absence would leave the
+   event ledger silently missing native transfers after backfill ends —
+   the "wrong money" anti-goal wearing a happy face.
+2. **native-backfill-<address>** — interval trigger + manual, with range
+   form: `scan-native-transactions (chunked step) → import-events…`, one
+   bounded chunk per run from `backfill.nextBlock`. `backfill=DONE` means
+   the walker **caught up to head**; the live workflow's native step then
+   continues from the same `lastNativeScanBlock` cursor — backfill and live
+   are one continuum, not two mechanisms. Honest cost note (measured):
+   walking ~23M blocks is ~6h; a 5M-block window ~80min; from a user-chosen
+   start block, resumable; parallelism is per-run, across accounts.
 3. **prices-hourly** — trigger: interval 1h: `fetch-prices →
    import-prices-to-book`.
 4. **staking-daily** — trigger: interval 24h (+manual):
@@ -305,6 +317,27 @@ workflow specs published:
 The reconciler also owns: `portfolio.baseCurrency` ↔ `price-book.baseCurrency`
 alignment, and workflow health → issues surfaced in the Accounts view
 (sektar's `runtimeIssue` vocabulary: BLOCKING vs WARNING).
+
+**Ownership and provisioning** (who creates what): the drive app's **Setup
+view** creates the four singleton documents (`portfolio`, `asset-registry`,
+`price-book`, `eth-staking`) when a drive has none — adopt-if-present on
+reopen — and creates the `powerhouse/connection` document holding the
+piece auth (`rpcUrl`, `beaconUrl`, `chainId`). Adding an address in the
+Accounts view creates its `wallet-account` document; the reconciler then
+builds its workflows. The reconciler recreates **managed workflows** it
+lost (sektar's put-back discipline) and nothing else: it never recreates
+user documents, and `REMOVE_ADDRESS` (address book) is final — no
+resurrection magic.
+
+**Publish identity**: this repo runs `createSignaturePolicy:
+"v2-required"` and sektar's hard-won lesson is that the workflow runtime
+parks workflows published without a person behind them. The minimal grant
+flow is therefore ported, not "scaled down": the Setup view runs the
+grant/sign-in step, the person is recorded in `portfolio` (`SET_GRANT`),
+and the reconciler publishes managed workflows under that grant with
+sektar's `withPublish`. Failing this check (workflows parked), the fix is
+in the grant path — which is why it is explicit in the model, not a
+runtime accident.
 
 ## Index and subgraph
 
@@ -378,9 +411,12 @@ portfolio-wide views.
   decode, coingecko → price rows, idempotent import plans.
 - Reconciler tests: specs → actions, drift repair (sektar's pattern).
 - Index/subgraph tests: rows projection, dashboard math incl. missing price.
-- End-to-end (throwaway script + screenshots): vetra up → seed portfolio +
-  `frankp.eth` → live scan against the local node → events visible →
-  prices import → dashboard renders → CSV downloads.
+- End-to-end (throwaway script + screenshots): vetra up → Setup wizard
+  creates the singletons, the connection and grant → add `frankp.eth` with
+  a chosen backfill window → native+log import runs → events visible →
+  prices import → dashboard renders → CSV downloads. The fresh-vetra check
+  that interval workflows actually **run** (not park) under v2-required
+  signing is part of this e2e, not a later surprise.
 
 ## Known gaps (accepted for v1, named in the UI where felt)
 

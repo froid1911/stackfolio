@@ -132,7 +132,11 @@ export function liveScanSpec(walletDocumentId: string): WorkflowSpec {
         name: "scan-native",
         piece: "ethereum",
         action: "scan-native-transactions",
-        config: { accountDocumentId: walletDocumentId, maxBlocks: 2000 },
+        config: {
+          accountDocumentId: walletDocumentId,
+          maxBlocks: 2000,
+          direction: "HEAD",
+        },
       },
       {
         name: "fetch-state",

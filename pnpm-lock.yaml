@@ -35,6 +35,9 @@ importers:
       '@electric-sql/pglite-tools':
         specifier: 0.2.20
         version: 0.2.20(@electric-sql/pglite@0.3.15)
+      '@powerhousedao/analytics-engine-core':
+        specifier: 6.2.3-dev.96
+        version: 6.2.3-dev.96(@electric-sql/pglite@0.3.15)(@sentry/node-core@10.75.2(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.1(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.10.0))(@opentelemetry/instrumentation@0.220.0(@opentelemetry/api@1.10.0)(supports-color@8.1.1))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0)))(rolldown@1.0.2)(supports-color@8.1.1)
       '@powerhousedao/clint':
         specifier: 6.2.3-dev.96
         version: 6.2.3-dev.96(94a09eec358ce62a1b8159a4a765a227)

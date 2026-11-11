@@ -94,15 +94,10 @@
     "service-startup": "bash ./node_modules/@powerhousedao/ph-cli/dist/scripts/service-startup.sh",
     "service-unstartup": "bash ./node_modules/@powerhousedao/ph-cli/dist/scripts/service-unstartup.sh"
   },
-  "dependencies": {
-    "@powerhousedao/pieces-framework": "6.2.3-dev.96",
-    "@powerhousedao/workflow": "6.2.3-dev.96",
-    "echarts": "^5.6.0",
-    "viem": "^2.50.4"
-  },
   "devDependencies": {
     "@electric-sql/pglite": "0.3.15",
     "@electric-sql/pglite-tools": "0.2.20",
+    "@powerhousedao/analytics-engine-core": "6.2.3-dev.96",
     "@powerhousedao/clint": "6.2.3-dev.96",
     "@powerhousedao/connect": "6.2.3-dev.96",
     "@powerhousedao/connect-core": "6.2.3-dev.96",
@@ -144,6 +139,7 @@
     "zod": "4.6.5"
   },
   "peerDependencies": {
+    "@powerhousedao/analytics-engine-core": "6.2.3-dev.96",
     "@powerhousedao/connect-core": "6.2.3-dev.96",
     "@powerhousedao/reactor-browser": "6.2.3-dev.96",
     "@tanstack/react-router": "^1.170.41",
@@ -169,5 +165,11 @@
     "date-fns": "$date-fns",
     "rolldown": "$rolldown",
     "vite": "$vite"
+  },
+  "dependencies": {
+    "@powerhousedao/pieces-framework": "6.2.3-dev.96",
+    "@powerhousedao/workflow": "6.2.3-dev.96",
+    "echarts": "^5.6.0",
+    "viem": "^2.50.4"
   }
 }

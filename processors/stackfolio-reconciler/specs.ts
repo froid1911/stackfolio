@@ -83,6 +83,24 @@ export type PortfolioResources = {
   walletDocumentIds: string[];
 };
 
+/**
+ * The connections the steps bind to when they are dispatched: the chain
+ * connection for the ethereum steps, the reactor one for steps that read
+ * and write documents. The spec itself stays pure - the binding is a
+ * dispatch-time fact, recorded on the step by the engine.
+ */
+export type Connections = {
+  ethereum: string;
+  reactor: string;
+};
+
+/** The step's connection fields as the engine stores them. */
+export function connectionOf(step: StepSpec, connections: Connections) {
+  return step.piece === "reactor"
+    ? { connectionId: null, reactorConnectionId: connections.reactor }
+    : { connectionId: connections.ethereum, reactorConnectionId: null };
+}
+
 /** The trigger payload doubles as the run's clock: one timestamp per fire. */
 const firedAt = "{{trigger.payload.firedAt}}";
 
@@ -356,6 +374,7 @@ export function buildWorkflow(
   spec: WorkflowSpec,
   newId: () => string,
   now: string,
+  connections: Connections,
   reactorPieceVersion = "0.0.0",
 ): WorkflowAction[] {
   const stepIds = spec.steps.map(() => newId());
@@ -367,6 +386,7 @@ export function buildWorkflow(
       key: step.name,
       name: step.name,
       ...pieceOf(step, reactorPieceVersion),
+      ...connectionOf(step, connections),
       actionName: step.action,
       config: step.config,
     }),

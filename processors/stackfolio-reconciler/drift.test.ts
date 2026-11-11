@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { readFacts, type WorkflowFacts } from "./facts.js";
 import { workflowDrift, sameJson } from "./drift.js";
-import { liveScanSpec, pricesSpec, type WorkflowSpec } from "./specs.js";
+import {
+  connectionOf,
+  liveScanSpec,
+  pricesSpec,
+  type Connections,
+  type WorkflowSpec,
+} from "./specs.js";
+
+const CONNS: Connections = { ethereum: "eth-1", reactor: "reactor-1" };
 
 const resources = {
   portfolioDocumentId: "p1",
@@ -38,6 +46,7 @@ const specFacts = (
       name: s.name,
       action: s.action,
       config: s.config,
+      ...connectionOf(s, CONNS),
     })),
     managedBy: null,
     ...overrides,
@@ -85,7 +94,7 @@ describe("readFacts", () => {
 describe("workflowDrift", () => {
   it("stays silent when the workflow is the spec", () => {
     const spec = liveScanSpec("w1");
-    const drift = workflowDrift(spec, specFacts(spec), "2026-11-11T00:00:00.000Z", newIds());
+    const drift = workflowDrift(spec, specFacts(spec), "2026-11-11T00:00:00.000Z", newIds(), CONNS);
     expect(drift.differences).toEqual([]);
     expect(drift.actions).toEqual([]);
   });
@@ -96,7 +105,7 @@ describe("workflowDrift", () => {
       ...specFacts(spec),
       steps: specFacts(spec).steps.slice(0, -1),
     };
-    const drift = workflowDrift(spec, trimmed, "2026-11-11T00:00:00.000Z", newIds());
+    const drift = workflowDrift(spec, trimmed, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
     expect(drift.differences).toEqual(["the step import-native was missing"]);
     expect(drift.actions.map((a) => a.type)).toEqual(["ADD_STEP"]);
   });
@@ -107,7 +116,7 @@ describe("workflowDrift", () => {
       ...specFacts(spec),
       steps: specFacts(spec).steps.slice().reverse(),
     };
-    const drift = workflowDrift(spec, scrambled, "2026-11-11T00:00:00.000Z", newIds());
+    const drift = workflowDrift(spec, scrambled, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
     expect(drift.actions).toEqual([]);
     expect(drift.differences[0]).toMatch(/edited by hand/);
   });
@@ -117,7 +126,7 @@ describe("workflowDrift", () => {
     const facts = specFacts(spec, {
       triggerConfig: { seconds: 600, label: spec.key },
     });
-    const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds());
+    const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
     expect(drift.differences[0]).toMatch(/10 minutes.*5 minutes/s);
     expect(drift.actions.map((a) => a.type)).toEqual(["SET_TRIGGER_CONFIG"]);
   });
@@ -125,14 +134,14 @@ describe("workflowDrift", () => {
   it("repairs a parked workflow", () => {
     const spec = pricesSpec(resources);
     const facts = specFacts(spec, { status: "DISABLED" });
-    const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds());
+    const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
     expect(drift.actions.map((a) => a.type)).toEqual(["SET_WORKFLOW_STATUS"]);
   });
 
   it("publishes when the workflow never was", () => {
     const spec = pricesSpec(resources);
     const facts = specFacts(spec, { publishedVersion: null });
-    const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds());
+    const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
     expect(drift.actions.map((a) => a.type)).toEqual([
       "SET_POLICY",
       "PUBLISH_WORKFLOW",
@@ -143,13 +152,28 @@ describe("workflowDrift", () => {
     const spec = pricesSpec(resources);
     const facts = specFacts(spec);
     facts.steps[2] = { ...facts.steps[2], config: { hour: "stale" } };
-    const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds());
+    const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
     expect(drift.differences[0]).toMatch(/step prices no longer read/);
     const update = drift.actions[0] as {
       type: string;
       input: Record<string, unknown>;
     };
     expect(update.input.id).toBe("step-2");
+  });
+
+  it("re-binds a step whose connection was swapped", () => {
+    const spec = pricesSpec(resources);
+    const facts = specFacts(spec);
+    facts.steps[0] = { ...facts.steps[0], connectionId: "other" };
+    const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
+    expect(drift.differences[0]).toMatch(/step holdings no longer read/);
+    const update = drift.actions[0] as {
+      type: string;
+      input: Record<string, unknown>;
+    };
+    expect(update.input.id).toBe("step-0");
+    expect(update.input.connectionId).toBe("eth-1");
+    expect(update.input.reactorConnectionId).toBeNull();
   });
 
   it("sameJson ignores key order", () => {

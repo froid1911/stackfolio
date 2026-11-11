@@ -2,8 +2,14 @@
  * What the reconciler would change to make a published workflow the spec
  * again. Pure: spec in, facts in, actions out; the caller dispatches.
  */
-import type { StepSpec, WorkflowAction, WorkflowSpec } from "./specs.js";
+import type {
+  Connections,
+  StepSpec,
+  WorkflowAction,
+  WorkflowSpec,
+} from "./specs.js";
 import {
+  connectionOf,
   ETHEREUM_PIECE_NAME,
   ETHEREUM_PIECE_VERSION,
   REACTOR_PIECE_NAME,
@@ -78,6 +84,7 @@ export function workflowDrift(
   facts: WorkflowFacts,
   now: string,
   newId: () => string,
+  connections: Connections,
   reactorPieceVersion = "0.0.0",
 ): Drift {
   const differences: string[] = [];
@@ -102,6 +109,7 @@ export function workflowDrift(
         key: step.name,
         name: step.name,
         ...pieceOf(step, reactorPieceVersion),
+        ...connectionOf(step, connections),
         actionName: step.action,
         config: step.config,
       }),
@@ -113,9 +121,12 @@ export function workflowDrift(
   for (const step of spec.steps) {
     const existing = have.get(step.name);
     if (!existing) continue;
+    const binding = connectionOf(step, connections);
     if (
       existing.action === step.action &&
-      sameJson(existing.config ?? {}, step.config)
+      sameJson(existing.config ?? {}, step.config) &&
+      (existing.connectionId ?? null) === binding.connectionId &&
+      (existing.reactorConnectionId ?? null) === binding.reactorConnectionId
     ) {
       continue;
     }
@@ -126,6 +137,7 @@ export function workflowDrift(
         key: step.name,
         name: step.name,
         ...pieceOf(step, reactorPieceVersion),
+        ...binding,
         actionName: step.action,
         config: step.config,
       }),

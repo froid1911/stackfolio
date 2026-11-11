@@ -7,8 +7,11 @@ import {
   pricesSpec,
   stakingSpec,
   withPublish,
+  type Connections,
   type WorkflowSpec,
 } from "./specs.js";
+
+const connections: Connections = { ethereum: "eth-1", reactor: "reactor-1" };
 
 const resources = {
   portfolioDocumentId: "p1",
@@ -71,7 +74,7 @@ describe("specs", () => {
   });
 
   it("builds a new workflow in runtime order", () => {
-    const actions = buildWorkflow(liveScanSpec("w1"), newIds("i"), "2026-11-11T00:00:00.000Z");
+    const actions = buildWorkflow(liveScanSpec("w1"), newIds("i"), "2026-11-11T00:00:00.000Z", connections);
     expect(types(actions)).toEqual([
       "SET_WORKFLOW_NAME",
       "SET_TRIGGER",
@@ -89,6 +92,11 @@ describe("specs", () => {
       "PUBLISH_WORKFLOW",
       "SET_WORKFLOW_STATUS",
     ]);
+    const firstStep = actions[2] as { input: Record<string, unknown> };
+    expect(firstStep.input).toMatchObject({
+      connectionId: "eth-1",
+      reactorConnectionId: null,
+    });
     const trigger = actions[1] as { input: Record<string, unknown> };
     expect(trigger.input).toMatchObject({
       pieceName: "@powerhousedao/ethereum-piece",
@@ -109,7 +117,7 @@ describe("specs", () => {
         { name: "b", piece: "ethereum", action: "fetch-account-state", config: {} },
       ],
     };
-    const actions = buildWorkflow(spec, newIds("m"), "2026-11-11T00:00:00.000Z");
+    const actions = buildWorkflow(spec, newIds("m"), "2026-11-11T00:00:00.000Z", connections);
     expect(types(actions)).toEqual([
       "SET_WORKFLOW_NAME",
       "ADD_STEP",
@@ -129,6 +137,7 @@ describe("specs", () => {
       nativeBackfillSpec("w1"),
       newIds("x"),
       "2026-11-11T00:00:00.000Z",
+      connections,
     );
     // buildWorkflow already publishes: idempotent.
     expect(withPublish(actions, "2026-11-12T00:00:00.000Z")).toBe(actions);

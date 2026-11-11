@@ -1,6 +1,6 @@
 import type { BaseSubgraph, Context } from "@powerhousedao/reactor-api";
 import { PortfolioIndex } from "processors/portfolio-index";
-import { driveFileIds } from "./lib.js";
+import { driveFileIds, forwardEnsAddress } from "./lib.js";
 
 /**
  * Queries over the portfolio index. Every resolver: assert the caller can
@@ -330,6 +330,11 @@ export const getResolvers = (
           .orderBy("timestamp", "desc")
           .execute();
       },
+
+      ensAddress: async (
+        _parent: unknown,
+        args: { name: string; rpcUrl: string },
+      ) => forwardEnsAddress(args.rpcUrl, args.name),
 
       issues: async (
         _parent: unknown,

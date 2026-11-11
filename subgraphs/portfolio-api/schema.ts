@@ -40,6 +40,10 @@ export const schema: DocumentNode = gql`
     withdrawals(driveId: String!, validatorIndex: Int): [PortfolioApiWithdrawal!]!
     "Open reconciler findings."
     issues(driveId: String!, severity: String): [PortfolioApiIssue!]!
+    "Forward ENS lookup on the given JSON-RPC node; null when the name has
+    no ETH address there. Answers server-side so browser views never need
+    CORS-wrapped access to the node."
+    ensAddress(name: String!, rpcUrl: String!): String
     "Header numbers for the dashboard."
     totals(driveId: String!): PortfolioApiTotals!
   }

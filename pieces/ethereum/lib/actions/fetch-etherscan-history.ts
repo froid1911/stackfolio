@@ -137,10 +137,6 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
   },
   async run(context) {
     const auth = etherscanConfig(authProps(context.auth));
-    const client = createEtherscanClient({
-      apiKey: auth.apiKey,
-      baseUrl: auth.baseUrl,
-    });
     const props = context.propsValue;
     const documentId = props.accountDocumentId.trim();
     const document = await context.reactor.get(documentId);
@@ -151,8 +147,14 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
     }
     const global = globalState<{
       address: string;
+      chainId: number | null;
       backfill: { nextBlock: number | null } | null;
     }>(document);
+    const client = createEtherscanClient({
+      apiKey: auth.apiKey,
+      baseUrl: auth.baseUrl,
+      chainId: global.chainId ?? 1,
+    });
     const address = global.address ?? "";
     if (address === "") {
       throw new Error(

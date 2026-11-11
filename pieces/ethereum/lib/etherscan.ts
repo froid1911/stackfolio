@@ -27,11 +27,14 @@ interface Envelope {
   status?: string;
   result?: unknown;
   message?: string;
+  jsonrpc?: string;
+  error?: { code?: number; message?: string };
 }
 
 export function createEtherscanClient(opts: {
   apiKey: string;
   baseUrl: string;
+  chainId?: number;
   fetchImpl?: typeof fetch;
   spacingMs?: number;
   sleepFn?: (ms: number) => Promise<void>;
@@ -40,12 +43,16 @@ export function createEtherscanClient(opts: {
   const sleep =
     opts.sleepFn ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   const spacingMs = opts.spacingMs ?? 220;
+  const chainId = opts.chainId ?? 1;
   let queue: Promise<unknown> = Promise.resolve();
 
   const attempt = async (
     params: Record<string, string | number>,
   ): Promise<unknown> => {
     const url = new URL(opts.baseUrl);
+    // The V2 endpoint routes by chainid on every call; without it every
+    // answer is `NOTOK / Missing Or invalid Action name`.
+    url.searchParams.set("chainid", String(chainId));
     for (const [name, value] of Object.entries(params)) {
       url.searchParams.set(name, String(value));
     }
@@ -84,6 +91,32 @@ export function createEtherscanClient(opts: {
       }
       const message = (envelope.message ?? "").trim();
       if (envelope.status === "1") {
+        return envelope.result;
+      }
+      // proxy-module calls answer bare JSON-RPC: no status field at all.
+      // An `error` member is the only failure shape it has.
+      if (envelope.jsonrpc !== undefined) {
+        const rpcError = envelope.error;
+        if (rpcError === undefined && envelope.result !== undefined) {
+          return envelope.result;
+        }
+        const rpcMessage = rpcError?.message ?? "";
+        if (/rate.?limit/i.test(rpcMessage)) {
+          lastError = new EtherscanError(
+            "Etherscan rate limit reached; backing off.",
+            "transient",
+          );
+          continue;
+        }
+        throw new EtherscanError(
+          `Etherscan answered with a JSON-RPC error: ${rpcMessage || "no message"}`,
+          "unavailable",
+        );
+      }
+      // An empty page answers status "0" with an empty array and a
+      // message like "No transactions found" - that is data, not an
+      // error, and the most common answer a full backfill gives.
+      if (Array.isArray(envelope.result) && envelope.result.length === 0) {
         return envelope.result;
       }
       const resultText =

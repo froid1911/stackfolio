@@ -49,6 +49,84 @@ describe("createEtherscanClient", () => {
     expect(rows[0].hash).toBe("0xa");
   });
 
+  it("sends chainid on every call", async () => {
+    const urls: string[] = [];
+    const impl = (async (input: unknown) => {
+      urls.push(String(input));
+      return new Response(
+        JSON.stringify({ status: "1", result: [], message: "OK" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+    const client = createEtherscanClient({
+      apiKey: KEY,
+      baseUrl: "https://api.etherscan.io/v2/api",
+      chainId: 8453,
+      fetchImpl: impl,
+      sleepFn: noSleep,
+    });
+    await client.call({ module: "account", action: "txlist", address: "0xabc" });
+    expect(urls).toHaveLength(1);
+    expect(new URL(urls[0]).searchParams.get("chainid")).toBe("8453");
+  });
+
+  it("unwraps a bare JSON-RPC answer from the proxy module", async () => {
+    const { impl } = fakeFetch([
+      { status: 200, body: { jsonrpc: "2.0", id: 1, result: "0x192bf31" } },
+    ]);
+    const client = createEtherscanClient({
+      apiKey: KEY,
+      baseUrl: "https://x/api",
+      fetchImpl: impl,
+      sleepFn: noSleep,
+    });
+    const head = await client.call({ module: "proxy", action: "eth_blockNumber" });
+    expect(head).toBe("0x192bf31");
+  });
+
+  it("retries a JSON-RPC rate-limit error as transient", async () => {
+    const { impl } = fakeFetch([
+      {
+        status: 200,
+        body: {
+          jsonrpc: "2.0",
+          id: 1,
+          error: { code: -32000, message: "Max rate limit reached" },
+        },
+      },
+      { status: 200, body: { jsonrpc: "2.0", id: 1, result: "0x10" } },
+    ]);
+    const client = createEtherscanClient({
+      apiKey: KEY,
+      baseUrl: "https://x/api",
+      fetchImpl: impl,
+      sleepFn: noSleep,
+    });
+    const head = await client.call({ module: "proxy", action: "eth_blockNumber" });
+    expect(head).toBe("0x10");
+  });
+
+  it("treats a status-0 empty page as no data, not an error", async () => {
+    const { impl } = fakeFetch([
+      {
+        status: 200,
+        body: { status: "0", result: [], message: "No transactions found" },
+      },
+    ]);
+    const client = createEtherscanClient({
+      apiKey: KEY,
+      baseUrl: "https://x/api",
+      fetchImpl: impl,
+      sleepFn: noSleep,
+    });
+    const rows = (await client.call({
+      module: "account",
+      action: "txlist",
+      address: "0xabc",
+    })) as EtherscanRow[];
+    expect(rows).toEqual([]);
+  });
+
   it("categorizes an invalid key as auth and never echoes the key", async () => {
     const { impl } = fakeFetch([
       { status: 200, body: { status: "0", result: "", message: "Invalid API Key" } },

@@ -36,6 +36,15 @@ export async function fetchEtherscanHistory(
     confirmations: number;
     windowBlocks: number;
     pageSize: number;
+    /**
+     * Wall-clock budget for the walk. Windows are fetched back to back
+     * until this runs out or the address reaches safe head, so one run
+     * crosses empty years quickly and the step finishes inside its
+     * engine timeout. 0 walks exactly one window.
+     */
+    budgetMs: number;
+    /** Clock seam for tests. */
+    now?: () => number;
   },
 ): Promise<{
   rows: LedgerEventRow[];
@@ -53,46 +62,57 @@ export async function fetchEtherscanHistory(
       skippedCategories: [],
     };
   }
-  const end = Math.min(
-    opts.startBlock + opts.windowBlocks - 1,
-    safeHead,
-  );
-  const skippedCategories: string[] = [];
-  const grab = async (
-    category: string,
-    action: string,
-  ): Promise<EtherscanRow[]> => {
-    try {
-      return await fetchWindow(client, {
-        address: opts.address,
-        action,
-        startBlock: opts.startBlock,
-        endBlock: end,
-        pageSize: opts.pageSize,
-      });
-    } catch (error) {
-      if (error instanceof EtherscanError && error.category === "unavailable") {
-        skippedCategories.push(category);
-        return [];
+  const now = opts.now ?? Date.now;
+  const startedAt = now();
+  const skipped = new Set<string>();
+  const rows: LedgerEventRow[] = [];
+  let block = opts.startBlock;
+  for (;;) {
+    const end = Math.min(block + opts.windowBlocks - 1, safeHead);
+    const grab = async (
+      category: string,
+      action: string,
+    ): Promise<EtherscanRow[]> => {
+      try {
+        return await fetchWindow(client, {
+          address: opts.address,
+          action,
+          startBlock: block,
+          endBlock: end,
+          pageSize: opts.pageSize,
+        });
+      } catch (error) {
+        if (
+          error instanceof EtherscanError &&
+          error.category === "unavailable"
+        ) {
+          skipped.add(category);
+          return [];
+        }
+        throw error;
       }
-      throw error;
+    };
+    const txs = await grab("transactions", "txlist");
+    const internal = await grab("internal", "txlistinternal");
+    const tokentxs = await grab("tokens", "tokentx");
+    const approvals = await grab("approvals", "tokenApprovals");
+    const { events } = mapEtherscanRows(opts.address, {
+      txs,
+      internal,
+      tokentxs,
+      approvals,
+    });
+    rows.push(...events);
+    block = end + 1;
+    if (block > safeHead || now() - startedAt >= opts.budgetMs) {
+      break;
     }
-  };
-  const txs = await grab("transactions", "txlist");
-  const internal = await grab("internal", "txlistinternal");
-  const tokentxs = await grab("tokens", "tokentx");
-  const approvals = await grab("approvals", "tokenApprovals");
-  const { events } = mapEtherscanRows(opts.address, {
-    txs,
-    internal,
-    tokentxs,
-    approvals,
-  });
+  }
   return {
-    rows: events,
-    nextBlock: end + 1,
-    done: end + 1 > safeHead,
-    skippedCategories,
+    rows,
+    nextBlock: block,
+    done: block > safeHead,
+    skippedCategories: [...skipped],
   };
 }
 
@@ -102,7 +122,7 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
   name: "fetch-etherscan-history",
   displayName: "Fetch Etherscan History",
   description:
-    "Import one confirmed window of an address's complete history from the Etherscan V2 API (native, internal, tokens, approvals) as ledger rows, answering the cursor for the next window. Rows are keyed by transaction hash, so re-imports are no-ops.",
+    "Walk an address's complete history from the Etherscan V2 API (native, internal, tokens, approvals) as ledger rows, window after window until the head or the walk budget is reached, answering the cursor for the next run. Rows are keyed by transaction hash, so re-imports are no-ops.",
   props: {
     accountDocumentId: Property.ShortText({
       displayName: "Wallet account document",
@@ -134,8 +154,16 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
       required: false,
       defaultValue: 10_000,
     }),
+    budgetMs: Property.Number({
+      displayName: "Walk budget (ms)",
+      description:
+        "Keep walking windows within this wall-clock budget, so one run crosses empty years. Default 240000; must stay below the step timeout.",
+      required: false,
+      defaultValue: 240_000,
+    }),
   },
   async run(context) {
+    const runStartedAt = Date.now();
     const auth = etherscanConfig(authProps(context.auth));
     const props = context.propsValue;
     const documentId = props.accountDocumentId.trim();
@@ -162,15 +190,31 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
       );
     }
     const cursor = global.backfill?.nextBlock;
-    const startBlock =
+    let block =
       props.startBlock ?? (cursor === null || cursor === undefined ? 0 : cursor);
-    const out = await fetchEtherscanHistory(client, {
+    const walk = {
       address,
-      startBlock,
       confirmations: props.confirmations ?? 9,
       windowBlocks: props.windowBlocks ?? 100_000,
       pageSize: props.pageSize ?? 10_000,
-    });
-    return out;
+      budgetMs: props.budgetMs ?? 240_000,
+    };
+    // Walk window after window inside one run - empty stretches of an
+    // address's life should cost seconds, not trigger intervals.
+    const rows: LedgerEventRow[] = [];
+    const skipped = new Set<string>();
+    let done = false;
+    for (;;) {
+      const out = await fetchEtherscanHistory(client, {
+        ...walk,
+        startBlock: block,
+      });
+      rows.push(...out.rows);
+      for (const category of out.skippedCategories) skipped.add(category);
+      block = out.nextBlock;
+      done = out.done;
+      if (done || Date.now() - runStartedAt >= walk.budgetMs) break;
+    }
+    return { rows, nextBlock: block, done, skippedCategories: [...skipped] };
   },
 });

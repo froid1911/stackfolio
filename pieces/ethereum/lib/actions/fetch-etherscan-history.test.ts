@@ -55,6 +55,7 @@ describe("fetchEtherscanHistory", () => {
       confirmations: 9,
       windowBlocks: 100_000,
       pageSize: 10_000,
+      budgetMs: 0,
     });
     expect(out.done).toBe(false);
     expect(out.nextBlock).toBe(100_000);
@@ -72,6 +73,7 @@ describe("fetchEtherscanHistory", () => {
       confirmations: 9,
       windowBlocks: 100_000,
       pageSize: 10_000,
+      budgetMs: 0,
     });
     expect(out).toMatchObject({ done: true, rows: [], nextBlock: 49_992 });
     expect(calls.filter((c) => !c.startsWith("eth_blockNumber"))).toEqual([]);
@@ -89,6 +91,7 @@ describe("fetchEtherscanHistory", () => {
       confirmations: 9,
       windowBlocks: 100_000,
       pageSize: 10_000,
+      budgetMs: 0,
     });
     expect(out.skippedCategories).toEqual(["approvals"]);
     expect(out.rows.length).toBeGreaterThan(0);
@@ -110,6 +113,7 @@ describe("fetchEtherscanHistory", () => {
         confirmations: 9,
         windowBlocks: 100_000,
         pageSize: 10_000,
+        budgetMs: 0,
       }),
     ).rejects.toBeInstanceOf(EtherscanError);
   });
@@ -135,11 +139,44 @@ describe("fetchEtherscanHistory", () => {
       confirmations: 9,
       windowBlocks: 100_000,
       pageSize: 2,
+      budgetMs: 0,
     });
     expect(calls.filter((c) => c.startsWith("txlist:"))).toEqual([
       "txlist:1",
       "txlist:2",
     ]);
     expect(out.rows.filter((r) => r.subtype === "FEE")).toHaveLength(2);
+  });
+  it("walks consecutive windows while the budget holds", async () => {
+    const { client, calls } = scriptClient({ head: 300_000, txs: [TX] });
+    const out = await fetchEtherscanHistory(client, {
+      address: ADDR,
+      startBlock: 0,
+      confirmations: 9,
+      windowBlocks: 100_000,
+      pageSize: 10_000,
+      budgetMs: 60_000,
+      now: () => 0,
+    });
+    expect(calls.filter((c) => c === "txlist:1")).toHaveLength(3);
+    expect(out).toMatchObject({ nextBlock: 299_992, done: true });
+    expect(out.rows).toHaveLength(3);
+  });
+
+  it("cuts the walk at a window boundary when the clock runs out", async () => {
+    const times = [0, 100_000];
+    let tick = 0;
+    const { client, calls } = scriptClient({ head: 500_000, txs: [TX] });
+    const out = await fetchEtherscanHistory(client, {
+      address: ADDR,
+      startBlock: 0,
+      confirmations: 9,
+      windowBlocks: 100_000,
+      pageSize: 10_000,
+      budgetMs: 50_000,
+      now: () => times[Math.min(tick++, times.length - 1)],
+    });
+    expect(calls.filter((c) => c === "txlist:1")).toHaveLength(1);
+    expect(out).toMatchObject({ nextBlock: 100_000, done: false });
   });
 });

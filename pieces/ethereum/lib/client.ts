@@ -1,4 +1,4 @@
-import { createPublicClient, http, type GetLogsParameters } from "viem";
+import { createPublicClient, http } from "viem";
 import { getBlockReceipts } from "viem/actions";
 import type { TransferLog } from "./decode.js";
 import type { EthereumAuth } from "./types.js";
@@ -70,20 +70,36 @@ export function createClientBundle(
   const client = createPublicClient({ transport: http(rpcUrl) });
   const bundle: ClientBundle = {
     async getLogs({ fromBlock, toBlock, topics }) {
-      // Cast over viem's overloaded filter union: this piece only ever uses
-      // the plain block-range + topics shape, no eventAbi.
-      const logs = await client.getLogs({
-        fromBlock,
-        toBlock,
-        topics,
-      } as GetLogsParameters);
+      // Raw eth_getLogs: viem 2.57's getLogs serialises a plain topics
+      // array as an empty filter, and an unfiltered query for a few
+      // hundred mainnet blocks answers hundreds of megabytes. One
+      // question, sent exactly as asked, cannot be misfiled.
+      const logs = (await client.request({
+        method: "eth_getLogs",
+        params: [
+          {
+            fromBlock: `0x${fromBlock.toString(16)}`,
+            toBlock: `0x${toBlock.toString(16)}`,
+            topics: topics.filter(
+              (topic): topic is `0x${string}` => topic !== null,
+            ),
+          },
+        ],
+      })) as Array<{
+        address: string;
+        topics: string[];
+        data: string;
+        logIndex: string;
+        blockNumber: string;
+        transactionHash: string;
+      }>;
       return logs.map((log) => ({
         address: log.address,
-        topics: log.topics as string[],
+        topics: log.topics,
         data: log.data,
         logIndex: Number(log.logIndex),
-        blockNumber: log.blockNumber ?? 0n,
-        transactionHash: log.transactionHash ?? "",
+        blockNumber: BigInt(log.blockNumber),
+        transactionHash: log.transactionHash,
       }));
     },
     getBlockNumber() {

@@ -398,7 +398,7 @@ describe("reconcilePortfolio", () => {
 
   it("warns, and builds nothing, for a chain no free plan covers", async () => {
     const fake = new FakeIO();
-    fake.wallets = [wallet("w1", { chainId: 8453, label: "Base user" })];
+    fake.wallets = [wallet("w1", { chainId: 1284, label: "Moonbeam user" })];
     fake.connectionStatus["eth-1"] = "OK";
     const doc = portfolioDocWith({
       grant: true,
@@ -414,8 +414,26 @@ describe("reconcilePortfolio", () => {
     const unsupported = check.input.issues.find(
       (i) => i.code === "UNSUPPORTED_CHAIN",
     );
-    expect(unsupported?.message).toContain("Base");
+    expect(unsupported?.message).toContain("1284");
     expect(fake.created.filter((c) => c.key.includes("w1"))).toEqual([]);
+  });
+
+  it("routes Ankr-roster chains to Ankr actions", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [wallet("w1", { chainId: 8453, backfill: null })];
+    fake.connectionStatus["eth-1"] = "OK";
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: [] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+    const keys = fake.created.map((c) => c.key);
+    expect(keys).toContain("live-ankr-w1");
+    expect(keys).toContain("ankr-backfill-w1");
+    const wiring = JSON.stringify(fake.created);
+    expect(wiring).toContain("fetch-ankr-recent");
+    expect(wiring).toContain("fetch-ankr-history");
   });
 });
 

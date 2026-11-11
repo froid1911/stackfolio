@@ -4,6 +4,7 @@
  * ids invented except through the `newId` the caller supplies.
  */
 import { actions as wf } from "@powerhousedao/workflow/document-models/workflow";
+import type { ChainProvider } from "../../pieces/ethereum/lib/providers.js";
 
 export const ETHEREUM_PIECE_NAME = "@powerhousedao/ethereum-piece";
 /** The piece version this package publishes. */
@@ -119,9 +120,20 @@ const firedAt = "{{trigger.payload.firedAt}}";
  * cursor, so quiet minutes no-op instead of tripping the regression
  * guard.
  */
+const LIVE_ACTION: Record<ChainProvider, string> = {
+  etherscan: "fetch-etherscan-recent",
+  blockscout: "fetch-blockscout-recent",
+  ankr: "fetch-ankr-recent",
+};
+const HISTORY_ACTION: Record<ChainProvider, string> = {
+  etherscan: "fetch-etherscan-history",
+  blockscout: "fetch-blockscout-history",
+  ankr: "fetch-ankr-history",
+};
+
 export function liveEtherscanSpec(
   walletDocumentId: string,
-  provider: "etherscan" | "blockscout" = "etherscan",
+  provider: ChainProvider = "etherscan",
 ): WorkflowSpec {
   return {
     key: `live-${provider}-${walletDocumentId}`,
@@ -131,7 +143,7 @@ export function liveEtherscanSpec(
       {
         name: "poll",
         piece: "ethereum",
-        action: provider === "etherscan" ? "fetch-etherscan-recent" : "fetch-blockscout-recent",
+        action: LIVE_ACTION[provider],
         timeoutSeconds: 120,
         config: { accountDocumentId: walletDocumentId },
       },
@@ -167,7 +179,7 @@ export function liveEtherscanSpec(
  */
 export function etherscanBackfillSpec(
   walletDocumentId: string,
-  provider: "etherscan" | "blockscout" = "etherscan",
+  provider: ChainProvider = "etherscan",
 ): WorkflowSpec {
   return {
     key: `${provider}-backfill-${walletDocumentId}`,
@@ -177,7 +189,7 @@ export function etherscanBackfillSpec(
       {
         name: "walk",
         piece: "ethereum",
-        action: provider === "etherscan" ? "fetch-etherscan-history" : "fetch-blockscout-history",
+        action: HISTORY_ACTION[provider],
         timeoutSeconds: 300,
         config: { accountDocumentId: walletDocumentId },
       },

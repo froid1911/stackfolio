@@ -1,15 +1,15 @@
 /**
  * Which indexer answers for which chain. Etherscan's free plan covers
  * the first group; the chains it charges for are answered by the
- * Blockscout hosted gateway where that gateway serves them (verified
- * live against the operator's key: OP Mainnet and Gnosis answer, BSC
- * and Avalanche are not Blockscout chains at all).
+ * Blockscout hosted gateway where it serves them (OP Mainnet, Gnosis -
+ * verified live), and Base/BSC/Avalanche - which Blockscout's plan
+ * gates too - by the Ankr multichain API's freemium roster.
  *
  * A chain absent from both tables is UNSUPPORTED - the actions say so
  * by name (Base: needs a paid Etherscan or Blockscout Builder plan)
  * instead of importing a partial lie from whichever half-works.
  */
-export type ChainProvider = "etherscan" | "blockscout";
+export type ChainProvider = "etherscan" | "blockscout" | "ankr";
 
 const ETHERSCAN_FREE = new Set([
   1, // Ethereum
@@ -42,23 +42,21 @@ const BLOCKSCOUT_GATEWAY = new Map<number, string>([
   [100, "Gnosis"],
 ]);
 
+const ANKR_ROSTER = new Map<number, string>([
+  [8453, "Base"],
+  [56, "BNB Smart Chain"],
+  [43114, "Avalanche C-Chain"],
+]);
+
 /** The provider an address's chain should be imported through. */
 export function providerForChain(chainId: number): ChainProvider | null {
   if (ETHERSCAN_FREE.has(chainId)) return "etherscan";
   if (BLOCKSCOUT_GATEWAY.has(chainId)) return "blockscout";
+  if (ANKR_ROSTER.has(chainId)) return "ankr";
   return null;
 }
 
 /** Why an unsupported chain is unsupported, named honestly. */
 export function unsupportedChainMessage(chainId: number): string {
-  const name = NOT_FREE_ON_ETHERSCAN.get(chainId);
-  return name
-    ? `Chain ${chainId} (${name}) is not on the free Etherscan plan and not served by the Blockscout gateway with this key. Importing it needs a paid plan (Base: Etherscan paid or Blockscout Builder+).`
-    : `Chain ${chainId} is not covered by the free Etherscan plan nor the Blockscout gateway - no free import exists for it.`;
+  return `Chain ${chainId} is covered by no free plan we know: Etherscan charges for it, Blockscout does not serve it and Ankr's multichain roster does not list it. No free import exists for it.`;
 }
-
-const NOT_FREE_ON_ETHERSCAN = new Map<number, string>([
-  [8453, "Base"],
-  [56, "BNB Smart Chain"],
-  [43114, "Avalanche C-Chain"],
-]);

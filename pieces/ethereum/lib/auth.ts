@@ -47,6 +47,12 @@ export const ethereumAuth = PieceAuth.CustomAuth({
         "Key for the Blockscout hosted gateway (api.blockscout.com) - answers the chains Etherscan's free plan charges for (OP Mainnet, Gnosis). Kept on this connection.",
       required: false,
     }),
+    ankrApiKey: Property.ShortText({
+      displayName: "Ankr API key",
+      description:
+        "Key for the Ankr multichain API (rpc.ankr.com) - answers Base, BNB Smart Chain and Avalanche, the chains the other indexers' free plans refuse. Kept on this connection.",
+      required: false,
+    }),
   },
   validate: async ({ auth }) => {
     if (auth.etherscanApiKey !== undefined && auth.etherscanApiKey.trim() !== "") {
@@ -134,6 +140,22 @@ export function blockscoutConfig(auth: {
   if (apiKey === "") {
     throw new Error(
       "Blockscout API key is not set - set blockscoutApiKey on the ethereum connection (Stackfolio reads it from there)",
+    );
+  }
+  return { apiKey };
+}
+
+/**
+ * The Ankr multichain settings from a connection's auth. Same rule as
+ * the others: the key lives on the connection and is never echoed.
+ */
+export function ankrConfig(auth: {
+  ankrApiKey?: string;
+}): { apiKey: string } {
+  const apiKey = auth.ankrApiKey?.trim() ?? "";
+  if (apiKey === "") {
+    throw new Error(
+      "The ethereum connection carries no ankrApiKey - Ankr imports need one (free key at app.ankr.com).",
     );
   }
   return { apiKey };

@@ -14,15 +14,20 @@ describe("providerForChain", () => {
     expect(providerForChain(100)).toBe("blockscout");
   });
 
-  it("answers null for chains no free plan covers", () => {
-    expect(providerForChain(8453)).toBeNull();
-    expect(providerForChain(56)).toBeNull();
-    expect(providerForChain(43114)).toBeNull();
+  it("routes the gap chains to Ankr's freemium roster", () => {
+    expect(providerForChain(8453)).toBe("ankr");
+    expect(providerForChain(56)).toBe("ankr");
+    expect(providerForChain(43114)).toBe("ankr");
   });
 
-  it("names the paid-chain offenders in the honest message", () => {
-    expect(unsupportedChainMessage(8453)).toContain("Base");
-    expect(unsupportedChainMessage(8453)).toContain("paid");
+  it("answers null for chains no free plan covers", () => {
+    expect(providerForChain(1284)).toBeNull();
+    expect(providerForChain(31337)).toBeNull();
+  });
+
+  it("says plainly why an unsupported chain is unsupported", () => {
+    expect(unsupportedChainMessage(1284)).toContain("1284");
     expect(unsupportedChainMessage(31337)).toContain("31337");
+    expect(unsupportedChainMessage(31337)).toContain("No free import");
   });
 });

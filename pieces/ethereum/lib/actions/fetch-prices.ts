@@ -3,6 +3,28 @@ import { parseJsonish } from "../jsonish.js";
 
 const ETH_IDENTIFIER = "eip155:1/slip44:60";
 
+/** CoinGecko platform slugs for the chains whose ERC-20s we price. */
+const CG_PLATFORM: Record<number, string> = {
+  1: "ethereum",
+  10: "optimistic-ethereum",
+  56: "binance-smart-chain",
+  137: "polygon-pos",
+  42161: "arbitrum-one",
+  8453: "base",
+  43114: "avalanche",
+};
+
+function platformFor(identifier: string): string | null {
+  const m = /^eip155:(\d+)\/erc20:0x[0-9a-fA-F]{40}$/.exec(identifier);
+  if (!m) return null;
+  return CG_PLATFORM[Number(m[1])] ?? null;
+}
+
+function contractOf(identifier: string): string {
+  const m = /^eip155:\d+\/erc20:(0x[0-9a-fA-F]{40})$/.exec(identifier);
+  return (m ? m[1] : "").toLowerCase();
+}
+
 interface RegistryAsset {
   identifier?: unknown;
   coingeckoId?: unknown;
@@ -93,7 +115,7 @@ export const ethereumFetchPricesAction = createAction({
     const base = (props.coingeckoBaseUrl ?? "").trim() ||
       "https://api.coingecko.com/api/v3";
     const ids = new Map<string, string>();
-    const addresses: Array<{ asset: string; address: string }> = [];
+    const addresses: Array<{ asset: string; address: string; platform: string }> = [];
     const unmapped: string[] = [];
 
     for (const identifier of identifiers) {
@@ -103,10 +125,11 @@ export const ethereumFetchPricesAction = createAction({
         ids.set(identifier, known);
       } else if (identifier === ETH_IDENTIFIER) {
         ids.set(identifier, "ethereum");
-      } else if (/^eip155:1\/erc20:0x[0-9a-fA-F]{40}$/.test(identifier)) {
+      } else if (platformFor(identifier) !== null) {
         addresses.push({
           asset: identifier,
-          address: identifier.slice("eip155:1/erc20:".length).toLowerCase(),
+          address: contractOf(identifier),
+          platform: platformFor(identifier) as string,
         });
       } else {
         unmapped.push(identifier);
@@ -167,16 +190,24 @@ export const ethereumFetchPricesAction = createAction({
         errors.push(error instanceof Error ? error.message : String(error));
       }
     }
-    if (addresses.length > 0) {
+    // Contract lookups go to CoinGecko per platform: the slug names the
+    // chain, so tokens on Base, BSC or Avalanche price like mainnet ones.
+    const byPlatform = new Map<string, typeof addresses>();
+    for (const entry of addresses) {
+      const list = byPlatform.get(entry.platform) ?? [];
+      if (!byPlatform.has(entry.platform)) byPlatform.set(entry.platform, list);
+      list.push(entry);
+    }
+    for (const [platform, group] of byPlatform) {
       try {
         const fetched = await get(
-          `${base}/simple/token_price/ethereum?contract_addresses=${addresses
+          `${base}/simple/token_price/${platform}?contract_addresses=${group
             .map((a) => a.address)
             .join(",")}&vs_currencies=${currency}`,
         );
         collect(
           fetched,
-          addresses.map((a) => ({ asset: a.asset, key: a.address })),
+          group.map((a) => ({ asset: a.asset, key: a.address })),
         );
       } catch (error) {
         errors.push(error instanceof Error ? error.message : String(error));

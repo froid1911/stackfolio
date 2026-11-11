@@ -54,15 +54,18 @@ keys kept on the ethereum connection document, never echoed anywhere
 else. Etherscan V2 answers the chains its free plan covers (Ethereum,
 Polygon, Arbitrum, Linea, Celo, Sonic, World, and more); the Blockscout
 gateway answers the ones Etherscan charges for and Blockscout serves
-(OP Mainnet, Gnosis). A chain neither covers for free - Base, BSC,
-Avalanche with current plans - is reported as unsupported instead of
+(OP Mainnet, Gnosis); and the Ankr multichain API fills the gaps both
+others refuse for free (Base, BNB Smart Chain, Avalanche), including
+each transaction's logs so ERC-20s ride along - its one honest gap is
+internal contract traces, which imports report as skipped. A chain
+none of the three covers is reported as unsupported instead of being
 imported half-way. History imports from block 0, so no archive node is
 needed: every wallet's complete lifetime lands in the ledger, and
 events are keyed by transaction hash, so imports are idempotent and
 re-run safely. Your own `geth --http` (127.0.0.1:8545) still serves the
 private parts - ENS lookups, the validator's world - and the local beacon
 API (127.0.0.1:5052) serves staking reads. Other than Etherscan,
-Blockscout and CoinGecko (prices), nothing talks to the internet.
+Blockscout, Ankr and CoinGecko (prices), nothing talks to the internet.
 
 ## Commands
 

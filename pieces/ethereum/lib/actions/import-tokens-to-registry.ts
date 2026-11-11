@@ -54,6 +54,10 @@ const NATIVE_CHAINS: Record<
   42220: { symbol: "CELO", name: "Celo", coingeckoId: "celo" },
   10: { symbol: "ETH", name: "Ether (OP Mainnet)", coingeckoId: "ethereum" },
   100: { symbol: "xDAI", name: "xDai", coingeckoId: "xdai" },
+  8453: { symbol: "ETH", name: "Ether (Base)", coingeckoId: "ethereum" },
+  56: { symbol: "BNB", name: "BNB", coingeckoId: "binancecoin" },
+  43114: { symbol: "AVAX", name: "Avalanche", coingeckoId: "avalanche-2" },
+  999: { symbol: "HYPE", name: "Hyperliquid", coingeckoId: "hyperliquid" },
 };
 
 /**

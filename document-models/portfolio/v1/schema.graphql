@@ -1,0 +1,223 @@
+scalar Unknown
+scalar DateTime
+scalar Address
+scalar AttachmentRef
+scalar Amount_Tokens
+scalar EthereumAddress
+scalar EmailAddress
+scalar Amount_Percentage
+scalar Date
+scalar URL
+scalar Amount_Money
+scalar OLabel
+scalar Currency
+scalar PHID
+scalar OID
+scalar Amount_Fiat
+scalar Amount_Currency
+scalar Amount_Crypto
+scalar Amount
+scalar Upload
+
+type PortfolioState {
+  name: String
+  baseCurrency: String!
+  addresses: [AddressEntry!]!
+  priceOverrides: [PriceOverride!]!
+  ignoredAssets: [String!]!
+  autoSnapshot: AutoSnapshot!
+  snapshots: [Snapshot!]!
+  resources: ManagedResources
+  lastCheck: ReconcilerCheck
+  grant: GrantInfo
+}
+
+type AddressEntry {
+  id: OID!
+  address: String!
+  chainId: Int!
+  label: String
+  ensName: String
+  tags: [String!]!
+  ignored: Boolean!
+  addedAt: DateTime!
+}
+
+type PriceOverride {
+  asset: String!
+  price: String!
+  setAt: DateTime!
+}
+
+type AutoSnapshot {
+  enabled: Boolean!
+  intervalHours: Int!
+}
+
+type Snapshot {
+  id: OID!
+  timestamp: DateTime!
+  totalValue: String!
+  perLocation: [LocationValue!]!
+  perAsset: [AssetValue!]!
+}
+
+type LocationValue {
+  location: String!
+  value: String!
+}
+
+type AssetValue {
+  asset: String!
+  amount: String!
+  value: String!
+}
+
+type ManagedResources {
+  connectionId: String!
+  workflowIds: [String!]!
+}
+
+type ReconcilerCheck {
+  at: DateTime!
+  issues: [ReconcilerIssue!]!
+  fixes: [ReconcilerFix!]!
+}
+
+type ReconcilerIssue {
+  code: String!
+  severity: IssueSeverity!
+  message: String!
+  accountId: String
+}
+
+type ReconcilerFix {
+  code: String!
+  message: String!
+  at: DateTime!
+}
+
+enum IssueSeverity {
+  BLOCKING
+  WARNING
+}
+
+type GrantInfo {
+  id: String!
+  name: String
+  grantedAt: DateTime
+}
+
+# identity
+
+input SetPortfolioDetailsInput {
+  name: String
+  baseCurrency: String
+  autoSnapshotEnabled: Boolean
+  autoSnapshotIntervalHours: Int
+}
+
+# address-book
+
+input AddAddressInput {
+  id: OID!
+  address: String!
+  chainId: Int!
+  label: String
+  ensName: String
+  timestamp: DateTime!
+}
+
+input UpdateAddressInput {
+  id: OID!
+  label: String
+  ensName: String
+  tags: [String!]
+}
+
+input RemoveAddressInput {
+  id: OID!
+}
+
+input SetAddressIgnoredInput {
+  id: OID!
+  ignored: Boolean!
+}
+
+# pricing
+
+input SetPriceOverrideInput {
+  asset: String!
+  price: String!
+  setAt: DateTime!
+}
+
+input RemovePriceOverrideInput {
+  asset: String!
+}
+
+input SetAssetIgnoredInput {
+  asset: String!
+  ignored: Boolean!
+}
+
+# snapshots
+
+input TakeSnapshotInput {
+  id: OID!
+  timestamp: DateTime!
+  totalValue: String!
+  perLocation: [LocationValueInput!]!
+  perAsset: [AssetValueInput!]!
+}
+
+input LocationValueInput {
+  location: String!
+  value: String!
+}
+
+input AssetValueInput {
+  asset: String!
+  amount: String!
+  value: String!
+}
+
+input DeleteSnapshotInput {
+  id: OID!
+}
+
+# reconciler
+
+input RecordResourcesInput {
+  connectionId: String!
+  workflowIds: [String!]!
+}
+
+input RecordCheckInput {
+  at: DateTime!
+  issues: [IssueInput!]!
+  fixes: [FixInput!]!
+}
+
+input IssueInput {
+  code: String!
+  severity: IssueSeverity!
+  message: String!
+  accountId: String
+}
+
+input FixInput {
+  code: String!
+  message: String!
+  at: DateTime!
+}
+
+input SetGrantInput {
+  id: String!
+  name: String
+  grantedAt: DateTime
+}
+
+input ClearGrantInput {
+  _empty: Boolean
+}

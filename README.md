@@ -57,15 +57,21 @@ gateway answers the ones Etherscan charges for and Blockscout serves
 (OP Mainnet, Gnosis); and the Ankr multichain API fills the gaps both
 others refuse for free (Base, BNB Smart Chain, Avalanche), including
 each transaction's logs so ERC-20s ride along - its one honest gap is
-internal contract traces, which imports report as skipped. A chain
-none of the three covers is reported as unsupported instead of being
-imported half-way. History imports from block 0, so no archive node is
-needed: every wallet's complete lifetime lands in the ledger, and
-events are keyed by transaction hash, so imports are idempotent and
-re-run safely. Your own `geth --http` (127.0.0.1:8545) still serves the
-private parts - ENS lookups, the validator's world - and the local beacon
-API (127.0.0.1:5052) serves staking reads. Other than Etherscan,
-Blockscout, Ankr and CoinGecko (prices), nothing talks to the internet.
+internal contract traces, which imports report as skipped. Bitcoin is
+watched separately (chain id 0): give a wallet an account **xpub** (or a
+single address) and Stackfolio derives its BIP-84 receive and change
+addresses and reads the confirmed chain from the public mempool.space
+API - watch-only, so no private key ever leaves your machine. A chain
+none of the three covers, and not a Bitcoin target, is reported as
+unsupported instead of being imported half-way.
+History imports from block 0, so no archive node is needed: every
+wallet's complete lifetime lands in the ledger, and events are keyed by
+transaction hash, so imports are idempotent and re-run safely. Your own
+`geth --http` (127.0.0.1:8545) still serves the private parts - ENS
+lookups, the validator's world - and the local beacon API
+(127.0.0.1:5052) serves staking reads. Other than Etherscan, Blockscout,
+Ankr, mempool.space (Bitcoin) and CoinGecko (prices), nothing talks to
+the internet.
 
 ## Commands
 

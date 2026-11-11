@@ -98,7 +98,9 @@ function AccountRowView({
           "—"
         ) : (
           <>
-            {fmtAmount(row.nativeBalance, 18, 5)} ETH
+            {/* Chain 0 is Bitcoin: sats and BTC, not wei and ETH. */}
+            {fmtAmount(row.nativeBalance, row.chainId === 0 ? 8 : 18, 5)}{" "}
+            {row.chainId === 0 ? "BTC" : "ETH"}
             {row.nativeBalanceBlock !== null && (
               <span className="text-xs text-muted-foreground"> #{row.nativeBalanceBlock}</span>
             )}

@@ -4,6 +4,12 @@ import { fmtAmount } from "../../stackfolio/lib/format.js";
 
 const PAGE = 50;
 
+/** Decimals by asset family: Bitcoin (native, testnet included) uses 8
+ * sats-per-coin; EVM natives and tokens use 18. */
+function decimalsOf(asset: string): number {
+  return asset.startsWith("bip122:") ? 8 : 18;
+}
+
 /**
  * Review of one wallet's ledger: newest first, with the actions a reviewer
  * needs — ignore an event that belongs to the history but not to the book,
@@ -34,7 +40,9 @@ export function WalletLedger() {
         <Field label="Chain">{state.chainId}</Field>
         <Field label="Native balance">
           {state.nativeBalance
-            ? `${fmtAmount(state.nativeBalance.amount, 18, 5)} ETH`
+            ? `${fmtAmount(state.nativeBalance.amount, state.chainId === 0 ? 8 : 18, 5)} ${
+                state.chainId === 0 ? "BTC" : "ETH"
+              }`
             : "—"}
         </Field>
         <Field label="Scan progress">
@@ -72,7 +80,7 @@ export function WalletLedger() {
               </td>
               <td className="text-right font-mono">
                 {event.type === "SPEND" ? "-" : ""}
-                {fmtAmount(event.amount, 18, 6)}{" "}
+                {fmtAmount(event.amount, decimalsOf(event.asset), 6)}{" "}
                 <span className="text-xs">{event.asset}</span>
               </td>
               <td className="max-w-[200px] truncate">

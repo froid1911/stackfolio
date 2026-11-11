@@ -9,7 +9,7 @@ export const TRANSFER_TOPIC =
 export const NATIVE_ASSET = "eip155:1/slip44:60";
 
 /** An address as its left-padded 32-byte log topic (always lowercase). */
-export function topicForAddress(address: string): string {
+export function topicForAddress(address: string): `0x${string}` {
   return `0x${"0".repeat(24)}${address.toLowerCase().slice(2)}`;
 }
 

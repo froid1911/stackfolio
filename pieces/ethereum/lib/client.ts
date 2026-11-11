@@ -10,7 +10,7 @@ export const DEFAULT_CHAIN_ID = 1;
 export interface GetLogsParams {
   fromBlock: bigint;
   toBlock: bigint;
-  topics: Array<string | null>;
+  topics: Array<`0x${string}` | null>;
 }
 
 /** A block narrowed to what the native walker reads. */
@@ -80,9 +80,9 @@ export function createClientBundle(
           {
             fromBlock: `0x${fromBlock.toString(16)}`,
             toBlock: `0x${toBlock.toString(16)}`,
-            topics: topics.filter(
-              (topic): topic is `0x${string}` => topic !== null,
-            ),
+            // Positional nulls stay: they are "any topic at this index",
+            // and dropping them would shift every later topic one up.
+            topics,
           },
         ],
       })) as Array<{

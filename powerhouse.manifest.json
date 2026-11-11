@@ -30,7 +30,12 @@
   ],
   "apps": [],
   "editors": [],
-  "processors": [],
+  "processors": [
+    {
+      "id": "portfolio-index",
+      "name": "portfolio-index"
+    }
+  ],
   "subgraphs": [],
   "config": []
 }

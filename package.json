@@ -126,6 +126,7 @@
     "document-model": "6.2.3-dev.96",
     "graphql": "16.12.0",
     "graphql-tag": "2.12.6",
+    "kysely": "0.28.16",
     "oxfmt": "0.68.0",
     "oxlint": "1.83.0",
     "oxlint-tsgolint": "7.0.2001",
@@ -146,6 +147,7 @@
     "document-model": "6.2.3-dev.96",
     "graphql": "^16",
     "graphql-tag": "^2",
+    "kysely": "^0.28",
     "react": "^19",
     "react-dom": "^19",
     "zod": "^4"

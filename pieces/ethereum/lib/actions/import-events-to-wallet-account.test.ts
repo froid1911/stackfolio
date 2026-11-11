@@ -114,6 +114,71 @@ describe("import-events-to-wallet-account", () => {
     });
   });
 
+  it("retires the backfill to DONE when the walk passes the head", async () => {
+    get.mockResolvedValue({
+      header: { documentId: "w1", documentType: "stackfolio/wallet-account" },
+      state: {
+        global: {
+          address: "0x1234",
+          chainId: 1,
+          ledger: [],
+          backfill: { state: "NATIVE", startBlock: 100, nextBlock: 100 },
+        },
+      },
+    });
+
+    await run({
+      ...baseProps,
+      eventsJson: "[]",
+      backfillDone: true,
+      backfillNextBlockJson: "250",
+    });
+
+    const [, , actions] = execute.mock.calls[0] as [
+      string,
+      string,
+      Array<{ type: string; input: Record<string, unknown> }>,
+    ];
+    expect(actions.map((a) => a.type)).toEqual(["SET_BACKFILL_STATE"]);
+    expect(actions[0].input).toEqual({
+      state: "DONE",
+      startBlock: 100,
+      nextBlock: 250,
+    });
+  });
+
+  it("advances the backfill cursor while the walk continues", async () => {
+    get.mockResolvedValue({
+      header: { documentId: "w1", documentType: "stackfolio/wallet-account" },
+      state: {
+        global: {
+          address: "0x1234",
+          chainId: 1,
+          ledger: [],
+          backfill: { state: "NATIVE", startBlock: 100, nextBlock: 100 },
+        },
+      },
+    });
+
+    await run({
+      ...baseProps,
+      eventsJson: "[]",
+      backfillDone: false,
+      backfillNextBlockJson: "1100100",
+    });
+
+    const [, , actions] = execute.mock.calls[0] as [
+      string,
+      string,
+      Array<{ type: string; input: Record<string, unknown> }>,
+    ];
+    expect(actions[0].input).toEqual({
+      state: "NATIVE",
+      startBlock: 100,
+      nextBlock: 1100100,
+    });
+  });
+
   it("refuses documents of another type", async () => {
     get.mockResolvedValue({
       header: { documentId: "w1", documentType: "stackfolio/portfolio" },

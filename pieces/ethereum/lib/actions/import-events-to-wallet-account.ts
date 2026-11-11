@@ -71,6 +71,19 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
         'Optional head-state payload {"balance":"<wei>","blockNumber":21000}. Dispatched as SET_NATIVE_BALANCE.',
       required: false,
     }),
+    backfillDone: Property.Checkbox({
+      displayName: "Backfill finished",
+      description:
+        "Set from {{steps.walk.output.done}}: when the walk ran past the head, the document's backfill state is retired to DONE.",
+      required: false,
+      defaultValue: false,
+    }),
+    backfillNextBlockJson: Property.Json({
+      displayName: "Backfill cursor (JSON)",
+      description:
+        "The walk step's nextBlock as a JSON number: advances backfill.nextBlock so the next run continues instead of repeating the window.",
+      required: false,
+    }),
   },
   async run(context) {
     const p = context.propsValue;
@@ -138,6 +151,29 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
           amount: native.balance,
           blockNumber: native.blockNumber,
           observedAt: p.importedAt,
+        }),
+      );
+    }
+    const backfillNext =
+      p.backfillNextBlockJson == null
+        ? null
+        : (parseJsonish(
+            p.backfillNextBlockJson,
+            "backfillNextBlockJson",
+          ) as number);
+    if (p.backfillDone || backfillNext !== null) {
+      const backfill = globalState<{
+        backfill?: {
+          state: string;
+          startBlock: number | null;
+          nextBlock: number | null;
+        };
+      }>(doc).backfill;
+      actions.push(
+        toGlobalAction("SET_BACKFILL_STATE", {
+          state: p.backfillDone ? "DONE" : (backfill?.state ?? "NATIVE"),
+          startBlock: backfill?.startBlock ?? null,
+          nextBlock: backfillNext ?? backfill?.nextBlock ?? null,
         }),
       );
     }

@@ -213,4 +213,44 @@ export async function up(db: Kysely<DB>): Promise<void> {
     .addPrimaryKeyConstraint("check_issues_pk", ["document_id", "seq"])
     .ifNotExists()
     .execute();
+
+  await db.schema
+    .createTable("hl_accounts")
+    .addColumn("document_id", "varchar(255)", (c) => c.notNull())
+    .addColumn("address", "varchar(255)", (c) => c.notNull())
+    .addColumn("label", "text")
+    .addColumn("account_value_usd", amount)
+    .addColumn("updated_at", stamp)
+    .addPrimaryKeyConstraint("hl_accounts_pk", ["document_id", "address"])
+    .ifNotExists()
+    .execute();
+
+  await db.schema
+    .createTable("hl_spot")
+    .addColumn("document_id", "varchar(255)", (c) => c.notNull())
+    .addColumn("address", "varchar(255)", (c) => c.notNull())
+    .addColumn("token_index", "integer", (c) => c.notNull())
+    .addColumn("coin", "varchar(64)", (c) => c.notNull())
+    .addColumn("total", amount, (c) => c.notNull())
+    .addColumn("hold", amount, (c) => c.notNull())
+    .addPrimaryKeyConstraint("hl_spot_pk", [
+      "document_id",
+      "address",
+      "token_index",
+    ])
+    .ifNotExists()
+    .execute();
+
+  await db.schema
+    .createTable("hl_perps")
+    .addColumn("document_id", "varchar(255)", (c) => c.notNull())
+    .addColumn("address", "varchar(255)", (c) => c.notNull())
+    .addColumn("coin", "varchar(64)", (c) => c.notNull())
+    .addColumn("szi", amount, (c) => c.notNull())
+    .addColumn("entry_px", amount, (c) => c.notNull())
+    .addColumn("position_value", amount, (c) => c.notNull())
+    .addColumn("unrealized_pnl", amount, (c) => c.notNull())
+    .addPrimaryKeyConstraint("hl_perps_pk", ["document_id", "address", "coin"])
+    .ifNotExists()
+    .execute();
 }

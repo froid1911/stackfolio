@@ -134,6 +134,34 @@ export interface CheckIssueRow {
   at: string;
 }
 
+/** One tracked Hyperliquid account, as last synced from the exchange. */
+export interface HlAccountRow {
+  document_id: string;
+  address: string;
+  label: string | null;
+  account_value_usd: string | null;
+  updated_at: string | null;
+}
+
+export interface HlSpotRow {
+  document_id: string;
+  address: string;
+  token_index: number;
+  coin: string;
+  total: string;
+  hold: string;
+}
+
+export interface HlPerpRow {
+  document_id: string;
+  address: string;
+  coin: string;
+  szi: string;
+  entry_px: string;
+  position_value: string;
+  unrealized_pnl: string;
+}
+
 export interface DB {
   events: EventRow;
   assets: AssetRow;
@@ -147,4 +175,7 @@ export interface DB {
   withdrawals: WithdrawalRow;
   accounts: AccountRow;
   check_issues: CheckIssueRow;
+  hl_accounts: HlAccountRow;
+  hl_spot: HlSpotRow;
+  hl_perps: HlPerpRow;
 }

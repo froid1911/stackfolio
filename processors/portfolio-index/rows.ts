@@ -6,6 +6,9 @@
  */
 import type {
   AccountRow,
+  HlAccountRow,
+  HlPerpRow,
+  HlSpotRow,
   AssetRow,
   BalancePointRow,
   CheckIssueRow,
@@ -320,4 +323,63 @@ export function unwrapState(state: unknown): unknown {
   const envelope = asRecord(state);
   const global = envelope ? asRecord(envelope.global) : null;
   return global ?? state;
+}
+
+export interface HlIndex {
+  accounts: HlAccountRow[];
+  spot: HlSpotRow[];
+  perps: HlPerpRow[];
+}
+
+/**
+ * The Hyperliquid document's accounts, balances and positions. Rows keep
+ * the exchange's own strings; only shape is checked, so a malformed entry
+ * drops silently rather than poisoning the table.
+ */
+export function hyperliquidRows(documentId: string, global: unknown): HlIndex {
+  const state = asRecord(global);
+  const accounts: HlAccountRow[] = [];
+  const spot: HlSpotRow[] = [];
+  const perps: HlPerpRow[] = [];
+  for (const entry of list(state?.accounts)) {
+    const account = asRecord(entry);
+    const address = str(account?.address)?.toLowerCase();
+    if (!account || !address) continue;
+    accounts.push({
+      document_id: documentId,
+      address,
+      label: str(account.label),
+      account_value_usd: str(account.accountValueUsd),
+      updated_at: str(account.updatedAt),
+    });
+    for (const raw of list(account.spot)) {
+      const balance = asRecord(raw);
+      const tokenIndex = num(balance?.tokenIndex);
+      const coin = str(balance?.coin);
+      if (!balance || tokenIndex === null || !coin) continue;
+      spot.push({
+        document_id: documentId,
+        address,
+        token_index: tokenIndex,
+        coin,
+        total: str(balance.total) ?? "0",
+        hold: str(balance.hold) ?? "0",
+      });
+    }
+    for (const raw of list(account.perps)) {
+      const position = asRecord(raw);
+      const coin = str(position?.coin);
+      if (!position || !coin) continue;
+      perps.push({
+        document_id: documentId,
+        address,
+        coin,
+        szi: str(position.szi) ?? "0",
+        entry_px: str(position.entryPx) ?? "0",
+        position_value: str(position.positionValue) ?? "0",
+        unrealized_pnl: str(position.unrealizedPnl) ?? "0",
+      });
+    }
+  }
+  return { accounts, spot, perps };
 }

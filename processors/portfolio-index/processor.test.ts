@@ -13,6 +13,11 @@ import {
   reducer as walletReducer,
   utils as walletUtils,
 } from "document-models/wallet-account/v1";
+import {
+  actions as hlActions,
+  reducer as hlReducer,
+  utils as hlUtils,
+} from "document-models/hyperliquid-account/v1";
 import { describe, expect, it } from "vitest";
 
 import { up } from "./migrations.js";
@@ -276,5 +281,100 @@ describe("portfolio-index", () => {
       code: "NO_GRANT",
       severity: "BLOCKING",
     });
+  });
+
+  it("replaces Hyperliquid rows when the account snapshot changes", async () => {
+    const { db, processor } = await harness();
+    const address = "0x8a88728340b81741c8ad70b07f601d99e9c3f7cb";
+    let document = hlReducer(
+      hlUtils.createDocument(),
+      hlActions.upsertAccount({ address, label: "fr4nk.eth" }),
+    );
+    document = hlReducer(
+      document,
+      hlActions.recordSnapshot({
+        address,
+        accountValueUsd: "1234.56",
+        spot: [{ tokenIndex: 0, coin: "USDC", total: "100.5", hold: "0" }],
+        perps: [
+          {
+            coin: "HYPE",
+            szi: "1.5",
+            entryPx: "18.2",
+            positionValue: "28.1",
+            unrealizedPnl: "0.4",
+          },
+        ],
+        fills: [],
+        updatedAt: "2026-11-11T10:00:00.000Z",
+      }),
+    );
+    await processor.onOperations(replay(document));
+
+    const account = await db
+      .selectFrom("hl_accounts")
+      .selectAll()
+      .where("document_id", "=", document.header.id)
+      .executeTakeFirstOrThrow();
+    expect(account).toMatchObject({
+      address,
+      label: "fr4nk.eth",
+      account_value_usd: "1234.56",
+    });
+    const spot = await db
+      .selectFrom("hl_spot")
+      .selectAll()
+      .where("document_id", "=", document.header.id)
+      .execute();
+    expect(spot).toEqual([
+      {
+        document_id: document.header.id,
+        address,
+        token_index: 0,
+        coin: "USDC",
+        total: "100.5",
+        hold: "0",
+      },
+    ]);
+    const perps = await db
+      .selectFrom("hl_perps")
+      .selectAll()
+      .where("document_id", "=", document.header.id)
+      .execute();
+    expect(perps[0]).toMatchObject({ coin: "HYPE", szi: "1.5" });
+
+    // A flat round: the closed position and the emptied balance vanish.
+    document = hlReducer(
+      document,
+      hlActions.recordSnapshot({
+        address,
+        spot: [],
+        perps: [],
+        fills: [],
+        updatedAt: "2026-11-11T11:00:00.000Z",
+      }),
+    );
+    await processor.onOperations(replay(document));
+    expect(
+      await db
+        .selectFrom("hl_spot")
+        .selectAll()
+        .where("document_id", "=", document.header.id)
+        .execute(),
+    ).toEqual([]);
+    expect(
+      await db
+        .selectFrom("hl_perps")
+        .selectAll()
+        .where("document_id", "=", document.header.id)
+        .execute(),
+    ).toEqual([]);
+    const refreshed = await db
+      .selectFrom("hl_accounts")
+      .selectAll()
+      .where("document_id", "=", document.header.id)
+      .executeTakeFirstOrThrow();
+    expect(refreshed.account_value_usd).toBeNull();
+    expect(refreshed.updated_at).toBe("2026-11-11T11:00:00.000Z");
   });
 });

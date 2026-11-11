@@ -15,6 +15,7 @@ import { RelationalDbProcessor } from "@powerhousedao/shared/processors";
 import type { OperationWithContext } from "document-model";
 import { up } from "./migrations.js";
 import {
+  hyperliquidRows,
   portfolioRows,
   planDiff,
   priceRows,
@@ -22,6 +23,7 @@ import {
   stakingRows,
   unwrapState,
   walletRows,
+  type HlIndex,
 } from "./rows.js";
 import type {
   AccountRow,
@@ -47,6 +49,7 @@ export const WALLET_DOCUMENT_TYPE = "stackfolio/wallet-account";
 export const REGISTRY_DOCUMENT_TYPE = "stackfolio/asset-registry";
 export const PRICE_BOOK_DOCUMENT_TYPE = "stackfolio/price-book";
 export const STAKING_DOCUMENT_TYPE = "stackfolio/eth-staking";
+export const HYPERLIQUID_DOCUMENT_TYPE = "stackfolio/hyperliquid-account";
 
 /** Every document type the index follows. */
 export const INDEXED_DOCUMENT_TYPES = [
@@ -55,6 +58,7 @@ export const INDEXED_DOCUMENT_TYPES = [
   REGISTRY_DOCUMENT_TYPE,
   PRICE_BOOK_DOCUMENT_TYPE,
   STAKING_DOCUMENT_TYPE,
+  HYPERLIQUID_DOCUMENT_TYPE,
 ] as const;
 
 const FOLLOWED = new Set<string>(INDEXED_DOCUMENT_TYPES);
@@ -172,6 +176,13 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
         case PRICE_BOOK_DOCUMENT_TYPE: {
           const prices = priceRows(documentId, parsed);
           await this.writePrices(prices.latest, prices.history);
+          break;
+        }
+        case HYPERLIQUID_DOCUMENT_TYPE: {
+          await this.writeHyperliquid(
+            documentId,
+            hyperliquidRows(documentId, parsed),
+          );
           break;
         }
         default: {
@@ -571,6 +582,49 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
    * (Kysely, not raw SQL: the namespace handle rewrites built queries and
    * lets raw text through without its search path.)
    */
+  /**
+   * The Hyperliquid document owns its accounts wholesale: replace the
+   * document's rows, so an account dropped from the document leaves no
+   * ghost balances behind.
+   */
+  private async writeHyperliquid(documentId: string, index: HlIndex): Promise<void> {
+    for (const table of ["hl_spot", "hl_perps", "hl_accounts"] as const) {
+      await this.relationalDb
+        .deleteFrom(table)
+        .where("document_id", "=", documentId)
+        .execute();
+    }
+    for (let at = 0; at < index.accounts.length; at += BATCH) {
+      await this.relationalDb
+        .insertInto("hl_accounts")
+        .values(index.accounts.slice(at, at + BATCH))
+        .onConflict((oc) =>
+          oc.columns(["document_id", "address"]).doNothing(),
+        )
+        .execute();
+    }
+    for (let at = 0; at < index.spot.length; at += BATCH) {
+      await this.relationalDb
+        .insertInto("hl_spot")
+        .values(index.spot.slice(at, at + BATCH))
+        .onConflict((oc) =>
+          oc
+            .columns(["document_id", "address", "token_index"])
+            .doNothing(),
+        )
+        .execute();
+    }
+    for (let at = 0; at < index.perps.length; at += BATCH) {
+      await this.relationalDb
+        .insertInto("hl_perps")
+        .values(index.perps.slice(at, at + BATCH))
+        .onConflict((oc) =>
+          oc.columns(["document_id", "address", "coin"]).doNothing(),
+        )
+        .execute();
+    }
+  }
+
   private async refreshCounterpartyLabels(): Promise<void> {
     await this.relationalDb
       .updateTable("events")

@@ -38,6 +38,8 @@ export const schema: DocumentNode = gql`
       to: String
     ): [PortfolioApiStakingBalance!]!
     withdrawals(driveId: String!, validatorIndex: Int): [PortfolioApiWithdrawal!]!
+    "Hyperliquid accounts tracked by the portfolio, with spot balances and open positions."
+    hyperliquidAccounts(driveId: String!): [PortfolioApiHlAccount!]!
     "Open reconciler findings."
     issues(driveId: String!, severity: String): [PortfolioApiIssue!]!
     "Forward ENS lookup on the given JSON-RPC node; null when the name has no ETH address there."
@@ -170,6 +172,31 @@ export const schema: DocumentNode = gql`
     amountGwei: String!
     blockNumber: Int!
     timestamp: String!
+  }
+
+  type PortfolioApiHlAccount {
+    documentId: String!
+    address: String!
+    label: String
+    accountValueUsd: String
+    updatedAt: String
+    spot: [PortfolioApiHlSpot!]!
+    perps: [PortfolioApiHlPerp!]!
+  }
+
+  type PortfolioApiHlSpot {
+    tokenIndex: Int!
+    coin: String!
+    total: String!
+    hold: String!
+  }
+
+  type PortfolioApiHlPerp {
+    coin: String!
+    szi: String!
+    entryPx: String!
+    positionValue: String!
+    unrealizedPnl: String!
   }
 
   type PortfolioApiIssue {

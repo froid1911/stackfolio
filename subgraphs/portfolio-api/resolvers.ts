@@ -331,6 +331,64 @@ export const getResolvers = (
           .execute();
       },
 
+      hyperliquidAccounts: async (
+        _parent: unknown,
+        args: { driveId: string },
+        ctx: Context,
+      ) => {
+        const ids = await driveFileIds(subgraph, args.driveId, ctx);
+        if (!ids || ids.length === 0) return [];
+        const db = query(args.driveId);
+        const [accounts, spot, perps] = await Promise.all([
+          db.selectFrom("hl_accounts").where("document_id", "in", ids)
+            .select([
+              "document_id as documentId",
+              "address",
+              "label",
+              "account_value_usd as accountValueUsd",
+              "updated_at as updatedAt",
+            ])
+            .orderBy("address")
+            .execute(),
+          db.selectFrom("hl_spot").where("document_id", "in", ids)
+            .select([
+              "document_id as documentId",
+              "address",
+              "token_index as tokenIndex",
+              "coin",
+              "total",
+              "hold",
+            ])
+            .orderBy(["address", "token_index"])
+            .execute(),
+          db.selectFrom("hl_perps").where("document_id", "in", ids)
+            .select([
+              "document_id as documentId",
+              "address",
+              "coin",
+              "szi",
+              "entry_px as entryPx",
+              "position_value as positionValue",
+              "unrealized_pnl as unrealizedPnl",
+            ])
+            .orderBy(["address", "coin"])
+            .execute(),
+        ]);
+        return accounts.map((account) => ({
+          ...account,
+          spot: spot.filter(
+            (row) =>
+              row.documentId === account.documentId &&
+              row.address === account.address,
+          ),
+          perps: perps.filter(
+            (row) =>
+              row.documentId === account.documentId &&
+              row.address === account.address,
+          ),
+        }));
+      },
+
       ensAddress: async (
         _parent: unknown,
         args: { name: string; rpcUrl: string },

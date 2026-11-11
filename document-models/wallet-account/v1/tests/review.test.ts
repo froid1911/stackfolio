@@ -1,7 +1,12 @@
-import { actions, reducer, utils } from "document-models/wallet-account/v1";
+import {
+  importEvents,
+  reducer,
+  retypeEvent,
+  setEventIgnored,
+  setEventNotes,
+  utils,
+} from "document-models/wallet-account/v1";
 import { describe, expect, it } from "vitest";
-
-const { importEvents, setEventIgnored, setEventNotes, retypeEvent } = actions;
 
 const seeded = () =>
   reducer(

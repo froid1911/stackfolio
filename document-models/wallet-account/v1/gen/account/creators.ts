@@ -6,9 +6,18 @@ import { createAction } from "document-model";
 import {
   SetAccountDetailsInputSchema,
   SetIgnoredInputSchema,
+  SetWalletXpubInputSchema,
 } from "../schema/zod.js";
-import type { SetAccountDetailsInput, SetIgnoredInput } from "../types.js";
-import type { SetAccountDetailsAction, SetIgnoredAction } from "./actions.js";
+import type {
+  SetAccountDetailsInput,
+  SetIgnoredInput,
+  SetWalletXpubInput,
+} from "../types.js";
+import type {
+  SetAccountDetailsAction,
+  SetIgnoredAction,
+  SetWalletXpubAction,
+} from "./actions.js";
 
 export const setAccountDetails = (input: SetAccountDetailsInput) =>
   createAction<SetAccountDetailsAction>(
@@ -25,5 +34,14 @@ export const setIgnored = (input: SetIgnoredInput) =>
     { ...input },
     undefined,
     SetIgnoredInputSchema,
+    "global",
+  );
+
+export const setWalletXpub = (input: SetWalletXpubInput) =>
+  createAction<SetWalletXpubAction>(
+    "SET_WALLET_XPUB",
+    { ...input },
+    undefined,
+    SetWalletXpubInputSchema,
     "global",
   );

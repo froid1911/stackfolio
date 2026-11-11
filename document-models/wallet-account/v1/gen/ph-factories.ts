@@ -23,6 +23,7 @@ export function defaultGlobalState(): WalletAccountGlobalState {
     cursor: null,
     backfill: null,
     nativeBalance: null,
+    bitcoinXpub: null,
   };
 }
 

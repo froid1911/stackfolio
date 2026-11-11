@@ -1,7 +1,11 @@
-import { actions, reducer, utils } from "document-models/wallet-account/v1";
+import {
+  recordScanProgress,
+  reducer,
+  setBackfillState,
+  setNativeBalance,
+  utils,
+} from "document-models/wallet-account/v1";
 import { describe, expect, it } from "vitest";
-
-const { recordScanProgress, setBackfillState, setNativeBalance } = actions;
 
 describe("CursorOperations", () => {
   it("should handle recordScanProgress operation", () => {
@@ -26,15 +30,24 @@ describe("CursorOperations", () => {
   it("should accept equal or greater block cursors", () => {
     let document = reducer(
       utils.createDocument(),
-      recordScanProgress({ lastLogsBlock: 100, ranAt: "2026-11-11T00:00:00.000Z" }),
+      recordScanProgress({
+        lastLogsBlock: 100,
+        ranAt: "2026-11-11T00:00:00.000Z",
+      }),
     );
     document = reducer(
       document,
-      recordScanProgress({ lastLogsBlock: 100, ranAt: "2026-11-11T01:00:00.000Z" }),
+      recordScanProgress({
+        lastLogsBlock: 100,
+        ranAt: "2026-11-11T01:00:00.000Z",
+      }),
     );
     document = reducer(
       document,
-      recordScanProgress({ lastLogsBlock: 150, ranAt: "2026-11-11T02:00:00.000Z" }),
+      recordScanProgress({
+        lastLogsBlock: 150,
+        ranAt: "2026-11-11T02:00:00.000Z",
+      }),
     );
 
     expect(document.operations.global[2].error).toBeUndefined();
@@ -44,11 +57,17 @@ describe("CursorOperations", () => {
   it("should reject a regressing logs cursor", () => {
     let document = reducer(
       utils.createDocument(),
-      recordScanProgress({ lastLogsBlock: 100, ranAt: "2026-11-11T00:00:00.000Z" }),
+      recordScanProgress({
+        lastLogsBlock: 100,
+        ranAt: "2026-11-11T00:00:00.000Z",
+      }),
     );
     document = reducer(
       document,
-      recordScanProgress({ lastLogsBlock: 99, ranAt: "2026-11-11T01:00:00.000Z" }),
+      recordScanProgress({
+        lastLogsBlock: 99,
+        ranAt: "2026-11-11T01:00:00.000Z",
+      }),
     );
 
     expect(document.operations.global[1].error).toBe(
@@ -85,7 +104,11 @@ describe("CursorOperations", () => {
     );
     document = reducer(
       document,
-      setBackfillState({ state: "LOGS", startBlock: 18000000, nextBlock: 18000500 }),
+      setBackfillState({
+        state: "LOGS",
+        startBlock: 18000000,
+        nextBlock: 18000500,
+      }),
     );
 
     expect(document.state.global.backfill).toEqual({

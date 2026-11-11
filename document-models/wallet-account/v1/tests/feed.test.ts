@@ -1,7 +1,9 @@
-import { actions, reducer, utils } from "document-models/wallet-account/v1";
+import {
+  importEvents,
+  reducer,
+  utils,
+} from "document-models/wallet-account/v1";
 import { describe, expect, it } from "vitest";
-
-const { importEvents } = actions;
 
 interface EventInput {
   id: string;
@@ -65,10 +67,7 @@ describe("FeedOperations", () => {
   });
 
   it("should reject an empty batch", () => {
-    const document = reducer(
-      utils.createDocument(),
-      importEvents(batch([])),
-    );
+    const document = reducer(utils.createDocument(), importEvents(batch([])));
 
     expect(document.operations.global[0].error).toBe(
       "An import batch must carry at least one event",
@@ -92,9 +91,7 @@ describe("FeedOperations", () => {
   it("should reject duplicates within one batch", () => {
     const document = reducer(
       utils.createDocument(),
-      importEvents(
-        batch([event(), event({ id: "evt-2", sequenceIndex: 0 })]),
-      ),
+      importEvents(batch([event(), event({ id: "evt-2", sequenceIndex: 0 })])),
     );
 
     expect(document.operations.global[0].error).toBe(

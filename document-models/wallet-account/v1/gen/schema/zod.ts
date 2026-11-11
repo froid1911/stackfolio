@@ -20,6 +20,7 @@ import type {
   SetEventNotesInput,
   SetIgnoredInput,
   SetNativeBalanceInput,
+  SetWalletXpubInput,
   WalletAccountState,
 } from "./types.js";
 
@@ -215,6 +216,14 @@ export function SetNativeBalanceInputSchema(): z.ZodObject<
   });
 }
 
+export function SetWalletXpubInputSchema(): z.ZodObject<
+  Properties<SetWalletXpubInput>
+> {
+  return z.object({
+    xpub: z.string().nullish(),
+  });
+}
+
 export function WalletAccountStateSchema(): z.ZodObject<
   Properties<WalletAccountState>
 > {
@@ -222,6 +231,7 @@ export function WalletAccountStateSchema(): z.ZodObject<
     __typename: z.literal("WalletAccountState").optional(),
     address: z.string(),
     backfill: z.lazy(() => BackfillStateSchema().nullish()),
+    bitcoinXpub: z.string().nullish(),
     chainId: z.number(),
     cursor: z.lazy(() => ScanCursorSchema().nullish()),
     ignored: z.boolean(),

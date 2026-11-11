@@ -33,6 +33,7 @@ export const initialGlobalState: WalletAccountGlobalState = {
   cursor: null,
   backfill: null,
   nativeBalance: null,
+  bitcoinXpub: null,
 };
 export const initialLocalState: WalletAccountLocalState = {};
 

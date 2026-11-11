@@ -4,6 +4,7 @@ import type { WalletAccountPHState } from "document-models/wallet-account/v1";
 import type {
   SetAccountDetailsAction,
   SetIgnoredAction,
+  SetWalletXpubAction,
 } from "./account/actions.js";
 import type {
   RecordScanProgressAction,
@@ -32,6 +33,7 @@ import {
   SetEventNotesInputSchema,
   SetIgnoredInputSchema,
   SetNativeBalanceInputSchema,
+  SetWalletXpubInputSchema,
 } from "./schema/zod.js";
 
 const schemaMemo = new Map<() => unknown, unknown>();
@@ -72,6 +74,18 @@ const stateReducer: StateReducer<WalletAccountPHState> = (
       walletAccountAccountOperations.setIgnoredOperation(
         state.global,
         action as SetIgnoredAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "SET_WALLET_XPUB": {
+      memoizedSchema(SetWalletXpubInputSchema).parse(action.input);
+
+      walletAccountAccountOperations.setWalletXpubOperation(
+        state.global,
+        action as SetWalletXpubAction,
         dispatch,
       );
 

@@ -28,6 +28,7 @@ type WalletAccountState {
   cursor: ScanCursor
   backfill: BackfillState
   nativeBalance: NativeBalance
+  bitcoinXpub: String
 }
 
 type LedgerEvent {
@@ -111,6 +112,10 @@ input SetAccountDetailsInput {
 
 input SetIgnoredInput {
   ignored: Boolean!
+}
+
+input SetWalletXpubInput {
+  xpub: String
 }
 
 # feed

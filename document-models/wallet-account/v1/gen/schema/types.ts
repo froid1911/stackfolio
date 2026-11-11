@@ -187,9 +187,14 @@ export type SetNativeBalanceInput = {
   observedAt: Scalars["DateTime"]["input"];
 };
 
+export type SetWalletXpubInput = {
+  xpub?: InputMaybe<Scalars["String"]["input"]>;
+};
+
 export type WalletAccountState = {
   address: Scalars["String"]["output"];
   backfill: Maybe<BackfillState>;
+  bitcoinXpub: Maybe<Scalars["String"]["output"]>;
   chainId: Scalars["Int"]["output"];
   cursor: Maybe<ScanCursor>;
   ignored: Scalars["Boolean"]["output"];

@@ -5,7 +5,7 @@
   "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": "https://github.com/powerhouse-inc/stackfolio"
+    "url": "https://github.com/froid1911/stackfolio"
   },
   "publishConfig": {
     "access": "public"

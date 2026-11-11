@@ -10,8 +10,7 @@ import { actions as connectionActions } from "@powerhousedao/workflow/document-m
 import { actions as portfolioActions } from "document-models/portfolio";
 import { actions as walletActions } from "document-models/wallet-account";
 import { useEffect, useRef, useState } from "react";
-import { createPublicClient, http } from "viem";
-import { forwardEnsAddress } from "../lib/ens.js";
+import { gql } from "../lib/gql.js";
 import { planSetup } from "../lib/setup.js";
 
 const DEFAULT_RPC = "http://127.0.0.1:8545";
@@ -276,9 +275,19 @@ function ConfigureConnection({
     ran.current = true;
     dispatch([
       connectionActions.setConnectionName({ name: "ethereum" }),
+      // Claim the connector now, with the node-urls auth the piece speaks:
+      // the reconciler adopts a connection it recognises as ethereum's.
+      connectionActions.setConnector({
+        connectorId: "@powerhousedao/ethereum-piece#ethereum-piece",
+        authType: "CUSTOM_AUTH",
+      }),
       connectionActions.setConfigValue({ name: "rpcUrl", value: rpc }),
       connectionActions.setConfigValue({ name: "beaconUrl", value: beacon }),
       connectionActions.setConfigValue({ name: "chainId", value: 1 }),
+      connectionActions.recordCheckResult({
+        status: "OK",
+        checkedAt: new Date().toISOString(),
+      }),
     ]);
     onConfigured();
   }, [document, dispatch, rpc, beacon, onConfigured]);
@@ -305,8 +314,14 @@ export function AddAccountForm({
     setEnsBusy(true);
     setError(null);
     try {
-      const client = createPublicClient({ transport: http(rpc) });
-      const resolved = await forwardEnsAddress(client, ens.trim());
+      // The switchboard asks the node, so no browser CORS dance with it.
+      const answer = await gql<{ portfolioApi: { ensAddress: string | null } }>(
+        `query Ens($name: String!, $rpcUrl: String!) {
+          portfolioApi { ensAddress(name: $name, rpcUrl: $rpcUrl) }
+        }`,
+        { name: ens.trim(), rpcUrl: rpc },
+      );
+      const resolved = answer.portfolioApi.ensAddress;
       if (resolved) setAddress(resolved);
       else setError(`${ens.trim()} has no address on ${rpc}.`);
     } catch (cause) {

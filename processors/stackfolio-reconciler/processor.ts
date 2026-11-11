@@ -96,6 +96,12 @@ export class StackfolioReconciler implements IProcessor {
   }
 
   onOperations(operations: OperationWithContext[]): Promise<void> {
+    if (this.stopped && operations.length > 0) {
+      // An operation arrived after a disconnect: the store is live again
+      // (a reload reconnects this instance), so re-arm the periodic sweep.
+      this.stopped = false;
+      this.start();
+    }
     for (const { context } of operations) {
       if (context.documentType === PORTFOLIO_TYPE) {
         this.consider(context.documentId);

@@ -17,7 +17,10 @@ export async function driveFileIds(
     handle.fetchIdentifier,
   )) as DocumentDriveDocument | null;
   if (!drive) return null;
-  return drive.state.global.nodes
+  // A document id passed where a drive belongs gets this far; it names no files.
+  const nodes = (drive.state?.global as { nodes?: unknown } | undefined)?.nodes;
+  if (!Array.isArray(nodes)) return [];
+  return nodes
     .filter((node) => node.kind === "file")
     .map((node) => node.id);
 }

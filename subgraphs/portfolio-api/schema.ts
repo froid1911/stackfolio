@@ -23,7 +23,7 @@ export const schema: DocumentNode = gql`
     latestPrices(driveId: String!): [PortfolioApiPrice!]!
     priceHistory(
       driveId: String!
-      asset: String!
+      asset: String
       from: String
       to: String
     ): [PortfolioApiPricePoint!]!

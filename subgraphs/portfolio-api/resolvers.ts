@@ -187,7 +187,7 @@ export const getResolvers = (
 
       priceHistory: async (
         _parent: unknown,
-        args: { driveId: string; asset: string; from?: string; to?: string },
+        args: { driveId: string; asset?: string; from?: string; to?: string },
         ctx: Context,
       ) => {
         const ids = await driveFileIds(subgraph, args.driveId, ctx);
@@ -195,7 +195,9 @@ export const getResolvers = (
         return query(args.driveId)
           .selectFrom("prices_history")
           .select(["asset", "hour", "price"])
-          .where("asset", "=", args.asset)
+          .$if(Boolean(args.asset), (qb) =>
+            qb.where("asset", "=", args.asset as string),
+          )
           .$if(Boolean(args.from), (qb) =>
             qb.where("hour", ">=", args.from as string),
           )

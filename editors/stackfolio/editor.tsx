@@ -62,20 +62,26 @@ export default function Editor({ children }: EditorProps) {
   // The wizard runs to its own end: the plan turning ready mid-wizard must
   // not yank it away. The decision happens once the drive's nodes have
   // arrived, then sticks until Setup reports itself done.
-  const [wizard, setWizard] = useState<boolean | null>(null);
-  // null: undecided — tabs when the drive is ready or the wizard finished;
-  // Setup while it is not. Once started, the wizard stays until it says so.
-  const showWizard = wizard ?? (nodes ? !plan.ready : null);
+  // The wizard mode is decided once, on the render where the drive's nodes
+  // have arrived, and sticks: the plan turning ready mid-wizard (the book
+  // step creates the very singletons the plan checks) must not yank it away.
+  const [mode, setMode] = useState<null | "wizard" | "tabs">(null);
+  // Latch the decision once, on the render where the drive's nodes arrive.
+  // (Render-phase update: React re-runs this render immediately; the wizard
+  // then stays up through its own steps even though the book step turns
+  // plan.ready on the way.)
+  if (mode === null && nodes) setMode(plan.ready ? "tabs" : "wizard");
+  const activeMode = mode;
 
   if (children) return <div className="h-full w-full">{children}</div>;
 
-  if (showWizard === null) {
+  if (activeMode === null) {
     return <div className="p-6 text-muted-foreground">Loading the drive…</div>;
   }
-  if (showWizard) {
+  if (activeMode === "wizard") {
     return (
       <div className="h-full w-full">
-        <Setup onReady={() => setWizard(false)} />
+        <Setup onReady={() => setMode("tabs")} />
       </div>
     );
   }

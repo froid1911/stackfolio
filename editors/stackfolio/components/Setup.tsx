@@ -49,9 +49,11 @@ export function Setup({ onReady }: { onReady: () => void }) {
 
   async function createBook(name: string, grantName: string) {
     const driveId = drive.header.id;
-    if (!portfolioId) {
+    let id = portfolioId;
+    if (!id) {
       const created = await addDocument(driveId, "Portfolio", "stackfolio/portfolio");
-      setPortfolioId(created.id);
+      id = created.id;
+      setPortfolioId(id);
     }
     if (!registryId) {
       const created = await addDocument(driveId, "Asset registry", "stackfolio/asset-registry");
@@ -61,7 +63,7 @@ export function Setup({ onReady }: { onReady: () => void }) {
       const created = await addDocument(driveId, "Price book", "stackfolio/price-book");
       setPriceBookId(created.id);
     }
-    return { name, grantName };
+    return { id, name, grantName };
   }
 
   async function createConnection() {
@@ -131,7 +133,7 @@ function BookStep({
   onNext,
 }: {
   portfolioId: string | null;
-  onCreated: (name: string, grantName: string) => Promise<{ name: string; grantName: string }>;
+  onCreated: (name: string, grantName: string) => Promise<{ id: string; name: string; grantName: string }>;
   onNext: () => void;
 }) {
   const [name, setName] = useState("My crypto book");
@@ -142,12 +144,13 @@ function BookStep({
     portfolioId ? { id: portfolioId, name: "", grant: "" } : null,
   );
 
+
   async function start() {
     setBusy(true);
     setError(null);
     try {
       const created = await onCreated(name, grantName);
-      setBook({ id: "", name: created.name, grant: created.grantName });
+      setBook({ id: created.id, name: created.name, grant: created.grantName });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -175,7 +178,7 @@ function BookStep({
           {busy ? "Creating…" : "Create the book"}
         </button>
       ) : (
-        <InitPortfolio portfolioId={book.id || ""} name={book.name} grant={book.grant} onNext={onNext} />
+        <InitPortfolio portfolioId={book.id} name={book.name} grant={book.grant} onNext={onNext} />
       )}
     </div>
   );
@@ -199,7 +202,9 @@ function InitPortfolio({
     if (!document || ran.current) return;
     ran.current = true;
     dispatch([
-      portfolioActions.setPortfolioDetails({ name }),
+      ...(name
+        ? [portfolioActions.setPortfolioDetails({ name })]
+        : []),
       ...(grant
         ? [
             portfolioActions.setGrant({

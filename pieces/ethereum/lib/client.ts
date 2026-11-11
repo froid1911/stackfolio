@@ -1,4 +1,5 @@
 import { createPublicClient, http, type GetLogsParameters } from "viem";
+import { getBlockReceipts } from "viem/actions";
 import type { TransferLog } from "./decode.js";
 import type { EthereumAuth } from "./types.js";
 
@@ -12,12 +13,37 @@ export interface GetLogsParams {
   topics: Array<string | null>;
 }
 
+/** A block narrowed to what the native walker reads. */
+export interface BlockView {
+  number: number;
+  timestamp: string;
+  hash: string;
+  transactions: Array<{
+    hash: string;
+    from: string;
+    to: string | null;
+    value: bigint;
+  }>;
+  withdrawals: Array<{ index: number; address: string; amountGwei: number }>;
+}
+
+export interface ReceiptView {
+  transactionHash: string;
+  gasUsed: bigint;
+  effectiveGasPrice: bigint;
+}
+
 /** Everything the actions ask of the node, kept narrow so tests can hand in
  * a fake bundle instead of a network. */
 export interface ClientBundle {
   getLogs(params: GetLogsParams): Promise<TransferLog[]>;
   getBlockNumber(): Promise<bigint>;
   getBlockTimestamp(blockNumber: bigint): Promise<string>;
+  getBlockWithTxs(blockNumber: bigint): Promise<BlockView>;
+  getBlockReceipts(blockNumber: bigint): Promise<ReceiptView[]>;
+  getBalance(address: string): Promise<bigint>;
+  getNonce(address: string): Promise<number>;
+  ethCall(to: string, data: string): Promise<string>;
 }
 
 /**
@@ -54,6 +80,60 @@ export function createClientBundle(
     async getBlockTimestamp(blockNumber) {
       const block = await client.getBlock({ blockNumber });
       return new Date(Number(block.timestamp) * 1000).toISOString();
+    },
+    async getBlockWithTxs(blockNumber) {
+      const block = await client.getBlock({
+        blockNumber,
+        includeTransactions: true,
+      });
+      return {
+        number: Number(block.number),
+        timestamp: new Date(Number(block.timestamp) * 1000).toISOString(),
+        hash: block.hash,
+        // includeTransactions: true guarantees full transactions, though the
+        // overload types still say `Transaction | Hash` per element.
+        transactions: (
+          block.transactions as unknown as Array<{
+            hash: `0x${string}`;
+            from: `0x${string}`;
+            to: `0x${string}` | null;
+            value: bigint;
+          }>
+        ).map((tx) => ({
+          hash: tx.hash,
+          from: tx.from,
+          to: tx.to,
+          value: tx.value,
+        })),
+        withdrawals: (block.withdrawals ?? []).map((withdrawal) => ({
+          index: Number(withdrawal.index),
+          address: withdrawal.address,
+          amountGwei: Number(withdrawal.amount),
+        })),
+      };
+    },
+    async getBlockReceipts(blockNumber) {
+      const receipts = await getBlockReceipts(client, { blockNumber });
+      return receipts.map((receipt) => ({
+        transactionHash: receipt.transactionHash,
+        gasUsed: receipt.gasUsed,
+        effectiveGasPrice: receipt.effectiveGasPrice,
+      }));
+    },
+    getBalance(address) {
+      return client.getBalance({ address: address as `0x${string}` });
+    },
+    async getNonce(address) {
+      return Number(
+        await client.getTransactionCount({ address: address as `0x${string}` }),
+      );
+    },
+    async ethCall(to, data) {
+      const result = await client.request({
+        method: "eth_call",
+        params: [{ to: to as `0x${string}`, data: data as `0x${string}` }, "latest"],
+      });
+      return result;
     },
   };
   return overrides ? { ...bundle, ...overrides } : bundle;

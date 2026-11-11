@@ -105,8 +105,9 @@ the ledger *and* the judgment.
 1. **CoinGecko (keyless free tier) polled by a workflow into a price-book
    document, with manual overrides in the portfolio document.** Chosen: it
    makes net worth work; overrides cover the API's gaps; everything is
-   timestamped and auditable. The network call is the one sanctioned
-   exception to local-only.
+   timestamped and auditable. Sanctioned external calls: this and the
+   Etherscan V2 import (history and live chain data, user key on the
+   ethereum connection). Everything else stays on the holder's nodes.
 2. Manual entry only — honest but the flagship dashboard dies without
    prices. Rejected as primary; kept as fallback/override.
 3. DEX spot price via the local node — per-chain work, needs archive state.
@@ -243,8 +244,22 @@ Module `prices`: `RECORD_PRICES` (idempotent on `(asset, hour)`),
 ### Pieces package `pieces/ethereum` ("Ethereum")
 
 Auth props: `rpcUrl` (default `http://127.0.0.1:8545`), `beaconUrl`
-(default `http://127.0.0.1:3500`), `chainId` (default 1). Actions (viem
+(default `http://127.0.0.1:3500`), `chainId` (default 1),
+`etherscanApiKey`, `etherscanBaseUrl` (default
+`https://api.etherscan.io/v2/api`). Actions (viem
 `createPublicClient`; `requireReactor: "write"` where noted):
+
+Source switch (2026-11-11, decided with the holder): portfolio chain
+data arrives via the Etherscan V2 API. `fetch-etherscan-history` walks
+an address's complete life from block 0 in confirmed windows (head−9,
+100k blocks per run, paged at 10k rows), and `fetch-etherscan-recent`
+keeps the wallet at head; both map `txlist` + `txlistinternal` (minus
+the `msg.value` mirror) + `tokentx` + approvals into the same event rows
+and import through `import-events-to-wallet-account`, with
+`eventIdentifier = tx.hash` so everything dedupes against what local
+scans already filed. The key lives on the connection only; free-tier
+endpoints that answer NOTOK degrade to a skipped category, never a lost
+import. The local node keeps ENS, validator reads and beacon staking.
 
 - `scan-account-logs` — `eth_getLogs` for `Transfer(address,address,uint256)`
   with `topic1`/`topic2` = account, bounded chunk of blocks (props:

@@ -1,8 +1,9 @@
 # Stackfolio
 
 A personal crypto portfolio as a Powerhouse package: your documents hold
-the data, local workflows pull it from your own Ethereum nodes, and the
-views in Connect render a full portfolio picture - without a Python server.
+the data, workflows pull it in from the Etherscan API and your own
+nodes, and the views in Connect render a full portfolio picture -
+without a Python server.
 
 ## Views
 
@@ -48,16 +49,15 @@ Live against a local Geth node - real wallet, real chain data.
 
 ## Nodes and history
 
-The piece talks to your own `geth --http` (127.0.0.1:8545) and a beacon
-API (127.0.0.1:5052) - no third-party RPCs. A brand-new wallet's history
-start is found by binary search on balance/nonce (birth discovery): exact
-on an **archive** node; on a **snap-sync** node historical state reads
-fail, so the scan settles at the oldest readable window and grows forward
-from there. Full history on snap-sync needs the backfill: set the
-wallet's backfill state (`SET_BACKFILL_STATE`, start and next block) and
-the reconciler grows a `native-backfill` workflow that walks the history
-2000 blocks at a time until the cursor passes the head and retires to
-DONE.
+Portfolio chain data - history and live - comes from the Etherscan V2
+API with your own API key, kept on the ethereum connection document and
+never echoed anywhere else. History imports from block 0, so no archive
+node is needed: every wallet's complete lifetime lands in the ledger,
+and events are keyed by transaction hash, so imports are idempotent and
+re-run safely. Your own `geth --http` (127.0.0.1:8545) still serves the
+private parts - ENS lookups, the validator's world - and the local beacon
+API (127.0.0.1:5052) serves staking reads. Other than Etherscan and
+CoinGecko (prices), nothing talks to the internet.
 
 ## Commands
 

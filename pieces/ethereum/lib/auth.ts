@@ -30,8 +30,29 @@ export const ethereumAuth = PieceAuth.CustomAuth({
       description: `Defaults to ${DEFAULT_CHAIN_ID} (Ethereum mainnet).`,
       required: false,
     }),
+    etherscanApiKey: Property.ShortText({
+      displayName: "Etherscan API key",
+      description:
+        "Key for the Etherscan V2 API - Stackfolio's source of portfolio history. Kept on this connection, never in portfolio documents.",
+      required: false,
+    }),
+    etherscanBaseUrl: Property.ShortText({
+      displayName: "Etherscan base URL",
+      description: "Override for mirrors; defaults to https://api.etherscan.io/v2/api.",
+      required: false,
+    }),
   },
   validate: async ({ auth }) => {
+    if (auth.etherscanApiKey !== undefined && auth.etherscanApiKey.trim() !== "") {
+      const key = auth.etherscanApiKey.trim();
+      if (key.length < 16 || !/^[A-Za-z0-9-]+$/.test(key)) {
+        return {
+          valid: false,
+          error:
+            "The Etherscan API key looks malformed - an Etherscan V2 key is at least 16 letters/digits (dashes allowed).",
+        };
+      }
+    }
     const rpcUrl = auth.rpcUrl?.trim() || DEFAULT_RPC_URL;
     try {
       const response = await fetch(rpcUrl, {
@@ -70,3 +91,28 @@ export const ethereumAuth = PieceAuth.CustomAuth({
   getConnectionIdentifier: ({ auth }) =>
     Promise.resolve(auth.rpcUrl?.trim() || DEFAULT_RPC_URL),
 });
+
+/** Default Etherscan V2 endpoint (chainid is appended per request). */
+export const DEFAULT_ETHERSCAN_BASE_URL = "https://api.etherscan.io/v2/api";
+
+/**
+ * The Etherscan endpoint settings from a connection's auth. The key lives
+ * only on the connection - the one document the operator marks private -
+ * so every message here points there and never echoes the key.
+ */
+export function etherscanConfig(auth: {
+  etherscanApiKey?: string;
+  etherscanBaseUrl?: string;
+}): { apiKey: string; baseUrl: string } {
+  const apiKey = auth.etherscanApiKey?.trim() ?? "";
+  if (apiKey === "") {
+    throw new Error(
+      "Etherscan API key is not set - set it on the ethereum connection (Stackfolio reads it from there)",
+    );
+  }
+  return {
+    apiKey,
+    baseUrl:
+      auth.etherscanBaseUrl?.trim() || DEFAULT_ETHERSCAN_BASE_URL,
+  };
+}

@@ -5,3 +5,4 @@
 export { AssetRegistry as AssetRegistryV1 } from "./asset-registry/v1/module.js";
 export { Portfolio as PortfolioV1 } from "./portfolio/v1/module.js";
 export { upgradeManifests } from "./upgrade-manifests.js";
+export { WalletAccount as WalletAccountV1 } from "./wallet-account/v1/module.js";

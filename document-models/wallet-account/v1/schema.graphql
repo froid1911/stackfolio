@@ -1,0 +1,174 @@
+scalar Unknown
+scalar DateTime
+scalar Address
+scalar AttachmentRef
+scalar Amount_Tokens
+scalar EthereumAddress
+scalar EmailAddress
+scalar Amount_Percentage
+scalar Date
+scalar URL
+scalar Amount_Money
+scalar OLabel
+scalar Currency
+scalar PHID
+scalar OID
+scalar Amount_Fiat
+scalar Amount_Currency
+scalar Amount_Crypto
+scalar Amount
+scalar Upload
+
+type WalletAccountState {
+  address: String!
+  chainId: Int!
+  label: String
+  ignored: Boolean!
+  ledger: [LedgerEvent!]!
+  cursor: ScanCursor
+  backfill: BackfillState
+  nativeBalance: NativeBalance
+}
+
+type LedgerEvent {
+  id: OID!
+  eventIdentifier: String!
+  sequenceIndex: Int!
+  timestamp: DateTime!
+  type: EventType!
+  subtype: EventSubtype!
+  asset: String!
+  amount: String!
+  counterparty: String
+  counterpartyLabel: String
+  notes: String
+  ignored: Boolean!
+  source: EventSource!
+  importBatch: String
+}
+
+type ScanCursor {
+  lastLogsBlock: Int
+  lastNativeScanBlock: Int
+  lastEventTimestamp: DateTime
+  lastRunAt: DateTime
+}
+
+type BackfillState {
+  state: BackfillPhase!
+  startBlock: Int
+  nextBlock: Int
+}
+
+type NativeBalance {
+  amount: String!
+  blockNumber: Int!
+  observedAt: DateTime!
+}
+
+enum EventType {
+  SPEND
+  RECEIVE
+  TRADE
+  TRANSFER
+  STAKING
+  MIGRATE
+  INFORMATIONAL
+}
+
+enum EventSubtype {
+  NONE
+  FEE
+  APPROVE
+  WITHDRAWAL
+  BLOCK_PRODUCTION
+  SPAM
+  AIRDROP
+  DONATE
+  DEPOSIT_ASSET
+  REMOVE_ASSET
+}
+
+enum EventSource {
+  CHAIN
+  MANUAL
+}
+
+enum BackfillPhase {
+  IDLE
+  LOGS
+  NATIVE
+  DONE
+}
+
+# account
+
+input SetAccountDetailsInput {
+  address: String
+  chainId: Int
+  label: String
+}
+
+input SetIgnoredInput {
+  ignored: Boolean!
+}
+
+# feed
+
+input ImportEventsInput {
+  batchId: String!
+  importedAt: DateTime!
+  events: [ImportedEventInput!]!
+}
+
+input ImportedEventInput {
+  id: OID!
+  eventIdentifier: String!
+  sequenceIndex: Int!
+  timestamp: DateTime!
+  type: EventType!
+  subtype: EventSubtype!
+  asset: String!
+  amount: String!
+  counterparty: String
+  notes: String
+}
+
+# review
+
+input SetEventIgnoredInput {
+  id: OID!
+  ignored: Boolean!
+}
+
+input SetEventNotesInput {
+  id: OID!
+  notes: String
+}
+
+input RetypeEventInput {
+  id: OID!
+  type: EventType!
+  subtype: EventSubtype!
+}
+
+# cursor
+
+input RecordScanProgressInput {
+  lastLogsBlock: Int
+  lastNativeScanBlock: Int
+  lastEventTimestamp: DateTime
+  ranAt: DateTime!
+}
+
+input SetBackfillStateInput {
+  state: BackfillPhase!
+  startBlock: Int
+  nextBlock: Int
+}
+
+input SetNativeBalanceInput {
+  amount: String!
+  blockNumber: Int!
+  observedAt: DateTime!
+}

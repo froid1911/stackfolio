@@ -14,6 +14,10 @@
     {
       "id": "stackfolio/portfolio",
       "name": "Portfolio"
+    },
+    {
+      "id": "stackfolio/wallet-account",
+      "name": "Wallet Account"
     }
   ],
   "apps": [],

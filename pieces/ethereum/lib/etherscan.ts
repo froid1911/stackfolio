@@ -23,6 +23,14 @@ export class EtherscanError extends Error {
 
 const RETRY_DELAYS_MS = [2_000, 8_000, 32_000];
 
+/**
+ * One call gate per API key, process-wide. The free plan allows five
+ * calls per second per key across all chains, so clients built for
+ * different chains (or different runs in the same worker) must share
+ * the spacing, not each pace themselves.
+ */
+const keyGates = new Map<string, Promise<void>>();
+
 interface Envelope {
   status?: string;
   result?: unknown;
@@ -44,7 +52,6 @@ export function createEtherscanClient(opts: {
     opts.sleepFn ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   const spacingMs = opts.spacingMs ?? 220;
   const chainId = opts.chainId ?? 1;
-  let queue: Promise<unknown> = Promise.resolve();
 
   const attempt = async (
     params: Record<string, string | number>,
@@ -157,13 +164,23 @@ export function createEtherscanClient(opts: {
 
   return {
     call(params: Record<string, string | number>): Promise<unknown> {
-      const run = queue.then(async () => {
+      // Etherscan's rate limit is per key, not per client: backfills on
+      // several chains run concurrently in this process, so every client
+      // for the same key shares one gate.
+      const key = opts.apiKey;
+      const run = (keyGates.get(key) ?? Promise.resolve()).then(async () => {
         await sleep(spacingMs);
         return attempt(params);
       });
-      // Keep the chain alive even when an attempt rejects, so one failed
-      // call never poisons the queue for the calls behind it.
-      queue = run.catch(() => undefined);
+      // Keep the gate alive even when a call rejects, so one failed call
+      // never poisons the calls queued behind it.
+      keyGates.set(
+        key,
+        run.then(
+          () => undefined,
+          () => undefined,
+        ),
+      );
       return run;
     },
   };

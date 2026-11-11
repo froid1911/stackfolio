@@ -106,6 +106,32 @@ describe("createEtherscanClient", () => {
     expect(head).toBe("0x10");
   });
 
+  it("paces two clients that share one key through a single gate", async () => {
+    const events: string[] = [];
+    const mk = () =>
+      createEtherscanClient({
+        apiKey: "gate-test-shared-key",
+        baseUrl: "https://x/api",
+        fetchImpl: (async () => {
+          events.push("fetch");
+          return new Response(
+            JSON.stringify({ status: "1", result: [], message: "OK" }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }) as unknown as typeof fetch,
+        sleepFn: async () => {
+          events.push("sleep");
+        },
+      });
+    const arb = mk();
+    const poly = mk();
+    await Promise.all([
+      arb.call({ module: "account", action: "txlist", address: "0xa" }),
+      poly.call({ module: "account", action: "tokentx", address: "0xb" }),
+    ]);
+    expect(events).toEqual(["sleep", "fetch", "sleep", "fetch"]);
+  });
+
   it("treats a status-0 empty page as no data, not an error", async () => {
     const { impl } = fakeFetch([
       {

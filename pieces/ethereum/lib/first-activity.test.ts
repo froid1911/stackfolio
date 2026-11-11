@@ -28,6 +28,28 @@ describe("findFirstActivity", () => {
     expect(await findFirstActivity(never, "0xdead", 5_000_000n)).toBe(5_000_000n);
   });
 
+  it("lands on the readable window of a snap-sync node", async () => {
+    // State reads fail below head-128 (missing trie node); the account is
+    // live inside the window. Unanswerable probes are not "active", so
+    // the search must settle at the window edge, never at genesis.
+    const readableBelow = 2_000_000n - 128n;
+    const snap = {
+      getBalance: async (_a: string, block?: bigint) => {
+        const b = block ?? 1_000n;
+        if (b < readableBelow) throw new Error("missing trie node");
+        return b >= readableBelow ? 5n : 0n;
+      },
+      getNonce: async (_a: string, block?: bigint) => {
+        const b = block ?? 1_000n;
+        if (b < readableBelow) throw new Error("missing trie node");
+        return 1;
+      },
+    };
+    const start = await findFirstActivity(snap, "0xacdc", 2_000_000n);
+    expect(start).toBeGreaterThanOrEqual(readableBelow - FIRST_ACTIVITY_LAG_BLOCKS);
+    expect(start).toBeLessThan(readableBelow + 128n);
+  });
+
   it("probes logarithmically, not one block at a time", async () => {
     let probes = 0;
     const counting = {

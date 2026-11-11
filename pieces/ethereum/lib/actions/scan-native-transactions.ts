@@ -156,7 +156,7 @@ export const ethereumScanNativeTransactionsAction = createAction({
       );
     }
     const backfill = state.global?.backfill;
-    if (!backfill || backfill.nextBlock === null) {
+    if (props.direction !== "HEAD" && (!backfill || backfill.nextBlock === null)) {
       throw new Error(
         `Document ${documentId} has no backfill cursor — record its backfill state before the native walk.`,
       );
@@ -166,10 +166,12 @@ export const ethereumScanNativeTransactionsAction = createAction({
     const clients = createClientBundle(authProps(context.auth));
     const head = Number(await clients.getBlockNumber());
 
+    // The head window needs no cursor: a wallet that has never walked its
+    // history still gets the newest blocks from its first run.
     const fromBlock =
       props.direction === "HEAD"
-        ? Math.max(backfill.nextBlock, head - maxBlocks + 1)
-        : backfill.nextBlock;
+        ? Math.max(backfill?.nextBlock ?? 0, head - maxBlocks + 1)
+        : (backfill?.nextBlock ?? 0);
     const toBlock = Math.min(fromBlock + maxBlocks - 1, head);
 
     if (fromBlock > head) {

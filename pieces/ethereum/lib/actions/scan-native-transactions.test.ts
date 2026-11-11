@@ -194,6 +194,24 @@ describe("scan-native-transactions", () => {
     expect(getBlockWithTxs).not.toHaveBeenCalled();
   });
 
+  it("walks the head window when there is no cursor at all", async () => {
+    getBlockNumber.mockResolvedValue(100n);
+    getBlockWithTxs.mockImplementation(async (n: bigint) =>
+      block(Number(n), []),
+    );
+    getBlockReceipts.mockResolvedValue([]);
+
+    const doc = {
+      ...walletDoc,
+      state: { global: { ...walletDoc.state.global, backfill: null } },
+    };
+    const page = await runAction(doc, { direction: "HEAD" });
+
+    expect(page.nextBlock).toBe(101);
+    expect(getBlockWithTxs).toHaveBeenCalledWith(98n);
+    expect(getBlockWithTxs).toHaveBeenCalledWith(100n);
+  });
+
   it("rejects a document that never started a backfill", async () => {
     const doc = {
       ...structuredClone(walletDoc),

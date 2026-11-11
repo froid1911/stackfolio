@@ -23,10 +23,13 @@ export async function findFirstActivity(
   account: string,
   head: bigint,
 ): Promise<bigint> {
+  // A snap-sync node refuses state older than its window (missing trie
+  // node); an unanswerable probe counts as "not provably active", so the
+  // search lands at the oldest block this node can still read.
   const active = async (block: bigint): Promise<boolean> => {
     const [balance, nonce] = await Promise.all([
-      clients.getBalance(account, block),
-      clients.getNonce(account, block),
+      clients.getBalance(account, block).catch(() => 0n),
+      clients.getNonce(account, block).catch(() => 0),
     ]);
     return balance > 0n || nonce > 0;
   };

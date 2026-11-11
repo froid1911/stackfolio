@@ -2,6 +2,7 @@ import { createPiece } from "@powerhousedao/pieces-framework";
 import { ethereumFetchAccountStateAction } from "./lib/actions/fetch-account-state.js";
 import { ethereumFetchEnsNamesAction } from "./lib/actions/fetch-ens-names.js";
 import { ethereumFetchPricesAction } from "./lib/actions/fetch-prices.js";
+import { ethereumFetchEtherscanHistoryAction } from "./lib/actions/fetch-etherscan-history.js";
 import { ethereumFetchTokenMetadataAction } from "./lib/actions/fetch-token-metadata.js";
 import { ethereumFetchValidatorsAction } from "./lib/actions/fetch-validators.js";
 import { ethereumHoldingsFromLedgerAction } from "./lib/actions/holdings-from-ledger.js";
@@ -32,6 +33,7 @@ export const ethereum = createPiece({
     ethereumFetchEnsNamesAction,
     ethereumFetchTokenMetadataAction,
     ethereumFetchPricesAction,
+    ethereumFetchEtherscanHistoryAction,
     ethereumFetchValidatorsAction,
     ethereumImportEventsToWalletAccountAction,
     ethereumImportTokensToRegistryAction,

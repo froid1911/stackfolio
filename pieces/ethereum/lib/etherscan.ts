@@ -152,3 +152,40 @@ export async function etherscanHeadBlock(client: {
   }
   return Number.parseInt(result, 16);
 }
+
+/**
+ * One address's rows for a block window, ascending, paged until a short
+ * page. 50 pages is the ceiling: 500k rows for one address in one
+ * window means the caller must shrink `windowBlocks`, not the API.
+ */
+export async function fetchWindow(
+  client: {
+    call(params: Record<string, string | number>): Promise<unknown>;
+  },
+  params: {
+    address: string;
+    action: string;
+    startBlock: number;
+    endBlock: number;
+    pageSize?: number;
+  },
+): Promise<EtherscanRow[]> {
+  const pageSize = params.pageSize ?? 10_000;
+  const rows: EtherscanRow[] = [];
+  for (let page = 1; page <= 50; page += 1) {
+    const batch = (await client.call({
+      module: "account",
+      action: params.action,
+      address: params.address,
+      startblock: params.startBlock,
+      endblock: params.endBlock,
+      page,
+      offset: pageSize,
+      sort: "asc",
+    })) as EtherscanRow[] | null;
+    const list = Array.isArray(batch) ? batch : [];
+    rows.push(...list);
+    if (list.length < pageSize) break;
+  }
+  return rows;
+}

@@ -45,9 +45,11 @@ export interface ScanPage {
   truncated: boolean;
 }
 
-/** The piece's connection settings: a local execution node and beacon API. */
+/** The piece's connection settings: a local execution node, beacon API, and the Etherscan import key. */
 export interface EthereumAuth {
   rpcUrl: string;
   beaconUrl: string;
   chainId: number;
+  etherscanApiKey?: string;
+  etherscanBaseUrl?: string;
 }

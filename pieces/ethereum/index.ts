@@ -3,6 +3,7 @@ import { ethereumFetchAccountStateAction } from "./lib/actions/fetch-account-sta
 import { ethereumFetchEnsNamesAction } from "./lib/actions/fetch-ens-names.js";
 import { ethereumFetchPricesAction } from "./lib/actions/fetch-prices.js";
 import { ethereumFetchTokenMetadataAction } from "./lib/actions/fetch-token-metadata.js";
+import { ethereumFetchValidatorsAction } from "./lib/actions/fetch-validators.js";
 import { ethereumScanAccountLogsAction } from "./lib/actions/scan-account-logs.js";
 import { ethereumScanNativeTransactionsAction } from "./lib/actions/scan-native-transactions.js";
 import { ethereumAuth } from "./lib/auth.js";
@@ -24,6 +25,7 @@ export const ethereum = createPiece({
     ethereumFetchEnsNamesAction,
     ethereumFetchTokenMetadataAction,
     ethereumFetchPricesAction,
+    ethereumFetchValidatorsAction,
   ],
   triggers: [],
 });

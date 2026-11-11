@@ -82,7 +82,10 @@
     "enabled": true
   },
   "vetra": {
-    "connectPort": 2844
+    "connectPort": 2844,
+    "previewDrive": {
+      "app": "stackfolio"
+    }
   },
   "assistant": {
     "port": 4910

@@ -311,3 +311,13 @@ export function planDiff<T extends object, K>(
 
 const sameJson = (a: unknown, b: unknown): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * The dispatcher hands the whole state envelope; the row builders read the
+ * global state itself.
+ */
+export function unwrapState(state: unknown): unknown {
+  const envelope = asRecord(state);
+  const global = envelope ? asRecord(envelope.global) : null;
+  return global ?? state;
+}

@@ -94,9 +94,46 @@ function replay(
   ];
 }
 
+/**
+ * The dispatcher sends the whole state envelope, not just the global state.
+ * The index must read through it.
+ */
+function replayEnvelope(
+  document: { header: { id: string; documentType: string }; state: unknown },
+): OperationLike[] {
+  const op = testOperation({
+    documentId: document.header.id,
+    documentType: document.header.documentType,
+    type: "REPLAY",
+  });
+  return [
+    {
+      ...op,
+      context: {
+        ...op.context,
+        resultingState: JSON.stringify(document.state),
+      },
+    },
+  ];
+}
+
 type OperationLike = ReturnType<typeof testOperation>;
 
 describe("portfolio-index", () => {
+  it("indexes the global state when the dispatcher sends the envelope", async () => {
+    const { db, processor } = await harness();
+    const wallet = walletDocument();
+    await processor.onOperations(replayEnvelope(wallet));
+
+    const rows = await db
+      .selectFrom("events")
+      .select(["event_id", "amount"])
+      .where("document_id", "=", wallet.header.id)
+      .orderBy("sequence_index")
+      .execute();
+    expect(rows).toHaveLength(2);
+  });
+
   it("carries the wallet's address and label onto every event row", async () => {
     const { db, processor } = await harness();
     const wallet = walletDocument();

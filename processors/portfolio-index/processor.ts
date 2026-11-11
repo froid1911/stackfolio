@@ -20,6 +20,7 @@ import {
   priceRows,
   registryRows,
   stakingRows,
+  unwrapState,
   walletRows,
 } from "./rows.js";
 import type {
@@ -37,6 +38,9 @@ import type {
   ValidatorRow,
   WithdrawalRow,
 } from "./schema.js";
+
+// The subgraph types its queries with the same row shapes.
+export type { DB };
 
 export const PORTFOLIO_DOCUMENT_TYPE = "stackfolio/portfolio";
 export const WALLET_DOCUMENT_TYPE = "stackfolio/wallet-account";
@@ -142,7 +146,7 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
     for (const [documentId, entry] of latest) {
       let parsed: unknown;
       try {
-        parsed = JSON.parse(entry.resultingState);
+        parsed = unwrapState(JSON.parse(entry.resultingState));
       } catch {
         console.warn(`[portfolio-index] ${documentId}: state is not JSON`);
         continue;

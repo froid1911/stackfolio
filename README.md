@@ -2,7 +2,7 @@
 
 A personal crypto portfolio as a Powerhouse package: your documents hold
 the data, local workflows pull it from your own Ethereum nodes, and the
-views in Connect render what rotki renders - without a Python server.
+views in Connect render a full portfolio picture - without a Python server.
 
 ## What is in the box
 
@@ -35,7 +35,7 @@ views in Connect render what rotki renders - without a Python server.
 
 The piece talks to your own `geth --http` (127.0.0.1:8545) and a beacon
 API (127.0.0.1:5052) - no third-party RPCs. A brand-new wallet's history
-start is found by binary search on balance/nonce (the rotki trick): exact
+start is found by binary search on balance/nonce (birth discovery): exact
 on an **archive** node; on a **snap-sync** node historical state reads
 fail, so the scan settles at the oldest readable window and grows forward
 from there. Full history on snap-sync needs the backfill: set the

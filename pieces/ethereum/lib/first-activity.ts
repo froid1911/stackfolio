@@ -2,7 +2,7 @@ import type { ClientBundle } from "./client.js";
 
 /**
  * The block an account first showed signs of life, found by binary search
- * (the trick rotki uses to skip dead chain): at each probe a block is
+ * (which skips dead chain): at each probe a block is
  * "active" when the account holds balance there or has already sent a
  * transaction. Balance and nonce are monotone enough for this - money in
  * and first out both flip the test from false to true forever after, so

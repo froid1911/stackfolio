@@ -1,6 +1,6 @@
 /**
  * Display formatters for the exact decimal strings the documents and the
- * index hold (wei, gwei, prices — never floats). The rules follow rotki:
+ * index hold (wei, gwei, prices — never floats). The rules:
  * amounts round UP to the shown precision and fiat values DOWN, so a
  * balance is never shown larger than a viewer could sell and a value never
  * richer than it is; both show ">0" for a positive amount below the shown

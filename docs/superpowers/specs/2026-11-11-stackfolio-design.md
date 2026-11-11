@@ -2,14 +2,14 @@
 
 Status: APPROVED (2026-11-11)
 Date: 2026-11-11
-Precursors: sektar (architecture), rotki (domain model and views)
+Precursors: sektar (architecture), an established open portfolio tracker (domain model and views)
 
 ## Intent and the why
 
 Stackfolio is a Powerhouse reactor package for tracking a crypto portfolio:
 the portfolio's data lives in documents (auditable, CRDT-synced, editable
 through operations), transactions are imported from blockchain data through
-published **workflows**, and Connect shows rotki-class views — a net-worth
+published **workflows**, and Connect shows portfolio-grade views — a net-worth
 dashboard, an event ledger, balances, staking.
 
 The first daily driver is the owner's own stack: wallet `frankp.eth`
@@ -48,11 +48,11 @@ the ledger *and* the judgment.
 - DeFi protocol decoding beyond native transfers, ERC-20 transfers, gas
   fees and withdrawal-contract events. Unknown contract calls surface as
   the fee + whatever transfers matched; no fake "swap" inference.
-- On-chain sending (rotki's `/onchain/send`). Stackfolio observes; it never
+- On-chain sending. Stackfolio observes; it never
   signs.
 - Historical native-ETH state queries (`eth_getBalance` at old blocks) — the
   node is snap-sync and pruned. Historical balances derive from the event
-  ledger, as rotki's derived balances do.
+  ledger, as derived balances do.
 
 ## Anti-goals
 
@@ -117,12 +117,12 @@ the ledger *and* the judgment.
 1. **EVM (mainnet first, `chainId`-parameterised) + ETH1/ETH2 staking**,
    one drive = one portfolio. Chosen: completes every promised path
    end-to-end; growth is additive.
-2. rotki-wide multi-source model. Rejected: wide and hollow beats nothing,
+2. The precursor's full multi-source model. Rejected: wide and hollow beats nothing,
    but not this year.
 
-## Domain model (rotki → stackfolio)
+## Domain model (precursor → stackfolio)
 
-| rotki | stackfolio |
+| precursor | stackfolio |
 |---|---|
 | `history_events` ledger (group_identifier + sequence_index, type/subtype, asset, amount) | `wallet-account` document `events` — same shape, minus exchange-only types |
 | `evm_transactions`, receipts, logs | not stored; the scan piece reads them, emits events; tx metadata rides on the event |
@@ -135,7 +135,7 @@ the ledger *and* the judgment.
 
 Event taxonomy: `type` ∈ `SPEND, RECEIVE, TRADE, TRANSFER, STAKING, FEE?
 (none — fees are SPEND with subtype FEE), MIGRATE, INFORMATIONAL` (a
-pruned subset of rotki's `HistoryEventType`); `subtype` ∈ `NONE, FEE,
+pruned subset of the precursor's event taxonomy); `subtype` ∈ `NONE, FEE,
 APPROVE, WITHDRAWAL, BLOCK_PRODUCTION, SPAM, AIRDROP, DONATE,
 DEPOSIT_ASSET, REMOVE_ASSET` (pruned likewise). v1 *emits* SPEND/RECEIVE
 (ERC-20 + native), SPEND-FEE (gas), STAKING-WITHDRAWAL, and INFORMATIONAL
@@ -361,19 +361,19 @@ documents (opens, mutations) — the sektar contract.
 Drive app `stackfolio` (editor module + components, design-system +
 tailwind, ECharts for charts; URL-synced filters; CSV export client-side
 from the current query). Dark-mode first-class. Information architecture
-mirrors rotki:
+mirrors the established information architecture:
 
 - **Dashboard** — headline card: net worth + period delta + segmented
   timeframe (`1W, 1M, 3M, 6M, 1Y, All`), ECharts area-line with zoom
   slider fed by snapshots ("camera" button takes one; auto-snapshot toggle);
-  holdings-by-source as **stacked bar + legend** (no donut — rotki's call,
+  holdings-by-source as **stacked bar + legend** (no donut — a deliberate call,
   ours too); location tiles; asset table (amount, price, value, % net;
   unknown price renders "—", never 0).
 - **Transactions** — the ledger: group header rows (date, tx hash, label,
   chain icon) + event rows (type badge, asset+amount, fiat value,
   counterparty); filters: account, asset, type, date range, text; row
   actions: ignore, note, retype (dispatches to the document); CSV export;
-  empty/filter-empty/failure states named like rotki's.
+  empty/filter-empty/failure states named to spec.
 - **Accounts** — address rows (label/ENS, chain, value, asset count, last
   scan, cursor, backfill progress bar, run health); add address with ENS
   field resolved locally; per-row "scan now" runs the workflow manually;

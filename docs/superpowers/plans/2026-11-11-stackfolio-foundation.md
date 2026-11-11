@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the v1 Stackfolio package: five crypto-portfolio document models, an `ethereum` piece with reconciler-built import workflows against local Geth/Prysm, a pglite index + subgraph, and rotki-class editors, verified end-to-end with `frankp.eth`.
+**Goal:** Build the v1 Stackfolio package: five crypto-portfolio document models, an `ethereum` piece with reconciler-built import workflows against local Geth/Prysm, a pglite index + subgraph, and portfolio-grade editors, verified end-to-end with `frankp.eth`.
 
 **Architecture:** Sektar's proven shape — documents hold the auditable ledger and curated state; pglite `RelationalDbProcessor` indexes feed a read-only subgraph; editors query the subgraph for lists and dispatch document actions for changes; workflows (built/published as the granting person by a reconciler processor) run `ethereum` piece actions that import chain data idempotently.
 
@@ -17,7 +17,7 @@
 - Reducers pure + synchronous: ids, timestamps, decimals arrive in action input; `??` never `||`; validate-then-mutate.
 - Crypto amounts and fiat values are decimal `String`s (never Float). Addresses lowercase. Timestamps `DateTime` ISO strings.
 - Document type ids: `stackfolio/asset-registry`, `stackfolio/portfolio`, `stackfolio/wallet-account`, `stackfolio/eth-staking`, `stackfolio/price-book`. Author name `Stackfolio`, website `https://github.com/froid1911/stackfolio`.
-- Native asset identifier: `eip155:1/slip44:60` (rotki convention). ERC-20: `eip155:1/erc20:0x<checksumless-lowercase-address>`.
+- Native asset identifier: `eip155:1/slip44:60` (CAIP-19 convention). ERC-20: `eip155:1/erc20:0x<checksumless-lowercase-address>`.
 - Endpoints default local: RPC `http://127.0.0.1:8545`, beacon `http://127.0.0.1:3500`, chainId 1. CoinGecko (`https://api.coingecko.com/api/v3`) is the only sanctioned external call.
 - Chain data is immutable: no pending-state machinery in models.
 - Checks after every code task: `npm run tsc` and `npm run lint:fix` clean; `npm run test:coverage` with reducers ≥95% on all four metrics; commit with conventional messages.
@@ -344,7 +344,7 @@ Tasks 2–6 all follow the same platform flow (skill `powerhouse-document-models
 **Files:** MCP-create `powerhouse/app` "Stackfolio" (documentTypes: the five models) → implement `editors/stackfolio/{editor.tsx,config.ts,components/*}`, plus `lib/{setup.ts,graphql.ts,format.ts}` (shared by later view tasks).
 
 **Interfaces:**
-- Produces: app id `stackfolio` (set as `vetra.previewDrive.app` in `powerhouse.config.json` + restartVetra note); the drive singleton lookup `getOrCreate(portfolioDocType)` used by Setup; subgraph query hooks (`useDashboard`, `useEventsPage`, …) built on the connect-core query helper sektar's `kit/index-gql.ts` uses — study it before writing; formatters `fmtAmount(decimals?)`, `fmtValue(fiat)` (round-down for values, round-up for amounts, rotki rule; "—" for null).
+- Produces: app id `stackfolio` (set as `vetra.previewDrive.app` in `powerhouse.config.json` + restartVetra note); the drive singleton lookup `getOrCreate(portfolioDocType)` used by Setup; subgraph query hooks (`useDashboard`, `useEventsPage`, …) built on the connect-core query helper sektar's `kit/index-gql.ts` uses — study it before writing; formatters `fmtAmount(decimals?)`, `fmtValue(fiat)` (round-down for values, round-up for amounts; "—" for null).
 - Components: `Setup.tsx` (3 steps: create/adopt the 4 singletons + the `powerhouse/connection` doc with rpc/beacon defaults; grant step reusing Connect's sign-in → `SET_GRANT`; add-address form with ENS field that resolves locally via a one-shot viem read in the browser against the configured RPC — failure falls back to plain address, **Review Focus 7** UI twin); `Accounts.tsx` (subgraph `accountsRows`: label/ENS, chain, value, last scan, backfill progress `nextBlock/startBlock→DONE`, health badge from `check_issues`, row actions: scan-now via workflow manual-run REST, ignore); nav shell mirroring the spec's IA (Dashboard, Transactions, Accounts, Staking, Assets, Prices).
 - Also in this task: MCP-create the five document editors (`*-editor` docs) as **thin review editors** — the `wallet-account-editor` gets the real event review UI (row actions ignore/notes/retype per the editors skill's `useSelectedWalletAccountDocument` pattern); the other four are toolbar + state views.
 

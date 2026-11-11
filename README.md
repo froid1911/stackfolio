@@ -24,6 +24,9 @@ views in Connect render what rotki renders - without a Python server.
    grant or a reactor connection it only files issues. With both, it
    builds one live-scan workflow per wallet and a hourly price round,
    publishes them under your signature, and repairs them when they drift.
+   The engine parks a workflow after a failed run; the reconciler notices
+   the stopped progress marker (scan cursor, backfill cursor) and re-arms
+   it, so a node hiccup costs one retry interval, not the portfolio.
 3. **Live scan** (every 5 minutes): ERC-20 transfers, recent native
    blocks, head balance - imported onto the wallet's ledger; the
    portfolio's holdings, snapshots and issues follow from the index.
@@ -35,8 +38,11 @@ API (127.0.0.1:5052) - no third-party RPCs. A brand-new wallet's history
 start is found by binary search on balance/nonce (the rotki trick): exact
 on an **archive** node; on a **snap-sync** node historical state reads
 fail, so the scan settles at the oldest readable window and grows forward
-from there. Full history on snap-sync needs the log-scan backfill (the
-manual `native-backfill` workflow walks it chunk by chunk).
+from there. Full history on snap-sync needs the backfill: set the
+wallet's backfill state (`SET_BACKFILL_STATE`, start and next block) and
+the reconciler grows a `native-backfill` workflow that walks the history
+2000 blocks at a time until the cursor passes the head and retires to
+DONE.
 
 ## Commands
 

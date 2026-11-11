@@ -69,6 +69,7 @@ class FakeIO {
             : null,
         ),
       createChainConnection: () => Promise.resolve("eth-1"),
+      findChainConnection: () => Promise.resolve(null),
       findReactorConnection: () => Promise.resolve(this.reactorConnectionId),
       findWallets: () => Promise.resolve(this.wallets),
       findSingleton: (type) => Promise.resolve(this.singletons[type] ?? null),

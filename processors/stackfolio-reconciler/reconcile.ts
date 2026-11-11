@@ -65,6 +65,8 @@ export type ReconcileIO = {
   /** The connection, or null when it is gone or revoked. */
   readConnection(id: string): Promise<{ status: string | null } | null>;
   createChainConnection(name: string): Promise<string>;
+  /** An ethereum-piece connection this reactor already has, if any. */
+  findChainConnection(): Promise<string | null>;
   findReactorConnection(): Promise<string | null>;
   findWallets(): Promise<Array<{ id: string; state: WalletAccountState }>>;
   /** The first document of `type` in the drive; the drive holds one. */
@@ -134,6 +136,18 @@ export async function reconcilePortfolio(
         message: "The chain connection was gone, so it was rebuilt.",
       });
       connectionId = null;
+    }
+  }
+  if (!connectionId) {
+    // A configured chain connection anywhere on this reactor (the setup
+    // wizard writes one with the node's urls) beats creating a blank one.
+    connectionId = await io.findChainConnection();
+    if (connectionId) {
+      recorded.connectionId = connectionId;
+      fixes.push({
+        code: "CONNECTION_ADOPTED",
+        message: "The portfolio adopted this reactor's ethereum connection.",
+      });
     }
   }
   if (!connectionId) {

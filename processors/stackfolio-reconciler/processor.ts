@@ -229,11 +229,32 @@ export class StackfolioReconciler implements IProcessor {
           connectionActions.setConnectionName({ name }),
           connectionActions.setConnector({
             connectorId: ETHEREUM_CONNECTOR,
-            authType: "NONE",
+            // The piece authenticates with node URLs (all optional: empty
+            // means the localhost defaults). NONE would leave the engine
+            // without an auth bundle for the steps.
+            authType: "CUSTOM_AUTH",
           }),
           connectionActions.setConfig({ config: {} }),
+          connectionActions.recordCheckResult({
+            status: "OK",
+            checkedAt: new Date().toISOString(),
+          }),
         ]);
         return newId;
+      },
+      findChainConnection: async () => {
+        const page = await read.find({ type: CONNECTION_TYPE });
+        const found = page.results.find((candidate) => {
+          const g = (
+            candidate.state as unknown as {
+              global: { connectorId?: string; status?: string };
+            }
+          ).global;
+          return (
+            g.connectorId === ETHEREUM_CONNECTOR && g.status !== "REVOKED"
+          );
+        });
+        return found?.header.id ?? null;
       },
       findReactorConnection: async () => {
         const page = await read.find({ type: CONNECTION_TYPE });

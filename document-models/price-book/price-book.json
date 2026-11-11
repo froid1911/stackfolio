@@ -1,0 +1,93 @@
+{
+  "id": "stackfolio/price-book",
+  "name": "Price Book",
+  "author": {
+    "name": "Stackfolio",
+    "website": "https://github.com/froid1911/stackfolio"
+  },
+  "extension": ".prices",
+  "description": "Shared fiat price book: latest and hourly prices for the portfolio's assets in one base currency.",
+  "specifications": [
+    {
+      "state": {
+        "local": {
+          "schema": "",
+          "examples": [],
+          "initialValue": ""
+        },
+        "global": {
+          "schema": "type PriceBookState {\n  baseCurrency: String!\n  latest: [LatestPrice!]!\n  history: [PricePoint!]!\n  status: FetchStatus!\n}\n\ntype LatestPrice {\n  asset: String!\n  price: String!\n  source: String!\n  fetchedAt: DateTime!\n}\n\ntype PricePoint {\n  asset: String!\n  hour: DateTime!\n  price: String!\n  source: String!\n}\n\ntype FetchStatus {\n  lastFetchAt: DateTime\n  lastError: String\n}",
+          "examples": [],
+          "initialValue": "{\"baseCurrency\": \"EUR\", \"latest\": [], \"history\": [], \"status\": {\"lastFetchAt\": null, \"lastError\": null}}"
+        }
+      },
+      "modules": [
+        {
+          "id": "ae89b911-2954-4177-8cfc-56ed95ed0307",
+          "name": "prices",
+          "description": "Latest and hourly prices with fetch status",
+          "operations": [
+            {
+              "id": "27239d8e-f032-4b36-9136-f33f8a2e45ab",
+              "name": "RECORD_PRICES",
+              "description": "",
+              "schema": "input RecordPricesInput {\n  baseCurrency: String!\n  prices: [RecordedPriceInput!]!\n  hour: DateTime!\n  fetchedAt: DateTime!\n}\n\ninput RecordedPriceInput {\n  asset: String!\n  price: String!\n  source: String!\n}",
+              "template": "",
+              "reducer": "if (action.input.prices.length === 0) {\n  throw new EmptyRecordError(\"A price record must carry at least one price\");\n}\nconst isDecimal = (value: string) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nfor (const price of action.input.prices) {\n  if (!isDecimal(price.price)) {\n    throw new InvalidAmountError(`${price.price} is not a decimal amount`);\n  }\n}\nfor (const price of action.input.prices) {\n  const latest = state.latest.find((p) => p.asset === price.asset);\n  if (latest) {\n    latest.price = price.price;\n    latest.source = price.source;\n    latest.fetchedAt = action.input.fetchedAt;\n  } else {\n    state.latest.push({\n      asset: price.asset,\n      price: price.price,\n      source: price.source,\n      fetchedAt: action.input.fetchedAt,\n    });\n  }\n  const point = state.history.find(\n    (h) => h.asset === price.asset && h.hour === action.input.hour,\n  );\n  if (point) {\n    point.price = price.price;\n    point.source = price.source;\n  } else {\n    state.history.push({\n      asset: price.asset,\n      hour: action.input.hour,\n      price: price.price,\n      source: price.source,\n    });\n  }\n}\nstate.baseCurrency = action.input.baseCurrency;\nstate.status.lastFetchAt = action.input.fetchedAt;\nstate.status.lastError = null;",
+              "errors": [
+                {
+                  "id": "b45dc616-cf5d-44e3-a603-1fed0828f6ac",
+                  "name": "EmptyRecordError",
+                  "code": "EMPTY_RECORD",
+                  "description": "A price record must carry at least one price",
+                  "template": ""
+                },
+                {
+                  "id": "9345fbf9-f64f-4986-82e9-88ea148fe120",
+                  "name": "InvalidAmountError",
+                  "code": "INVALID_AMOUNT",
+                  "description": "A price is not a decimal amount",
+                  "template": ""
+                }
+              ],
+              "examples": [],
+              "scope": "global"
+            },
+            {
+              "id": "ac9d72a9-0c0b-418f-bab4-ac43744116af",
+              "name": "SET_BASE_CURRENCY",
+              "description": "",
+              "schema": "input SetBaseCurrencyInput {\n  baseCurrency: String!\n}",
+              "template": "",
+              "reducer": "if (!/^[A-Z]{3}$/.test(action.input.baseCurrency)) {\n  throw new InvalidCurrencyError(\n    `${action.input.baseCurrency} is not a 3-letter currency code`,\n  );\n}\nif (action.input.baseCurrency !== state.baseCurrency) {\n  // Prices stored in another currency carry no meaning here.\n  state.latest = [];\n  state.history = [];\n}\nstate.baseCurrency = action.input.baseCurrency;",
+              "errors": [
+                {
+                  "id": "71c95c33-86f2-412e-8843-de282fc37e96",
+                  "name": "InvalidCurrencyError",
+                  "code": "INVALID_CURRENCY",
+                  "description": "The base currency is not a 3-letter code",
+                  "template": ""
+                }
+              ],
+              "examples": [],
+              "scope": "global"
+            },
+            {
+              "id": "b6de6f3a-c975-4fc8-8f8a-64dc35b3bde7",
+              "name": "RECORD_FETCH_ERROR",
+              "description": "",
+              "schema": "input RecordFetchErrorInput {\n  at: DateTime!\n  error: String!\n}",
+              "template": "",
+              "reducer": "state.status.lastFetchAt = action.input.at;\nstate.status.lastError = action.input.error;",
+              "errors": [],
+              "examples": [],
+              "scope": "global"
+            }
+          ]
+        }
+      ],
+      "version": 1,
+      "changeLog": []
+    }
+  ]
+}

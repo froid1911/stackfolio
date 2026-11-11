@@ -22,6 +22,10 @@
     {
       "id": "stackfolio/eth-staking",
       "name": "ETH Staking"
+    },
+    {
+      "id": "stackfolio/price-book",
+      "name": "Price Book"
     }
   ],
   "apps": [],

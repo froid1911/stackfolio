@@ -1,0 +1,70 @@
+scalar Unknown
+scalar DateTime
+scalar Address
+scalar AttachmentRef
+scalar Amount_Tokens
+scalar EthereumAddress
+scalar EmailAddress
+scalar Amount_Percentage
+scalar Date
+scalar URL
+scalar Amount_Money
+scalar OLabel
+scalar Currency
+scalar PHID
+scalar OID
+scalar Amount_Fiat
+scalar Amount_Currency
+scalar Amount_Crypto
+scalar Amount
+scalar Upload
+
+type PriceBookState {
+  baseCurrency: String!
+  latest: [LatestPrice!]!
+  history: [PricePoint!]!
+  status: FetchStatus!
+}
+
+type LatestPrice {
+  asset: String!
+  price: String!
+  source: String!
+  fetchedAt: DateTime!
+}
+
+type PricePoint {
+  asset: String!
+  hour: DateTime!
+  price: String!
+  source: String!
+}
+
+type FetchStatus {
+  lastFetchAt: DateTime
+  lastError: String
+}
+
+# prices
+
+input RecordPricesInput {
+  baseCurrency: String!
+  prices: [RecordedPriceInput!]!
+  hour: DateTime!
+  fetchedAt: DateTime!
+}
+
+input RecordedPriceInput {
+  asset: String!
+  price: String!
+  source: String!
+}
+
+input SetBaseCurrencyInput {
+  baseCurrency: String!
+}
+
+input RecordFetchErrorInput {
+  at: DateTime!
+  error: String!
+}

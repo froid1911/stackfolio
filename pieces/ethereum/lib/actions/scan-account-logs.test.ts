@@ -6,11 +6,14 @@ const ACCOUNT = "0x1111111111111111111111111111111111111111";
 const PEER = "0x2222222222222222222222222222222222222222";
 const TOKEN = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
-const { getLogs, getBlockNumber, getBlockTimestamp } = vi.hoisted(() => ({
-  getLogs: vi.fn(),
-  getBlockNumber: vi.fn(),
-  getBlockTimestamp: vi.fn(),
-}));
+const { getLogs, getBlockNumber, getBlockTimestamp, getBalance, getNonce } =
+  vi.hoisted(() => ({
+    getLogs: vi.fn(),
+    getBlockNumber: vi.fn(),
+    getBlockTimestamp: vi.fn(),
+    getBalance: vi.fn(),
+    getNonce: vi.fn(),
+  }));
 
 vi.mock("../client.js", async (importOriginal) => {
   // Keep the real module (auth.ts reads its URL constants); swap only the
@@ -18,7 +21,13 @@ vi.mock("../client.js", async (importOriginal) => {
   const actual: Record<string, unknown> = await importOriginal();
   return {
     ...actual,
-    createClientBundle: () => ({ getLogs, getBlockNumber, getBlockTimestamp }),
+    createClientBundle: () => ({
+      getLogs,
+      getBlockNumber,
+      getBlockTimestamp,
+      getBalance,
+      getNonce,
+    }),
   };
 });
 
@@ -83,6 +92,8 @@ beforeEach(() => {
   getLogs.mockReset();
   getBlockNumber.mockReset();
   getBlockTimestamp.mockReset();
+  getBalance.mockReset();
+  getNonce.mockReset();
 });
 
 describe("scan-account-logs", () => {
@@ -168,14 +179,37 @@ describe("scan-account-logs", () => {
     expect(getLogs).not.toHaveBeenCalled();
   });
 
-  it("starts from genesis when no cursor exists yet", async () => {
+  it("discovers the history start when no cursor exists yet", async () => {
+    getBlockNumber.mockResolvedValue(2_000_000n);
+    // The chain came alive at block 1_000_000; discovery binary-searches
+    // there and the scan starts a lag behind it, not at genesis.
+    getBalance.mockImplementation(
+      async (_a: string, block?: bigint) =>
+        (block ?? 0n) >= 1_000_000n ? 1n : 0n,
+    );
+    getNonce.mockImplementation(
+      async (_a: string, block?: bigint) =>
+        (block ?? 0n) >= 1_000_000n ? 1 : 0,
+    );
+    getLogs.mockResolvedValue([]);
+
+    await runAction(walletDoc(null));
+
+    expect(getLogs).toHaveBeenCalledWith(
+      expect.objectContaining({ fromBlock: 998_000n }),
+    );
+  });
+
+  it("scans from head when the account has never been active", async () => {
     getBlockNumber.mockResolvedValue(5n);
+    getBalance.mockResolvedValue(0n);
+    getNonce.mockResolvedValue(0);
     getLogs.mockResolvedValue([]);
 
     const page = await runAction(walletDoc(null));
 
     expect(getLogs).toHaveBeenCalledWith(
-      expect.objectContaining({ fromBlock: 0n, toBlock: 5n }),
+      expect.objectContaining({ fromBlock: 5n, toBlock: 5n }),
     );
     expect(page.lastBlock).toBe(5);
   });

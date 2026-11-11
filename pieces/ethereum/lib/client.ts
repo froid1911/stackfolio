@@ -41,8 +41,8 @@ export interface ClientBundle {
   getBlockTimestamp(blockNumber: bigint): Promise<string>;
   getBlockWithTxs(blockNumber: bigint): Promise<BlockView>;
   getBlockReceipts(blockNumber: bigint): Promise<ReceiptView[]>;
-  getBalance(address: string): Promise<bigint>;
-  getNonce(address: string): Promise<number>;
+  getBalance(address: string, block?: bigint): Promise<bigint>;
+  getNonce(address: string, block?: bigint): Promise<number>;
   ethCall(to: string, data: string): Promise<string>;
 }
 
@@ -132,12 +132,18 @@ export function createClientBundle(
         effectiveGasPrice: receipt.effectiveGasPrice,
       }));
     },
-    getBalance(address) {
-      return client.getBalance({ address: address as `0x${string}` });
+    getBalance(address, block) {
+      return client.getBalance({
+        address: address as `0x${string}`,
+        ...(block === undefined ? {} : { blockNumber: block }),
+      });
     },
-    async getNonce(address) {
+    async getNonce(address, block) {
       return Number(
-        await client.getTransactionCount({ address: address as `0x${string}` }),
+        await client.getTransactionCount({
+          address: address as `0x${string}`,
+          ...(block === undefined ? {} : { blockNumber: block }),
+        }),
       );
     },
     async ethCall(to, data) {

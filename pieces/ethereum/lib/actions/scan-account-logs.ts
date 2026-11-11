@@ -1,6 +1,7 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { ethereumAuth } from "../auth.js";
 import { authProps, createClientBundle, type ClientBundle } from "../client.js";
+import { findFirstActivity } from "../first-activity.js";
 import {
   TRANSFER_TOPIC,
   chunkRange,
@@ -163,10 +164,24 @@ export const ethereumScanAccountLogsAction = createAction({
     const chainId =
       state.global?.chainId ?? authProps(context.auth).chainId ?? 1;
     const clients = createClientBundle(authProps(context.auth));
+    const cursor = state.global?.cursor?.lastLogsBlock ?? null;
+    // A wallet with no cursor yet gets its history start discovered by
+    // binary search; scanning 26 million dead blocks a page at a time is
+    // not a life anyone should have to live.
+    const fromBlock =
+      cursor === null
+        ? Number(
+            await findFirstActivity(
+              clients,
+              account,
+              await clients.getBlockNumber(),
+            ),
+          )
+        : cursor + 1;
     const page = await scanLogsPage(clients, {
       account,
       chainId,
-      fromBlock: (state.global?.cursor?.lastLogsBlock ?? -1) + 1,
+      fromBlock,
       maxBlocks: props.maxBlocks ?? 500,
       maxLogs: props.maxLogs ?? 5000,
     });

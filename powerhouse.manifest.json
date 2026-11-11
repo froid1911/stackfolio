@@ -1,5 +1,5 @@
 {
-  "name": "stackfolio",
+  "name": "@powerhousedao/stackfolio",
   "description": "",
   "category": "",
   "publisher": {
@@ -34,8 +34,17 @@
     {
       "id": "portfolio-index",
       "name": "portfolio-index"
+    },
+    {
+      "id": "stackfolio-reconciler",
+      "name": "stackfolio-reconciler"
     }
   ],
-  "subgraphs": [],
+  "subgraphs": [
+    {
+      "id": "portfolio-api",
+      "name": "portfolio-api"
+    }
+  ],
   "config": []
 }

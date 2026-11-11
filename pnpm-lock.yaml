@@ -16,9 +16,6 @@ importers:
 
   .:
     dependencies:
-      '@powerhousedao/pieces-framework':
-        specifier: 6.2.3-dev.96
-        version: 6.2.3-dev.96(@powerhousedao/reactor@6.2.3-dev.96(@sentry/node-core@10.75.2(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.1(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.10.0))(@opentelemetry/instrumentation@0.220.0(@opentelemetry/api@1.10.0)(supports-color@8.1.1))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0)))(graphql@16.12.0)(rolldown@1.0.2)(supports-color@8.1.1))(@powerhousedao/shared@6.2.3-dev.96(@electric-sql/pglite@0.3.15)(@sentry/node-core@10.75.2(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.1(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.10.0))(@opentelemetry/instrumentation@0.220.0(@opentelemetry/api@1.10.0)(supports-color@8.1.1))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0)))(rolldown@1.0.2)(supports-color@8.1.1))
       '@powerhousedao/workflow':
         specifier: 6.2.3-dev.96
         version: 6.2.3-dev.96(@babel/runtime@8.1.0)(@electric-sql/pglite@0.3.15)(@powerhousedao/design-system@6.2.3-dev.96(83f36376331afc305b28d5f1f3fc2d36))(@powerhousedao/reactor-browser@6.2.3-dev.96(7f2874437080680c4a6797714aa6119d))(@sentry/node-core@10.75.2(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.1(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.10.0))(@opentelemetry/instrumentation@0.220.0(@opentelemetry/api@1.10.0)(supports-color@8.1.1))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0)))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(rolldown@1.0.2)(supports-color@8.1.1)
@@ -62,9 +59,15 @@ importers:
       '@powerhousedao/ph-cli':
         specifier: 6.2.3-dev.96
         version: 6.2.3-dev.96(9c1d7be39b4eaf9c5588460663dabb72)
+      '@powerhousedao/pieces-framework':
+        specifier: 6.2.3-dev.96
+        version: 6.2.3-dev.96(@powerhousedao/reactor@6.2.3-dev.96(@sentry/node-core@10.75.2(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.1(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.10.0))(@opentelemetry/instrumentation@0.220.0(@opentelemetry/api@1.10.0)(supports-color@8.1.1))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0)))(graphql@16.12.0)(rolldown@1.0.2)(supports-color@8.1.1))(@powerhousedao/shared@6.2.3-dev.96(@electric-sql/pglite@0.3.15)(@sentry/node-core@10.75.2(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.1(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.10.0))(@opentelemetry/instrumentation@0.220.0(@opentelemetry/api@1.10.0)(supports-color@8.1.1))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0)))(rolldown@1.0.2)(supports-color@8.1.1))
       '@powerhousedao/reactor':
         specifier: 6.2.3-dev.96
         version: 6.2.3-dev.96(@sentry/node-core@10.75.2(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.1(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.10.0))(@opentelemetry/instrumentation@0.220.0(@opentelemetry/api@1.10.0)(supports-color@8.1.1))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0)))(graphql@16.12.0)(rolldown@1.0.2)(supports-color@8.1.1)
+      '@powerhousedao/reactor-api':
+        specifier: 6.2.3-dev.96
+        version: 6.2.3-dev.96(a5271ef76769f4488000a9446c120cd6)
       '@powerhousedao/reactor-browser':
         specifier: 6.2.3-dev.96
         version: 6.2.3-dev.96(7f2874437080680c4a6797714aa6119d)

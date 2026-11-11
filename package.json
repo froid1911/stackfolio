@@ -106,7 +106,9 @@
     "@powerhousedao/document-engineering": "1.40.5",
     "@powerhousedao/host-core": "6.2.3-dev.96",
     "@powerhousedao/ph-cli": "6.2.3-dev.96",
+    "@powerhousedao/pieces-framework": "6.2.3-dev.96",
     "@powerhousedao/reactor": "6.2.3-dev.96",
+    "@powerhousedao/reactor-api": "6.2.3-dev.96",
     "@powerhousedao/reactor-browser": "6.2.3-dev.96",
     "@powerhousedao/shared": "6.2.3-dev.96",
     "@powerhousedao/switchboard": "6.2.3-dev.96",
@@ -142,6 +144,7 @@
   "peerDependencies": {
     "@powerhousedao/analytics-engine-core": "6.2.3-dev.96",
     "@powerhousedao/connect-core": "6.2.3-dev.96",
+    "@powerhousedao/reactor-api": "6.2.3-dev.96",
     "@powerhousedao/reactor-browser": "6.2.3-dev.96",
     "@tanstack/react-router": "^1.170.41",
     "document-model": "6.2.3-dev.96",
@@ -169,7 +172,6 @@
     "vite": "$vite"
   },
   "dependencies": {
-    "@powerhousedao/pieces-framework": "6.2.3-dev.96",
     "@powerhousedao/workflow": "6.2.3-dev.96",
     "echarts": "^5.6.0",
     "viem": "^2.50.4"

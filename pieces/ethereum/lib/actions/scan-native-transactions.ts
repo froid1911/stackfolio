@@ -1,5 +1,4 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
-import { formatUnits } from "viem";
 import { ethereumAuth } from "../auth.js";
 import {
   createClientBundle,
@@ -44,7 +43,7 @@ export function nativeRowsForBlock(
         type: "SPEND",
         subtype: "NONE",
         asset: NATIVE_ASSET,
-        amount: formatUnits(tx.value, 18),
+        amount: tx.value.toString(),
         counterparty: to ?? NULL_ADDRESS,
         notes: null,
       });
@@ -57,7 +56,7 @@ export function nativeRowsForBlock(
         type: "RECEIVE",
         subtype: "NONE",
         asset: NATIVE_ASSET,
-        amount: formatUnits(tx.value, 18),
+        amount: tx.value.toString(),
         counterparty: from,
         notes: null,
       });
@@ -75,7 +74,7 @@ export function nativeRowsForBlock(
           type: "SPEND",
           subtype: "FEE",
           asset: NATIVE_ASSET,
-          amount: formatUnits(fee, 18),
+          amount: fee.toString(),
           counterparty: NULL_ADDRESS,
           notes: null,
         });
@@ -91,7 +90,7 @@ export function nativeRowsForBlock(
       type: "STAKING",
       subtype: "WITHDRAWAL",
       asset: NATIVE_ASSET,
-      amount: formatUnits(BigInt(withdrawal.amountGwei) * GWEI_TO_WEI, 18),
+      amount: (BigInt(withdrawal.amountGwei) * GWEI_TO_WEI).toString(),
       counterparty: withdrawal.address.toLowerCase(),
       notes: null,
     });

@@ -1,5 +1,4 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
-import { formatUnits } from "viem";
 import { ethereumAuth } from "../auth.js";
 import { createClientBundle } from "../client.js";
 
@@ -45,7 +44,7 @@ export const ethereumFetchAccountStateAction = createAction({
       clients.getNonce(address),
     ]);
     return {
-      balance: formatUnits(balance, 18),
+      balance: balance.toString(),
       blockNumber: Number(blockNumber),
       nonce,
       accountDocumentId: documentId,

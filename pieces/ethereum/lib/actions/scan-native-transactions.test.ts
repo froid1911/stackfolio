@@ -135,23 +135,23 @@ describe("scan-native-transactions", () => {
     // Block 10: one SPEND of 2 ETH, one RECEIVE of 1 ETH.
     expect(byKey.get("0xt1/0")).toMatchObject({
       type: "SPEND",
-      amount: "2",
+      amount: "2000000000000000000",
       counterparty: PEER,
       asset: "eip155:1/slip44:60",
     });
     expect(byKey.get("0xt2/1")).toMatchObject({
       type: "RECEIVE",
-      amount: "1",
+      amount: "1000000000000000000",
       counterparty: PEER,
     });
     // The self-transfer books one of each.
-    expect(byKey.get("0xt3/0")).toMatchObject({ type: "SPEND", amount: "0.5" });
-    expect(byKey.get("0xt3/1")).toMatchObject({ type: "RECEIVE", amount: "0.5" });
+    expect(byKey.get("0xt3/0")).toMatchObject({ type: "SPEND", amount: "500000000000000000" });
+    expect(byKey.get("0xt3/1")).toMatchObject({ type: "RECEIVE", amount: "500000000000000000" });
     // A fee row per account-initiated tx, after the move row.
     expect(byKey.get("0xt1/2")).toMatchObject({
       type: "SPEND",
       subtype: "FEE",
-      amount: "0.000021",
+      amount: "21000000000000",
     });
     expect(byKey.get("0xt3/2")).toMatchObject({ subtype: "FEE" });
     expect(byKey.get("0xt5/2")).toMatchObject({ subtype: "FEE" });
@@ -159,7 +159,7 @@ describe("scan-native-transactions", () => {
     expect(byKey.get("withdrawal-5000001/0")).toMatchObject({
       type: "STAKING",
       subtype: "WITHDRAWAL",
-      amount: "0.001",
+      amount: "1000000000000000",
       counterparty: ACCOUNT,
     });
     // The unrelated transfer produced nothing.

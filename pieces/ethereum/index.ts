@@ -4,8 +4,14 @@ import { ethereumFetchEnsNamesAction } from "./lib/actions/fetch-ens-names.js";
 import { ethereumFetchPricesAction } from "./lib/actions/fetch-prices.js";
 import { ethereumFetchTokenMetadataAction } from "./lib/actions/fetch-token-metadata.js";
 import { ethereumFetchValidatorsAction } from "./lib/actions/fetch-validators.js";
+import { ethereumHoldingsFromLedgerAction } from "./lib/actions/holdings-from-ledger.js";
+import { ethereumImportEventsToWalletAccountAction } from "./lib/actions/import-events-to-wallet-account.js";
+import { ethereumImportPricesToBookAction } from "./lib/actions/import-prices-to-book.js";
+import { ethereumImportStakingToDocAction } from "./lib/actions/import-staking-to-doc.js";
+import { ethereumImportTokensToRegistryAction } from "./lib/actions/import-tokens-to-registry.js";
 import { ethereumScanAccountLogsAction } from "./lib/actions/scan-account-logs.js";
 import { ethereumScanNativeTransactionsAction } from "./lib/actions/scan-native-transactions.js";
+import { ethereumSnapshotPortfolioAction } from "./lib/actions/snapshot-portfolio.js";
 import { ethereumAuth } from "./lib/auth.js";
 import { ETHEREUM_LOGO } from "./lib/logo.js";
 
@@ -26,6 +32,12 @@ export const ethereum = createPiece({
     ethereumFetchTokenMetadataAction,
     ethereumFetchPricesAction,
     ethereumFetchValidatorsAction,
+    ethereumImportEventsToWalletAccountAction,
+    ethereumImportTokensToRegistryAction,
+    ethereumImportStakingToDocAction,
+    ethereumImportPricesToBookAction,
+    ethereumHoldingsFromLedgerAction,
+    ethereumSnapshotPortfolioAction,
   ],
   triggers: [],
 });

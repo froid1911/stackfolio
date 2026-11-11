@@ -20,8 +20,9 @@ export type EventSubtype =
   | "DEPOSIT_ASSET"
   | "REMOVE_ASSET";
 
-/** One decoded ledger event; amounts are unsigned decimal strings, the
- * direction lives in `type`. `timestamp` is ISO 8601. */
+/** One decoded ledger event; amounts are unsigned decimal strings in the
+ * asset's smallest unit (wei for the native coin, base units for tokens),
+ * the direction lives in `type`. `timestamp` is ISO 8601. */
 export interface EventRow {
   eventIdentifier: string;
   sequenceIndex: number;

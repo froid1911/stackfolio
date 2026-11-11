@@ -78,6 +78,9 @@
       "studioMode": false
     }
   },
+  "workflows": {
+    "enabled": true
+  },
   "vetra": {
     "connectPort": 2844
   },

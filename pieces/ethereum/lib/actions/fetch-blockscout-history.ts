@@ -41,7 +41,13 @@ export async function crawlAddressEndpoint(
   client: BlockscoutClient,
   address: string,
   endpoint: string,
-  opts: { budgetMs: number; maxPages: number; now?: () => number },
+  opts: {
+    budgetMs: number;
+    maxPages: number;
+    /** Ceiling on collected raw items; heavy payloads must not OOM a worker. */
+    maxItems?: number;
+    now?: () => number;
+  },
 ): Promise<{ items: Record<string, unknown>[]; done: boolean; oldestBlock: number }> {
   const now = opts.now ?? Date.now;
   const startedAt = now();
@@ -56,7 +62,12 @@ export async function crawlAddressEndpoint(
       done = true;
       break;
     }
-    if (now() - startedAt >= opts.budgetMs) break;
+    if (
+      now() - startedAt >= opts.budgetMs ||
+      (opts.maxItems !== undefined && items.length >= opts.maxItems)
+    ) {
+      break;
+    }
   }
   let oldestBlock = Number.POSITIVE_INFINITY;
   for (const item of items) oldestBlock = Math.min(oldestBlock, blockOf(item));
@@ -74,6 +85,7 @@ export async function fetchBlockscoutHistory(
     importedDownTo: number;
     budgetMs: number;
     maxPages: number;
+    maxItems?: number;
     now?: () => number;
   },
 ): Promise<{
@@ -144,6 +156,13 @@ export const ethereumFetchBlockscoutHistoryAction = createAction({
       required: false,
       defaultValue: 200,
     }),
+    maxItems: Property.Number({
+      displayName: "Max items per endpoint",
+      description:
+        "Stop a crawl after this many raw items; the next run continues. Default 10000.",
+      required: false,
+      defaultValue: 10_000,
+    }),
   },
   async run(context) {
     const auth = blockscoutConfig(authProps(context.auth));
@@ -181,6 +200,7 @@ export const ethereumFetchBlockscoutHistoryAction = createAction({
       importedDownTo,
       budgetMs: props.budgetMs ?? 240_000,
       maxPages: props.maxPages ?? 200,
+      maxItems: props.maxItems ?? 10_000,
     });
   },
 });

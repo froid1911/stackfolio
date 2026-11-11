@@ -124,4 +124,22 @@ describe("crawlAddressEndpoint", () => {
     expect(out.oldestBlock).toBe(4);
     expect(out.items).toHaveLength(2);
   });
+  it("stops collecting at the item ceiling and stays unfinished", async () => {
+    const { client } = fake({
+      "/addresses/0x1/transactions": [
+        { items: [{ block_number: 10 }], next_page_params: { index: 1 } },
+        { items: [{ block_number: 9 }], next_page_params: { index: 2 } },
+        { items: [{ block_number: 8 }], next_page_params: null },
+      ],
+    });
+    const out = await crawlAddressEndpoint(client, "0x1", "transactions", {
+      budgetMs: 1000,
+      maxPages: 10,
+      maxItems: 2,
+      now: () => 0,
+    });
+    expect(out.done).toBe(false);
+    expect(out.items).toHaveLength(2);
+    expect(out.oldestBlock).toBe(9);
+  });
 });

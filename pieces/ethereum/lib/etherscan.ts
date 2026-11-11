@@ -44,7 +44,7 @@ export function createEtherscanClient(opts: {
   const doFetch = opts.fetchImpl ?? fetch;
   const sleep =
     opts.sleepFn ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
-  const spacingMs = opts.spacingMs ?? 220;
+  const spacingMs = opts.spacingMs ?? 250;
   const chainId = opts.chainId ?? 1;
 
   const attempt = async (

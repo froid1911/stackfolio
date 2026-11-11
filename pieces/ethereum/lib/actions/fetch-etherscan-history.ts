@@ -44,6 +44,10 @@ export async function fetchEtherscanHistory(
      * engine timeout. 0 walks exactly one window.
      */
     budgetMs: number;
+    /** Stop at a window boundary once this many rows are collected, so a
+     * busy stretch of a lifetime cannot overflow memory or step payload.
+     * 0 means no cap. */
+    maxRows?: number;
     /** Clock seam for tests. */
     now?: () => number;
   },
@@ -105,7 +109,13 @@ export async function fetchEtherscanHistory(
     });
     rows.push(...events);
     block = end + 1;
-    if (block > safeHead || now() - startedAt >= opts.budgetMs) {
+    if (
+      block > safeHead ||
+      now() - startedAt >= opts.budgetMs ||
+      (opts.maxRows !== undefined &&
+        opts.maxRows > 0 &&
+        rows.length >= opts.maxRows)
+    ) {
       break;
     }
   }
@@ -155,6 +165,13 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
       required: false,
       defaultValue: 10_000,
     }),
+    maxRows: Property.Number({
+      displayName: "Max rows per run",
+      description:
+        "Stop at a window boundary after this many collected rows; the next run continues. Default 5000, 0 for no cap.",
+      required: false,
+      defaultValue: 5_000,
+    }),
     budgetMs: Property.Number({
       displayName: "Walk budget (ms)",
       description:
@@ -200,6 +217,7 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
       windowBlocks: props.windowBlocks ?? 100_000,
       pageSize: props.pageSize ?? 10_000,
       budgetMs: props.budgetMs ?? 240_000,
+      maxRows: props.maxRows ?? 5_000,
     };
     // Walk window after window inside one run - empty stretches of an
     // address's life should cost seconds, not trigger intervals.

@@ -186,4 +186,36 @@ describe("fetchEtherscanHistory", () => {
     expect(calls.filter((c) => c === "txlist:1")).toHaveLength(1);
     expect(out).toMatchObject({ nextBlock: 100_000, done: false });
   });
+  it("stops at a window boundary once the row cap is hit", async () => {
+    const page: EtherscanRow[] = [
+      {
+        hash: "0xcap",
+        timeStamp: "1730000000",
+        from: ADDR,
+        to: "0x0000000000000000000000000000000000000002",
+        value: "1",
+        gasUsed: "21000",
+        gasPrice: "1",
+        status: "1",
+      },
+    ];
+    const { client } = scriptClient({
+      head: 500_000,
+      pages: { txlist: [page, []] },
+    });
+    const out = await fetchEtherscanHistory(client, {
+      address: ADDR,
+      chainId: 1,
+      startBlock: 0,
+      confirmations: 9,
+      windowBlocks: 100_000,
+      pageSize: 2,
+      budgetMs: 60_000,
+      maxRows: 2,
+      now: () => 0,
+    });
+    // window 1 yields 2 rows (value + fee) -> stop at the first boundary
+    expect(out.done).toBe(false);
+    expect(out.nextBlock).toBe(100_000);
+  });
 });

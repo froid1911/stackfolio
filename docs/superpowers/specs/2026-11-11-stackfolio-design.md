@@ -1,6 +1,6 @@
 # Stackfolio — a crypto portfolio Powerhouse package
 
-Status: DRAFT for approval
+Status: APPROVED (2026-11-11)
 Date: 2026-11-11
 Precursors: sektar (architecture), rotki (domain model and views)
 

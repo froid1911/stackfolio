@@ -4,8 +4,23 @@ A personal crypto portfolio as a Powerhouse package: your documents hold
 the data, local workflows pull it from your own Ethereum nodes, and the
 views in Connect render a full portfolio picture - without a Python server.
 
-## What is in the box
+## Views
 
+Live against a local Geth node - real wallet, real chain data.
+
+**Dashboard** - net worth from snapshots, allocation, latest events:
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+**Transactions** - the ledger, filterable; every row is a document event:
+
+![Transactions](docs/screenshots/transactions.png)
+
+**Accounts** - balances, scan cursors, backfill progress, run health:
+
+![Accounts](docs/screenshots/accounts.png)
+
+## What is in the box
 | Piece | Role |
 |---|---|
 | `document-models/` | Five models: `portfolio` (the book), `wallet-account` (one address's ledger), `asset-registry`, `price-book`, `eth-staking` |

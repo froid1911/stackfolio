@@ -17,6 +17,7 @@ interface HoldingsOutput {
 }
 
 function chainLocation(asset: string): string {
+  if (asset.startsWith("bip122:")) return "BITCOIN";
   const match = /^eip155:(\d+)\//.exec(asset);
   const chainId = match ? Number(match[1]) : 1;
   return chainId === 1 ? "ETHEREUM" : `EIP155_${chainId}`;

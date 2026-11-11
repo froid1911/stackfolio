@@ -124,11 +124,13 @@ const LIVE_ACTION: Record<ChainProvider, string> = {
   etherscan: "fetch-etherscan-recent",
   blockscout: "fetch-blockscout-recent",
   ankr: "fetch-ankr-recent",
+  bitcoin: "fetch-bitcoin-recent",
 };
 const HISTORY_ACTION: Record<ChainProvider, string> = {
   etherscan: "fetch-etherscan-history",
   blockscout: "fetch-blockscout-history",
   ankr: "fetch-ankr-history",
+  bitcoin: "fetch-bitcoin-history",
 };
 
 export function liveEtherscanSpec(
@@ -161,7 +163,9 @@ export function liveEtherscanSpec(
             ranAt: firedAt,
           },
           nativeStateJson: {
-            balance: "{{steps.poll.output.balanceWei}}",
+            // EVM answers wei, Bitcoin answers sats; the key is per
+            // provider because the wire contract differs, not the model.
+            balance: `{{steps.poll.output.${provider === "bitcoin" ? "balanceSats" : "balanceWei"}}}`,
             blockNumber: "{{steps.poll.output.lastBlock}}",
           },
         },

@@ -215,6 +215,21 @@ export async function reconcilePortfolio(
       });
       continue;
     }
+    if (
+      provider === "bitcoin" &&
+      (wallet.state.bitcoinXpub?.trim() ?? "") === "" &&
+      (wallet.state.address?.trim() ?? "") === ""
+    ) {
+      // Chain 0 is also the never-configured value: a wallet with
+      // neither an address nor an xpub is empty, not a Bitcoin wallet.
+      issues.push({
+        code: "INCOMPLETE_WALLET",
+        severity: "WARNING",
+        subject: wallet.id,
+        message: `Wallet ${wallet.id.slice(0, 8)} has no address and no extended public key yet - nothing can be imported until one is set.`,
+      });
+      continue;
+    }
     const live = liveEtherscanSpec(wallet.id, provider);
     specs.push(live);
     stallKeys.set(live, wallet.state.cursor?.lastRunAt ?? "never");

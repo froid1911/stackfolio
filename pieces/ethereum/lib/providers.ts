@@ -9,7 +9,15 @@
  * by name (Base: needs a paid Etherscan or Blockscout Builder plan)
  * instead of importing a partial lie from whichever half-works.
  */
-export type ChainProvider = "etherscan" | "blockscout" | "ankr";
+export type ChainProvider = "etherscan" | "blockscout" | "ankr" | "bitcoin";
+
+/**
+ * Bitcoin has no EVM chain id; 0 - the wallet-account initial value -
+ * doubles as its sentinel, since an EVM wallet only counts once its
+ * details (and a real chain id) are set. A chain-0 wallet without an
+ * address or xpub is incomplete, not a Bitcoin wallet.
+ */
+export const BITCOIN_CHAIN_ID = 0;
 
 const ETHERSCAN_FREE = new Set([
   1, // Ethereum
@@ -50,6 +58,7 @@ const ANKR_ROSTER = new Map<number, string>([
 
 /** The provider an address's chain should be imported through. */
 export function providerForChain(chainId: number): ChainProvider | null {
+  if (chainId === BITCOIN_CHAIN_ID) return "bitcoin";
   if (ETHERSCAN_FREE.has(chainId)) return "etherscan";
   if (BLOCKSCOUT_GATEWAY.has(chainId)) return "blockscout";
   if (ANKR_ROSTER.has(chainId)) return "ankr";

@@ -31,6 +31,7 @@ const wallet = (
     backfill: { state: "DONE", startBlock: 0, nextBlock: 0 },
     cursor: null,
     nativeBalance: null,
+    bitcoinXpub: null,
     label: null,
     ...over,
   },
@@ -456,6 +457,53 @@ describe("reconcilePortfolio", () => {
     const wiring = JSON.stringify(fake.created);
     expect(wiring).toContain("fetch-ankr-recent");
     expect(wiring).toContain("fetch-ankr-history");
+  });
+
+  it("routes chain-0 wallets with an xpub to Bitcoin actions", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [
+      wallet("w1", {
+        chainId: 0,
+        address: "",
+        bitcoinXpub:
+          "xpub6Bm9M1SxZdzL3TxdNV8897FgtTLBgehR1wVNnMyJ5VLRK5n3tFqXxrCVnVQj4zooN4eFSkf6Sma84reWc5ZCXMxPbLXQs3BcaBdTd4YQa3B",
+        backfill: null,
+      }),
+    ];
+    fake.connectionStatus["eth-1"] = "OK";
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: [] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+    const keys = fake.created.map((c) => c.key);
+    expect(keys).toContain("live-bitcoin-w1");
+    expect(keys).toContain("bitcoin-backfill-w1");
+    const wiring = JSON.stringify(fake.created);
+    expect(wiring).toContain("fetch-bitcoin-recent");
+    expect(wiring).toContain("fetch-bitcoin-history");
+    // The live import writes sats, not wei, onto the native balance.
+    expect(wiring).toContain("balanceSats");
+  });
+
+  it("warns, and builds nothing, for a chain-0 wallet that was never configured", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [wallet("w1", { chainId: 0, address: "", backfill: null })];
+    fake.connectionStatus["eth-1"] = "OK";
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: [] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+    const check = fake.dispatched
+      .flatMap((d) => d.actions)
+      .find((a) => (a as { type: string }).type === "RECORD_CHECK") as {
+      input: { issues: Array<{ code: string; message: string }> };
+    };
+    expect(check.input.issues.find((i) => i.code === "INCOMPLETE_WALLET")).toBeTruthy();
+    expect(fake.created.filter((c) => c.key.includes("w1"))).toEqual([]);
   });
 });
 

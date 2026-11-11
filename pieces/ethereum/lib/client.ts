@@ -13,6 +13,16 @@ export interface GetLogsParams {
   topics: Array<`0x${string}` | null>;
 }
 
+/** An `eth_getLogs` result entry as the node sends it: hex quantities. */
+interface WireLog {
+  address: string;
+  topics: string[];
+  data: string;
+  logIndex: string;
+  blockNumber: string;
+  transactionHash: string;
+}
+
 /** A block narrowed to what the native walker reads. */
 export interface BlockView {
   number: number;
@@ -74,7 +84,10 @@ export function createClientBundle(
       // array as an empty filter, and an unfiltered query for a few
       // hundred mainnet blocks answers hundreds of megabytes. One
       // question, sent exactly as asked, cannot be misfiled.
-      const logs = await client.request({
+      // Raw JSON-RPC result: viem types known methods as parsed domain
+      // objects, but request hands back the node's wire shape untouched —
+      // so narrow through unknown against the wire contract instead.
+      const result: unknown = await client.request({
         method: "eth_getLogs",
         params: [
           {
@@ -86,6 +99,10 @@ export function createClientBundle(
           },
         ],
       });
+      if (!Array.isArray(result)) {
+        throw new Error("eth_getLogs answered with something not a list.");
+      }
+      const logs = result as WireLog[];
       return logs.map((log) => ({
         address: log.address,
         topics: log.topics,

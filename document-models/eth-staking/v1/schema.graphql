@@ -1,0 +1,102 @@
+scalar Unknown
+scalar DateTime
+scalar Address
+scalar AttachmentRef
+scalar Amount_Tokens
+scalar EthereumAddress
+scalar EmailAddress
+scalar Amount_Percentage
+scalar Date
+scalar URL
+scalar Amount_Money
+scalar OLabel
+scalar Currency
+scalar PHID
+scalar OID
+scalar Amount_Fiat
+scalar Amount_Currency
+scalar Amount_Crypto
+scalar Amount
+scalar Upload
+
+type EthStakingState {
+  validators: [Validator!]!
+  balanceHistory: [BalancePoint!]!
+  withdrawals: [Withdrawal!]!
+  cursor: StakeCursor
+}
+
+type Validator {
+  index: Int!
+  publicKey: String!
+  withdrawalAddress: String
+  activationTimestamp: Int
+  withdrawableTimestamp: Int
+  exitedTimestamp: Int
+}
+
+type BalancePoint {
+  validatorIndex: Int!
+  day: String!
+  balanceGwei: String!
+}
+
+type Withdrawal {
+  id: OID!
+  validatorIndex: Int!
+  timestamp: DateTime!
+  amountGwei: String!
+  blockNumber: Int!
+  withdrawalRef: Int!
+}
+
+type StakeCursor {
+  lastBalanceDay: DateTime
+  lastWithdrawalBlock: Int
+}
+
+# validators
+
+input UpsertValidatorsInput {
+  validators: [ValidatorInput!]!
+}
+
+input ValidatorInput {
+  index: Int!
+  publicKey: String!
+  withdrawalAddress: String
+  activationTimestamp: Int
+  withdrawableTimestamp: Int
+  exitedTimestamp: Int
+}
+
+# history
+
+input RecordBalancesInput {
+  points: [BalancePointInput!]!
+  ranAt: DateTime!
+}
+
+input BalancePointInput {
+  validatorIndex: Int!
+  day: String!
+  balanceGwei: String!
+}
+
+input RecordWithdrawalsInput {
+  withdrawals: [WithdrawalInput!]!
+}
+
+input WithdrawalInput {
+  id: OID!
+  validatorIndex: Int!
+  timestamp: DateTime!
+  amountGwei: String!
+  blockNumber: Int!
+  withdrawalRef: Int!
+}
+
+input RecordStakeScanProgressInput {
+  lastBalanceDay: DateTime
+  lastWithdrawalBlock: Int
+}

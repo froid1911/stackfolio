@@ -18,6 +18,10 @@
     {
       "id": "stackfolio/wallet-account",
       "name": "Wallet Account"
+    },
+    {
+      "id": "stackfolio/eth-staking",
+      "name": "ETH Staking"
     }
   ],
   "apps": [],

@@ -95,7 +95,7 @@ describe("specs", () => {
     const firstStep = actions[2] as { input: Record<string, unknown> };
     expect(firstStep.input).toMatchObject({
       connectionId: "eth-1",
-      reactorConnectionId: null,
+      reactorConnectionId: "reactor-1",
     });
     const trigger = actions[1] as { input: Record<string, unknown> };
     expect(trigger.input).toMatchObject({

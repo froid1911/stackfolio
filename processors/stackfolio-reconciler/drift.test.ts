@@ -173,7 +173,7 @@ describe("workflowDrift", () => {
     };
     expect(update.input.id).toBe("step-0");
     expect(update.input.connectionId).toBe("eth-1");
-    expect(update.input.reactorConnectionId).toBeNull();
+    expect(update.input.reactorConnectionId).toBe("reactor-1");
   });
 
   it("sameJson ignores key order", () => {

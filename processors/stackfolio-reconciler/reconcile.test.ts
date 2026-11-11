@@ -239,8 +239,9 @@ describe("reconcilePortfolio", () => {
     const doc = portfolioDocWith({ grant: true });
     await reconcilePortfolio(doc, emptyRecorded(), fake.io());
 
-    // The ethereum-only live scan builds; the prices workflow waits.
-    expect(fake.created.map((c) => c.key)).toEqual(["live-scan-w1"]);
+    // Every spec has document-touching steps, so all of them wait; the
+    // engine refuses those steps' reactor access without a binding.
+    expect(fake.created.map((c) => c.key)).toEqual([]);
     const check = fake.dispatched
       .flatMap((d) => d.actions)
       .find((a) => (a as { type: string }).type === "RECORD_CHECK") as {

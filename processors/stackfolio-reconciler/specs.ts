@@ -94,11 +94,17 @@ export type Connections = {
   reactor: string;
 };
 
-/** The step's connection fields as the engine stores them. */
+/**
+ * The step's connection fields as the engine stores them. Every step binds
+ * the reactor connection: the document-touching actions declare reactor
+ * access, and the engine only grants it when the step carries a binding -
+ * a step without one fails the run with "bind a reactor connection".
+ */
 export function connectionOf(step: StepSpec, connections: Connections) {
+  const reactor = connections.reactor || null;
   return step.piece === "reactor"
-    ? { connectionId: null, reactorConnectionId: connections.reactor }
-    : { connectionId: connections.ethereum, reactorConnectionId: null };
+    ? { connectionId: null, reactorConnectionId: reactor }
+    : { connectionId: connections.ethereum, reactorConnectionId: reactor };
 }
 
 /** The trigger payload doubles as the run's clock: one timestamp per fire. */

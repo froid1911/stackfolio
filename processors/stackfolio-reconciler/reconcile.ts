@@ -73,9 +73,7 @@ export type ReconcileIO = {
   dispatchPortfolio(id: string, actions: Action[]): Promise<void>;
 };
 
-function specNeedsReactor(spec: WorkflowSpec): boolean {
-  return spec.steps.some((step) => step.piece === "reactor");
-}
+
 
 const issueSignature = (
   issues: Array<{ code: string; subject: string | null }>,
@@ -205,11 +203,10 @@ export async function reconcilePortfolio(
     );
   }
 
-  // Without the reactor connection, specs that read documents cannot be
-  // built: their reactor steps would carry an empty binding. They wait.
-  const buildable = reactorConnectionId
-    ? specs
-    : specs.filter((spec) => !specNeedsReactor(spec));
+  // Every spec has at least one step that reads or writes documents, and
+  // those steps only get reactor access with a connection bound. Without
+  // one, nothing is buildable: the specs wait.
+  const buildable = reactorConnectionId ? specs : [];
   for (const spec of specs) {
     if (!buildable.includes(spec)) {
       issues.push({

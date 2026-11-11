@@ -3,5 +3,8 @@
  * This file is auto-generated and updated by codegen
  */
 import type { UpgradeManifest } from "document-model";
+import { assetRegistryUpgradeManifest } from "document-models/asset-registry/upgrades";
 
-export const upgradeManifests: UpgradeManifest<readonly number[]>[] = [];
+export const upgradeManifests: UpgradeManifest<readonly number[]>[] = [
+  assetRegistryUpgradeManifest,
+];

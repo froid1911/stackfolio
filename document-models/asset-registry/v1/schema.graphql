@@ -1,0 +1,73 @@
+scalar Unknown
+scalar DateTime
+scalar Address
+scalar AttachmentRef
+scalar Amount_Tokens
+scalar EthereumAddress
+scalar EmailAddress
+scalar Amount_Percentage
+scalar Date
+scalar URL
+scalar Amount_Money
+scalar OLabel
+scalar Currency
+scalar PHID
+scalar OID
+scalar Amount_Fiat
+scalar Amount_Currency
+scalar Amount_Crypto
+scalar Amount
+scalar Upload
+
+type AssetRegistryState {
+  assets: [Asset!]!
+}
+
+type Asset {
+  id: OID!
+  identifier: String!
+  symbol: String!
+  name: String!
+  decimals: Int!
+  kind: AssetKind!
+  chainId: Int!
+  coingeckoId: String
+  custom: Boolean!
+  addedAt: DateTime!
+}
+
+enum AssetKind {
+  NATIVE
+  ERC20
+}
+
+# registry
+
+input RegisterAssetInput {
+  id: OID!
+  identifier: String!
+  symbol: String!
+  name: String!
+  decimals: Int!
+  kind: AssetKind!
+  chainId: Int!
+  coingeckoId: String
+  custom: Boolean!
+  addedAt: DateTime!
+}
+
+input UpdateAssetInput {
+  identifier: String!
+  symbol: String
+  name: String
+  decimals: Int
+}
+
+input SetCoingeckoIdInput {
+  identifier: String!
+  coingeckoId: String
+}
+
+input RemoveAssetInput {
+  identifier: String!
+}

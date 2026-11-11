@@ -6,7 +6,12 @@
     "name": "",
     "url": ""
   },
-  "documentModels": [],
+  "documentModels": [
+    {
+      "id": "stackfolio/asset-registry",
+      "name": "Asset Registry"
+    }
+  ],
   "apps": [],
   "editors": [],
   "processors": [],

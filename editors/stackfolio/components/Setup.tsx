@@ -162,7 +162,13 @@ function BookStep({
     <div className="mt-4 flex flex-col gap-3">
       <label>
         <h3>Portfolio name</h3>
-        <input value={name} onChange={(e) => setName(e.target.value)} />
+        {/* The default name is a suggestion: focusing selects it whole,
+            so typing replaces it instead of appending. */}
+        <input
+          value={name}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => setName(e.target.value)}
+        />
       </label>
       <label>
         <h3>Runs for (grant name)</h3>

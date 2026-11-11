@@ -47,9 +47,15 @@ class FakeIO {
   connectionStatus: Record<string, string | null> = {};
   reactorConnectionId: string | null = "reac-1";
   nextId = 1;
+  fingerprints = new Map<string, string>();
 
   io(): ReconcileIO {
     return {
+      progressFingerprint: (key, fingerprint) => {
+        const previous = this.fingerprints.get(key);
+        this.fingerprints.set(key, fingerprint);
+        return previous === fingerprint;
+      },
       now: () => "2026-11-11T12:00:00.000Z",
       newId: () => `n${this.nextId++}`,
       reactorPieceVersion: () => "6.2.3",
@@ -190,6 +196,70 @@ describe("reconcilePortfolio", () => {
     expect(fake.created).toEqual([]);
     expect(fake.updated).toEqual([]);
     expect(fake.dispatched).toEqual([]);
+  });
+
+  it("re-arms a workflow whose progress stopped moving", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [
+      wallet("w1", {
+        cursor: {
+          lastLogsBlock: 100,
+          lastNativeScanBlock: 100,
+          lastEventTimestamp: null,
+          lastRunAt: "2026-11-11T11:55:00.000Z",
+        },
+      }),
+    ];
+    fake.connectionStatus["eth-1"] = "OK";
+    fake.workflows.set("wf-old", fake.inSyncFacts("w1"));
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: ["wf-old"] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+    expect(fake.updated).toEqual([]);
+
+    // A second pass sees the same cursor: the scan has not reported in,
+    // so the trigger config is re-sent - the version bump lifts a park.
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+    expect(fake.updated).toHaveLength(1);
+    expect(fake.updated[0].id).toBe("wf-old");
+    expect(
+      fake.updated[0].actions.map((a) => (a as { type: string }).type),
+    ).toEqual(["SET_TRIGGER_CONFIG"]);
+  });
+
+  it("leaves a workflow whose cursor keeps moving", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [
+      wallet("w1", {
+        cursor: {
+          lastLogsBlock: 100,
+          lastNativeScanBlock: 100,
+          lastEventTimestamp: null,
+          lastRunAt: "2026-11-11T11:55:00.000Z",
+        },
+      }),
+    ];
+    fake.connectionStatus["eth-1"] = "OK";
+    fake.workflows.set("wf-old", fake.inSyncFacts("w1"));
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: ["wf-old"] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+    fake.wallets[0].state.cursor = {
+      lastLogsBlock: 200,
+      lastNativeScanBlock: 200,
+      lastEventTimestamp: null,
+      lastRunAt: "2026-11-11T11:58:00.000Z",
+    };
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+    expect(fake.updated).toEqual([]);
   });
 
   it("switches off the workflow of a wallet that left", async () => {

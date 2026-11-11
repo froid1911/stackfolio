@@ -190,13 +190,18 @@ export function nativeBackfillSpec(walletDocumentId: string): WorkflowSpec {
   return {
     key: `native-backfill-${walletDocumentId}`,
     displayName: `Native backfill ${walletDocumentId.slice(0, 8)}`,
-    trigger: { kind: "interval", seconds: 300 },
+    trigger: { kind: "interval", seconds: 60 },
     steps: [
       {
         name: "walk",
         piece: "ethereum",
         action: "scan-native-transactions",
-        config: { accountDocumentId: walletDocumentId, maxBlocks: 500_000 },
+        timeoutSeconds: 120,
+        config: {
+          accountDocumentId: walletDocumentId,
+          maxBlocks: 2000,
+          direction: "BACKFILL",
+        },
       },
       {
         name: "import",

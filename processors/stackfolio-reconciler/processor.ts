@@ -80,6 +80,8 @@ export class StackfolioReconciler implements IProcessor {
   private timers: ReturnType<typeof setTimeout>[] = [];
   private stopped = false;
   private reactorVersion: string | undefined;
+  /** Last-seen progress marker per workflow key; the stall detector. */
+  private readonly fingerprints = new Map<string, string>();
 
   constructor(
     private readonly driveId: string,
@@ -183,6 +185,11 @@ export class StackfolioReconciler implements IProcessor {
       return workflowsDriveId.current;
     };
     return {
+      progressFingerprint: (key, fingerprint) => {
+        const previous = this.fingerprints.get(key);
+        this.fingerprints.set(key, fingerprint);
+        return previous === fingerprint;
+      },
       now: () => new Date().toISOString(),
       newId: () => generateId(),
       reactorPieceVersion: () => {

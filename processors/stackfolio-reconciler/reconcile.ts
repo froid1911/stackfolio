@@ -69,6 +69,11 @@ export type ReconcileIO = {
   findChainConnection(): Promise<string | null>;
   findReactorConnection(): Promise<string | null>;
   findWallets(): Promise<Array<{ id: string; state: WalletAccountState }>>;
+  /**
+   * True when `fingerprint` equals what the previous pass saw for `key`:
+   * progress stood still, so the workflow behind it has stalled.
+   */
+  progressFingerprint(key: string, fingerprint: string): boolean;
   /** The first document of `type` in the drive; the drive holds one. */
   findSingleton(type: string): Promise<{ id: string; name: string } | null>;
   /** Portfolio-document actions (RECORD_CHECK, RECORD_RESOURCES). */
@@ -182,11 +187,20 @@ export async function reconcilePortfolio(
 
   const wallets = await io.findWallets();
   const specs: WorkflowSpec[] = [];
+  // The progress marker whose silence unmasks a parked workflow: the
+  // wallet's scan cursor for a live scan, the backfill cursor for the
+  // history walk. A successful run always moves its marker; a park stops
+  // it, and a stopped marker is what re-arming looks for.
+  const stallKeys = new Map<WorkflowSpec, string>();
   for (const wallet of wallets) {
     if (wallet.state.ignored) continue;
-    specs.push(liveScanSpec(wallet.id));
+    const live = liveScanSpec(wallet.id);
+    specs.push(live);
+    stallKeys.set(live, wallet.state.cursor?.lastRunAt ?? "never");
     if (wallet.state.backfill && wallet.state.backfill.state !== "DONE") {
-      specs.push(nativeBackfillSpec(wallet.id));
+      const walk = nativeBackfillSpec(wallet.id);
+      specs.push(walk);
+      stallKeys.set(walk, String(wallet.state.backfill.nextBlock ?? "none"));
     }
   }
   if (registry && priceBook) {
@@ -290,6 +304,8 @@ export async function reconcilePortfolio(
       newId,
       connections,
       io.reactorPieceVersion(),
+      stallKeys.has(spec) &&
+        io.progressFingerprint(spec.key, stallKeys.get(spec) as string),
     );
     if (drift.differences.some((d) => d.includes("edited by hand"))) {
       issues.push({

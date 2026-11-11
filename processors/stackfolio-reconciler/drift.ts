@@ -86,6 +86,7 @@ export function workflowDrift(
   newId: () => string,
   connections: Connections,
   reactorPieceVersion = "0.0.0",
+  stalled = false,
 ): Drift {
   const differences: string[] = [];
   const actions: WorkflowAction[] = [];
@@ -172,6 +173,12 @@ export function workflowDrift(
               : 0,
           )}, now on ${humanSeconds(spec.trigger.seconds)}`,
         );
+        actions.push(wf.setTriggerConfig({ config: wanted }));
+      } else if (stalled) {
+        // The engine parks a workflow after a failed run and never
+        // re-arms it from the document. Re-sending the trigger config
+        // bumps the version, which is exactly what lifts the park.
+        differences.push("was re-armed after a stalled schedule");
         actions.push(wf.setTriggerConfig({ config: wanted }));
       }
     }

@@ -184,15 +184,28 @@ export const ethereumScanNativeTransactionsAction = createAction({
     }
 
     const rows: EventRow[] = [];
-    for (let number = fromBlock; number <= toBlock; number += 1) {
-      const block = await clients.getBlockWithTxs(BigInt(number));
-      const receipts = new Map(
-        (await clients.getBlockReceipts(BigInt(number))).map((receipt) => [
-          receipt.transactionHash,
-          receipt,
-        ]),
+    // Bounded parallel fetch: a 2000-block head walk must fit the piece
+    // worker's budget. Slices stay in block order; rows keep their slots.
+    const BLOCK_PARALLELISM = 8;
+    for (let start = fromBlock; start <= toBlock; start += BLOCK_PARALLELISM) {
+      const end = Math.min(start + BLOCK_PARALLELISM - 1, toBlock);
+      const slices = await Promise.all(
+        Array.from({ length: end - start + 1 }, async (_, offset) => {
+          const number = BigInt(start + offset);
+          const [block, receipts] = await Promise.all([
+            clients.getBlockWithTxs(number),
+            clients.getBlockReceipts(number),
+          ]);
+          return nativeRowsForBlock(
+            block,
+            new Map(
+              receipts.map((receipt) => [receipt.transactionHash, receipt]),
+            ),
+            account,
+          );
+        }),
       );
-      rows.push(...nativeRowsForBlock(block, receipts, account));
+      for (const slice of slices) rows.push(...slice);
     }
 
     const nextBlock = toBlock + 1;

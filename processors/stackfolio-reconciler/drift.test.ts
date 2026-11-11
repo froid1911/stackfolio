@@ -46,6 +46,7 @@ const specFacts = (
       name: s.name,
       action: s.action,
       config: s.config,
+      timeoutSeconds: s.timeoutSeconds ?? null,
       ...connectionOf(s, CONNS),
     })),
     managedBy: null,
@@ -146,6 +147,19 @@ describe("workflowDrift", () => {
       "SET_POLICY",
       "PUBLISH_WORKFLOW",
     ]);
+  });
+
+  it("repairs a step timeout wiped by hand", () => {
+    const spec = liveScanSpec("w1");
+    const facts = specFacts(spec);
+    facts.steps[1] = { ...facts.steps[1], timeoutSeconds: null };
+    const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
+    expect(drift.differences[0]).toMatch(/step scan-native no longer read/);
+    const update = drift.actions[0] as {
+      type: string;
+      input: Record<string, unknown>;
+    };
+    expect(update.input.timeoutSeconds).toBe(120);
   });
 
   it("re-updates an existing step whose config drifted", () => {

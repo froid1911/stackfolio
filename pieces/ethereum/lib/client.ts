@@ -74,7 +74,7 @@ export function createClientBundle(
       // array as an empty filter, and an unfiltered query for a few
       // hundred mainnet blocks answers hundreds of megabytes. One
       // question, sent exactly as asked, cannot be misfiled.
-      const logs = (await client.request({
+      const logs = await client.request({
         method: "eth_getLogs",
         params: [
           {
@@ -85,14 +85,7 @@ export function createClientBundle(
             topics,
           },
         ],
-      })) as Array<{
-        address: string;
-        topics: string[];
-        data: string;
-        logIndex: string;
-        blockNumber: string;
-        transactionHash: string;
-      }>;
+      });
       return logs.map((log) => ({
         address: log.address,
         topics: log.topics,

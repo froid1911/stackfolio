@@ -61,6 +61,8 @@ export type StepSpec = {
   piece: "ethereum" | "reactor";
   action: string;
   config: Record<string, unknown>;
+  /** Wall-clock budget for the action; the engine's default is 30 s. */
+  timeoutSeconds?: number;
 };
 
 export type TriggerSpec =
@@ -132,6 +134,7 @@ export function liveScanSpec(walletDocumentId: string): WorkflowSpec {
         name: "scan-native",
         piece: "ethereum",
         action: "scan-native-transactions",
+        timeoutSeconds: 120,
         config: {
           accountDocumentId: walletDocumentId,
           maxBlocks: 2000,

@@ -112,6 +112,9 @@ export function workflowDrift(
         ...connectionOf(step, connections),
         actionName: step.action,
         config: step.config,
+        ...(step.timeoutSeconds != null
+          ? { timeoutSeconds: step.timeoutSeconds }
+          : {}),
       }),
     );
   }
@@ -126,7 +129,8 @@ export function workflowDrift(
       existing.action === step.action &&
       sameJson(existing.config ?? {}, step.config) &&
       (existing.connectionId ?? null) === binding.connectionId &&
-      (existing.reactorConnectionId ?? null) === binding.reactorConnectionId
+      (existing.reactorConnectionId ?? null) === binding.reactorConnectionId &&
+      (existing.timeoutSeconds ?? null) === (step.timeoutSeconds ?? null)
     ) {
       continue;
     }
@@ -140,6 +144,9 @@ export function workflowDrift(
         ...binding,
         actionName: step.action,
         config: step.config,
+        ...(step.timeoutSeconds != null
+          ? { timeoutSeconds: step.timeoutSeconds }
+          : {}),
       }),
     );
   }

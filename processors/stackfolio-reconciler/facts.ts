@@ -21,6 +21,7 @@ export type WorkflowFacts = {
     config: Record<string, unknown> | null;
     connectionId: string | null;
     reactorConnectionId: string | null;
+    timeoutSeconds: number | null;
   }>;
   /** The document that manages it (managedBy.documentId); null: nobody */
   managedBy: string | null;
@@ -47,6 +48,7 @@ function readSteps(
   config: Record<string, unknown> | null;
   connectionId: string | null;
   reactorConnectionId: string | null;
+  timeoutSeconds: number | null;
 }> {
   if (!Array.isArray(steps)) return [];
   const out: Array<{
@@ -56,6 +58,7 @@ function readSteps(
     config: Record<string, unknown> | null;
     connectionId: string | null;
     reactorConnectionId: string | null;
+    timeoutSeconds: number | null;
   }> = [];
   for (const entry of steps) {
     const step = asRecord(entry);
@@ -68,6 +71,8 @@ function readSteps(
       config: asRecord(step?.config),
       connectionId: readString(step?.connectionId),
       reactorConnectionId: readString(step?.reactorConnectionId),
+      timeoutSeconds:
+        typeof step?.timeoutSeconds === "number" ? step.timeoutSeconds : null,
     });
   }
   return out;

@@ -100,6 +100,7 @@ class FakeIO {
           name: s.name,
           action: s.action,
           config: s.config,
+          timeoutSeconds: s.timeoutSeconds ?? null,
           ...connectionOf(s, CONNECTIONS),
         })),
         managedBy: "p1",

@@ -214,9 +214,33 @@ export async function fetchWindow(
     pageSize?: number;
   },
 ): Promise<EtherscanRow[]> {
+  return (await fetchWindowCapped(client, params)).rows;
+}
+
+/**
+ * The same paged window, with a hard page ceiling and a `truncated`
+ * answer: `true` means the window held more rows than the ceiling
+ * covers and the caller must shrink the window (or accept the cut).
+ * Unbounded paging is how a walk's worker gets OOM-killed on a busy
+ * stretch of history - the ceiling is what keeps a step's memory finite.
+ */
+export async function fetchWindowCapped(
+  client: {
+    call(params: Record<string, string | number>): Promise<unknown>;
+  },
+  params: {
+    address: string;
+    action: string;
+    startBlock: number;
+    endBlock: number;
+    pageSize?: number;
+    maxPages?: number;
+  },
+): Promise<{ rows: EtherscanRow[]; truncated: boolean }> {
   const pageSize = params.pageSize ?? 10_000;
+  const maxPages = params.maxPages ?? 50;
   const rows: EtherscanRow[] = [];
-  for (let page = 1; page <= 50; page += 1) {
+  for (let page = 1; page <= maxPages; page += 1) {
     const batch = (await client.call({
       module: "account",
       action: params.action,
@@ -229,7 +253,7 @@ export async function fetchWindow(
     })) as EtherscanRow[] | null;
     const list = Array.isArray(batch) ? batch : [];
     rows.push(...list);
-    if (list.length < pageSize) break;
+    if (list.length < pageSize) return { rows, truncated: false };
   }
-  return rows;
+  return { rows, truncated: true };
 }

@@ -218,4 +218,44 @@ describe("fetchEtherscanHistory", () => {
     expect(out.done).toBe(false);
     expect(out.nextBlock).toBe(100_000);
   });
+  it("halves an oversized window instead of holding it in memory", async () => {
+    // A window whose txlist never fits the page ceiling: the walk must
+    // split the span down to the floor, import what fits at the floor,
+    // and name the truncation - never accumulate the whole window.
+    const seenSpans: number[] = [];
+    const client = {
+      async call(params: Record<string, string | number>) {
+        if (params.action === "eth_blockNumber") return "0x2710"; // head 10000
+        const span = Number(params.endblock) - Number(params.startblock);
+        if (params.action === "txlist") {
+          seenSpans.push(span);
+          return [
+            { hash: `0x${Number(params.startblock)}`, timeStamp: "1", from: ADDR,
+              to: "0x2", value: "1", gasUsed: "0", gasPrice: "1", status: "1" },
+            { hash: `0x${Number(params.startblock)}a`, timeStamp: "1", from: ADDR,
+              to: "0x2", value: "1", gasUsed: "0", gasPrice: "1", status: "1" },
+          ]; // 2 rows = pageSize, always full -> truncated at every span
+        }
+        return [];
+      },
+    };
+    const out = await fetchEtherscanHistory(client, {
+      address: ADDR,
+      chainId: 1,
+      startBlock: 0,
+      confirmations: 0,
+      windowBlocks: 1000,
+      pageSize: 2,
+      budgetMs: 10_000,
+      maxRows: 0,
+      pagesPerWindow: 1,
+      minWindowBlocks: 250,
+      now: () => 0,
+    });
+    expect(seenSpans[0]).toBe(999); // full window first
+    expect(seenSpans).toContain(249); // split down to the floor
+    expect(out.skippedCategories).toContain("oversized-window");
+    expect(out.nextBlock).toBeGreaterThan(0); // floor windows still progress
+    expect(out.rows.length).toBeGreaterThan(0);
+  });
 });

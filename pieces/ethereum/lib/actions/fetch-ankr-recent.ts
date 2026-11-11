@@ -24,6 +24,8 @@ export async function fetchAnkrRecent(
     address: string;
     fromBlock: number;
     safeHead: number;
+    /** Blocks per poll; a laggard cursor climbs in bounded steps. */
+    maxBlocks?: number;
   },
 ): Promise<{
   rows: LedgerEventRow[];
@@ -32,14 +34,18 @@ export async function fetchAnkrRecent(
   skippedCategories: string[];
 }> {
   const rows: LedgerEventRow[] = [];
-  if (opts.safeHead >= opts.fromBlock) {
+  const toBlock = Math.min(
+    opts.safeHead,
+    opts.fromBlock + (opts.maxBlocks ?? 100_000) - 1,
+  );
+  if (toBlock >= opts.fromBlock) {
     let token: string | null = null;
     for (;;) {
       const page = await client.transactions({
         chain: opts.chain,
         address: opts.address,
         fromBlock: opts.fromBlock,
-        toBlock: opts.safeHead,
+        toBlock,
         pageToken: token,
         includeLogs: true,
       });
@@ -55,8 +61,8 @@ export async function fetchAnkrRecent(
   return {
     rows,
     balanceWei: hexOrZero(balanceRaw),
-    // Never answer below the cursor: an empty round keeps the cursor.
-    lastBlock: Math.max(opts.fromBlock - 1, opts.safeHead),
+    // Never answer below the cursor; the bounded window advances it.
+    lastBlock: Math.max(opts.fromBlock - 1, toBlock),
     skippedCategories: ["internal"],
   };
 }

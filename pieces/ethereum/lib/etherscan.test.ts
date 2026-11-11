@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  fetchWindowCapped,
   EtherscanError,
   createEtherscanClient,
   type EtherscanRow,
@@ -272,5 +273,47 @@ describe("createEtherscanClient", () => {
     release.resolve();
     await Promise.all([p1, p2]);
     expect(order).toEqual(["start1", "end1", "start2", "end2"]);
+  });
+});
+
+describe("fetchWindowCapped", () => {
+  const full = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ hash: `0x${i}` }));
+  it("stops at the page ceiling and says so", async () => {
+    const calls: number[] = [];
+    const client = {
+      async call(params: Record<string, string | number>) {
+        calls.push(Number(params.page));
+        return full(2); // every page full
+      },
+    };
+    const out = await fetchWindowCapped(client, {
+      address: "0xabc",
+      action: "txlist",
+      startBlock: 0,
+      endBlock: 99,
+      pageSize: 2,
+      maxPages: 3,
+    });
+    expect(out.rows).toHaveLength(6);
+    expect(out.truncated).toBe(true);
+    expect(calls).toEqual([1, 2, 3]);
+  });
+  it("is not truncated when a short page ends the window", async () => {
+    const client = {
+      async call(params: Record<string, string | number>) {
+        return Number(params.page) === 1 ? full(2) : full(1);
+      },
+    };
+    const out = await fetchWindowCapped(client, {
+      address: "0xabc",
+      action: "txlist",
+      startBlock: 0,
+      endBlock: 99,
+      pageSize: 2,
+      maxPages: 3,
+    });
+    expect(out.truncated).toBe(false);
+    expect(out.rows).toHaveLength(3);
   });
 });

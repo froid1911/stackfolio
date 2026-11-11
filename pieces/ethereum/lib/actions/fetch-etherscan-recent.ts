@@ -33,6 +33,10 @@ export async function fetchEtherscanRecent(
     fromBlock: number;
     confirmations: number;
     pageSize: number;
+    /** Blocks per poll - a laggard cursor climbs toward the head in
+     * bounded steps instead of paging a chain-span window into memory.
+     * Default 100000. */
+    maxBlocks?: number;
   },
 ): Promise<{
   rows: LedgerEventRow[];
@@ -42,18 +46,22 @@ export async function fetchEtherscanRecent(
 }> {
   const head = await etherscanHeadBlock(client);
   const safeHead = head - opts.confirmations;
+  const toBlock = Math.min(
+    safeHead,
+    opts.fromBlock + (opts.maxBlocks ?? 100_000) - 1,
+  );
   const skippedCategories: string[] = [];
   const grab = async (
     category: string,
     action: string,
   ): Promise<EtherscanRow[]> => {
-    if (opts.fromBlock > safeHead) return [];
+    if (opts.fromBlock > toBlock) return [];
     try {
       return await fetchWindow(client, {
         address: opts.address,
         action,
         startBlock: opts.fromBlock,
-        endBlock: safeHead,
+        endBlock: toBlock,
         pageSize: opts.pageSize,
       });
     } catch (error) {

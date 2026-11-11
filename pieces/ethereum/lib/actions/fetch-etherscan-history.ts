@@ -7,7 +7,7 @@ import {
   createEtherscanClient,
   etherscanHeadBlock,
   EtherscanError,
-  fetchWindow,
+  fetchWindowCapped,
   type EtherscanRow,
 } from "../etherscan.js";
 import {
@@ -48,6 +48,12 @@ export async function fetchEtherscanHistory(
      * busy stretch of a lifetime cannot overflow memory or step payload.
      * 0 means no cap. */
     maxRows?: number;
+    /** Pages fetched per window per endpoint before the window is
+     * declared oversized and halved. Default 2. */
+    pagesPerWindow?: number;
+    /** Floor for the window split - below it a truncated window is
+     * imported as-is and named in skippedCategories. Default 1000. */
+    minWindowBlocks?: number;
     /** Clock seam for tests. */
     now?: () => number;
   },
@@ -72,19 +78,23 @@ export async function fetchEtherscanHistory(
   const skipped = new Set<string>();
   const rows: LedgerEventRow[] = [];
   let block = opts.startBlock;
+  let span = opts.windowBlocks;
+  const minWindow = opts.minWindowBlocks ?? 1000;
+  const maxPages = opts.pagesPerWindow ?? 2;
   for (;;) {
-    const end = Math.min(block + opts.windowBlocks - 1, safeHead);
+    const end = Math.min(block + span - 1, safeHead);
     const grab = async (
       category: string,
       action: string,
-    ): Promise<EtherscanRow[]> => {
+    ): Promise<{ rows: EtherscanRow[]; truncated: boolean }> => {
       try {
-        return await fetchWindow(client, {
+        return await fetchWindowCapped(client, {
           address: opts.address,
           action,
           startBlock: block,
           endBlock: end,
           pageSize: opts.pageSize,
+          maxPages,
         });
       } catch (error) {
         if (
@@ -92,20 +102,36 @@ export async function fetchEtherscanHistory(
           error.category === "unavailable"
         ) {
           skipped.add(category);
-          return [];
+          return { rows: [], truncated: false };
         }
         throw error;
       }
     };
-    const txs = await grab("transactions", "txlist");
-    const internal = await grab("internal", "txlistinternal");
-    const tokentxs = await grab("tokens", "tokentx");
-    const approvals = await grab("approvals", "tokenApprovals");
+    const txsR = await grab("transactions", "txlist");
+    const internalR = await grab("internal", "txlistinternal");
+    const tokentxsR = await grab("tokens", "tokentx");
+    const approvalsR = await grab("approvals", "tokenApprovals");
+    if (
+      (txsR.truncated || internalR.truncated || tokentxsR.truncated || approvalsR.truncated) &&
+      span > minWindow
+    ) {
+      // The window holds more rows than the page ceiling covers:
+      // discard this attempt and re-walk it in quarter windows. Data
+      // is re-fetched, never lost - and memory stays finite either way.
+      span = Math.max(minWindow, Math.floor(span / 4));
+      continue;
+    }
+    if (txsR.truncated || internalR.truncated || tokentxsR.truncated) {
+      skipped.add("oversized-window");
+    }
+    const txs = txsR.rows;
+    const internal = internalR.rows;
+    const tokentxs = tokentxsR.rows;
     const { events } = mapEtherscanRows(opts.chainId, opts.address, {
       txs,
       internal,
       tokentxs,
-      approvals,
+      approvals: approvalsR.rows,
     });
     rows.push(...events);
     block = end + 1;

@@ -12,12 +12,11 @@ type Scripted = Array<{
   body: unknown;
 }>;
 
-function fakeFetch(script: Scripted, calls: string[] = []) {
+function fakeFetch(script: Scripted) {
   let n = 0;
-  const impl = async (url: string | URL | Request) => {
+  const impl = (async () => {
     const step = script[Math.min(n, script.length - 1)];
     n += 1;
-    calls.push(String(url));
     return new Response(
       typeof step.body === "string" ? step.body : JSON.stringify(step.body),
       {
@@ -25,8 +24,8 @@ function fakeFetch(script: Scripted, calls: string[] = []) {
         headers: { "content-type": "application/json" },
       },
     );
-  };
-  return { impl, calls };
+  }) as unknown as typeof fetch;
+  return { impl };
 }
 
 const noSleep = async () => {};

@@ -16,6 +16,8 @@ import { ethereumFetchBlockscoutHistoryAction } from "./lib/actions/fetch-blocks
 import { ethereumFetchBlockscoutRecentAction } from "./lib/actions/fetch-blockscout-recent.js";
 import { ethereumFetchAnkrHistoryAction } from "./lib/actions/fetch-ankr-history.js";
 import { ethereumFetchAnkrRecentAction } from "./lib/actions/fetch-ankr-recent.js";
+import { ethereumFetchBitcoinHistoryAction } from "./lib/actions/fetch-bitcoin-history.js";
+import { ethereumFetchBitcoinRecentAction } from "./lib/actions/fetch-bitcoin-recent.js";
 import { ethereumScanNativeTransactionsAction } from "./lib/actions/scan-native-transactions.js";
 import { ethereumSnapshotPortfolioAction } from "./lib/actions/snapshot-portfolio.js";
 import { ethereumSyncHyperliquidAction } from "./lib/actions/sync-hyperliquid.js";
@@ -45,6 +47,8 @@ export const ethereum = createPiece({
     ethereumFetchBlockscoutRecentAction,
     ethereumFetchAnkrHistoryAction,
     ethereumFetchAnkrRecentAction,
+    ethereumFetchBitcoinHistoryAction,
+    ethereumFetchBitcoinRecentAction,
     ethereumFetchValidatorsAction,
     ethereumImportEventsToWalletAccountAction,
     ethereumImportTokensToRegistryAction,

@@ -172,7 +172,11 @@
     "vite": "$vite"
   },
   "dependencies": {
+    "@noble/hashes": "^2.4.0",
     "@powerhousedao/workflow": "6.2.3-dev.96",
+    "@scure/base": "^2.4.0",
+    "@scure/bip32": "^2.4.0",
+    "@scure/bip39": "^2.4.0",
     "echarts": "^5.6.0",
     "viem": "^2.50.4"
   }

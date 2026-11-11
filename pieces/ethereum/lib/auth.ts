@@ -4,6 +4,10 @@ import {
   DEFAULT_CHAIN_ID,
   DEFAULT_RPC_URL,
 } from "./client.js";
+import {
+  DEFAULT_BITCOIN_BASE_URL,
+  DEFAULT_BITCOIN_TESTNET_BASE_URL,
+} from "./bitcoin.js";
 
 /**
  * This piece talks to the holder's own nodes, so the "auth" is node URLs —
@@ -57,6 +61,12 @@ export const ethereumAuth = PieceAuth.CustomAuth({
       displayName: "Hyperliquid info URL",
       description:
         "Override for the Hyperliquid public info API; defaults to https://api.hyperliquid.xyz.",
+      required: false,
+    }),
+    bitcoinApiUrl: Property.ShortText({
+      displayName: "Bitcoin API URL",
+      description:
+        "Override for the Bitcoin indexer (mempool.space/Esplora dialect); leave blank to use the public instance for each wallet's network.",
       required: false,
     }),
   },
@@ -165,4 +175,24 @@ export function ankrConfig(auth: {
     );
   }
   return { apiKey };
+}
+
+/**
+ * The Bitcoin indexer settings: no key - mempool.space answers the
+ * public chain read-only. The wallet's network picks the public
+ * instance; `bitcoinApiUrl` on the connection overrides it (self-hosted
+ * Esplora, or a mirror) and then its URL answers for both networks.
+ */
+export function bitcoinConfig(
+  auth: { bitcoinApiUrl?: string },
+  network: "mainnet" | "testnet",
+): { baseUrl: string } {
+  const override = auth.bitcoinApiUrl?.trim() ?? "";
+  if (override !== "") return { baseUrl: override };
+  return {
+    baseUrl:
+      network === "testnet"
+        ? DEFAULT_BITCOIN_TESTNET_BASE_URL
+        : DEFAULT_BITCOIN_BASE_URL,
+  };
 }

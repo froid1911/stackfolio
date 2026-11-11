@@ -10,6 +10,7 @@
 import type { Action } from "document-model";
 import { actions as portfolioActions } from "document-models/portfolio/v1";
 import type { PortfolioState } from "document-models/portfolio/v1";
+import { actions as walletActions } from "document-models/wallet-account/v1";
 import type { WalletAccountState } from "document-models/wallet-account/v1";
 import { workflowDrift } from "./drift.js";
 import type { WorkflowFacts } from "./facts.js";
@@ -17,8 +18,8 @@ import type { WorkflowAction, WorkflowSpec } from "./specs.js";
 import {
   buildWorkflow,
   disableAction,
-  liveScanSpec,
-  nativeBackfillSpec,
+  etherscanBackfillSpec,
+  liveEtherscanSpec,
   pricesSpec,
   stakingSpec,
 } from "./specs.js";
@@ -78,6 +79,7 @@ export type ReconcileIO = {
   findSingleton(type: string): Promise<{ id: string; name: string } | null>;
   /** Portfolio-document actions (RECORD_CHECK, RECORD_RESOURCES). */
   dispatchPortfolio(id: string, actions: Action[]): Promise<void>;
+  dispatchWallet(id: string, actions: Action[]): Promise<void>;
 };
 
 
@@ -194,13 +196,36 @@ export async function reconcilePortfolio(
   const stallKeys = new Map<WorkflowSpec, string>();
   for (const wallet of wallets) {
     if (wallet.state.ignored) continue;
-    const live = liveScanSpec(wallet.id);
+    const live = liveEtherscanSpec(wallet.id);
     specs.push(live);
     stallKeys.set(live, wallet.state.cursor?.lastRunAt ?? "never");
-    if (wallet.state.backfill && wallet.state.backfill.state !== "DONE") {
-      const walk = nativeBackfillSpec(wallet.id);
+    let backfill = wallet.state.backfill;
+    if (
+      backfill &&
+      backfill.state === "DONE" &&
+      (backfill.startBlock ?? 0) !== 0
+    ) {
+      // Source switch: a walk that finished against the local node gets
+      // its lifetime re-imported from block 0 through Etherscan - the
+      // history a snap-sync walk could not reach. Wallets whose walk
+      // already starts at 0 (Etherscan-era) are left alone.
+      await io.dispatchWallet(wallet.id, [
+        walletActions.setBackfillState({
+          state: "NATIVE",
+          startBlock: 0,
+          nextBlock: 0,
+        }),
+      ]);
+      fixes.push({
+        code: "WORKFLOW_REPAIRED",
+        message: `${wallet.id.slice(0, 8)} restarts its history from block 0 - Etherscan reaches what the node walk could not.`,
+      });
+      backfill = { state: "NATIVE", startBlock: 0, nextBlock: 0 };
+    }
+    if (!backfill || backfill.state !== "DONE") {
+      const walk = etherscanBackfillSpec(wallet.id);
       specs.push(walk);
-      stallKeys.set(walk, String(wallet.state.backfill.nextBlock ?? "none"));
+      stallKeys.set(walk, String(backfill?.nextBlock ?? 0));
     }
   }
   if (registry && priceBook) {

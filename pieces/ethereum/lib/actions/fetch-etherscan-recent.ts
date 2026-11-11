@@ -1,6 +1,8 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { ethereumAuth, etherscanConfig } from "../auth.js";
 import { authProps } from "../client.js";
+import { globalState } from "../reactor.js";
+import { WALLET_ACCOUNT_TYPE } from "./import-events-to-wallet-account.js";
 import {
   createEtherscanClient,
   etherscanHeadBlock,
@@ -85,20 +87,22 @@ export async function fetchEtherscanRecent(
 
 export const ethereumFetchEtherscanRecentAction = createAction({
   auth: ethereumAuth,
+  requireReactor: "read",
   name: "fetch-etherscan-recent",
   displayName: "Fetch Etherscan Recent",
   description:
     "The live round from the Etherscan V2 API: transfers, internal moves and token rows since the cursor, plus the current native balance. Confirmed blocks only; the answered block never goes backwards.",
   props: {
-    address: Property.ShortText({
-      displayName: "Address",
-      description: "The 0x address to poll.",
+    accountDocumentId: Property.ShortText({
+      displayName: "Wallet account document",
+      description: "The stackfolio/wallet-account document to poll.",
       required: true,
     }),
     fromBlock: Property.Number({
-      displayName: "From block",
-      description: "The block after the last imported one (cursor + 1).",
-      required: true,
+      displayName: "From block (override)",
+      description:
+        "Leave empty to poll from the document's cursor + 1 (the normal wiring).",
+      required: false,
     }),
     confirmations: Property.Number({
       displayName: "Confirmations",
@@ -120,9 +124,30 @@ export const ethereumFetchEtherscanRecentAction = createAction({
       baseUrl: auth.baseUrl,
     });
     const props = context.propsValue;
+    const documentId = props.accountDocumentId.trim();
+    const document = await context.reactor.get(documentId);
+    if (document.header.documentType !== WALLET_ACCOUNT_TYPE) {
+      throw new Error(
+        `Document ${documentId} is a ${document.header.documentType}, not a ${WALLET_ACCOUNT_TYPE}.`,
+      );
+    }
+    const global = globalState<{
+      address: string;
+      cursor: { lastNativeScanBlock: number | null } | null;
+    }>(document);
+    const address = global.address ?? "";
+    if (address === "") {
+      throw new Error(
+        `Document ${documentId} has no address yet - set the account details before polling.`,
+      );
+    }
+    const cursorBlock = global.cursor?.lastNativeScanBlock;
+    const fromBlock =
+      props.fromBlock ??
+      (cursorBlock === null || cursorBlock === undefined ? 0 : cursorBlock + 1);
     return fetchEtherscanRecent(client, {
-      address: props.address,
-      fromBlock: props.fromBlock,
+      address,
+      fromBlock,
       confirmations: props.confirmations ?? 9,
       pageSize: props.pageSize ?? 10_000,
     });

@@ -309,6 +309,9 @@ export class StackfolioReconciler implements IProcessor {
       dispatchPortfolio: async (portfolioId, actions) => {
         await dispatch.execute(portfolioId, "main", actions);
       },
+      dispatchWallet: async (walletId, actions) => {
+        await dispatch.execute(walletId, "main", actions);
+      },
     };
   }
 }

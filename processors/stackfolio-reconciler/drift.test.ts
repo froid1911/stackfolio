@@ -4,7 +4,7 @@ import { readFacts, type WorkflowFacts } from "./facts.js";
 import { workflowDrift, sameJson } from "./drift.js";
 import {
   connectionOf,
-  liveScanSpec,
+  liveEtherscanSpec,
   pricesSpec,
   type Connections,
   type WorkflowSpec,
@@ -94,25 +94,25 @@ describe("readFacts", () => {
 
 describe("workflowDrift", () => {
   it("stays silent when the workflow is the spec", () => {
-    const spec = liveScanSpec("w1");
+    const spec = liveEtherscanSpec("w1");
     const drift = workflowDrift(spec, specFacts(spec), "2026-11-11T00:00:00.000Z", newIds(), CONNS);
     expect(drift.differences).toEqual([]);
     expect(drift.actions).toEqual([]);
   });
 
   it("appends a missing tail step", () => {
-    const spec = liveScanSpec("w1");
+    const spec = liveEtherscanSpec("w1");
     const trimmed = {
       ...specFacts(spec),
       steps: specFacts(spec).steps.slice(0, -1),
     };
     const drift = workflowDrift(spec, trimmed, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
-    expect(drift.differences).toEqual(["the step import-native was missing"]);
+    expect(drift.differences).toEqual(["the step import was missing"]);
     expect(drift.actions.map((a) => a.type)).toEqual(["ADD_STEP"]);
   });
 
   it("refuses to repair a hand-edited chain", () => {
-    const spec = liveScanSpec("w1");
+    const spec = liveEtherscanSpec("w1");
     const scrambled = {
       ...specFacts(spec),
       steps: specFacts(spec).steps.slice().reverse(),
@@ -123,12 +123,12 @@ describe("workflowDrift", () => {
   });
 
   it("fixes a changed interval", () => {
-    const spec = liveScanSpec("w1");
+    const spec = liveEtherscanSpec("w1");
     const facts = specFacts(spec, {
       triggerConfig: { seconds: 600, label: spec.key },
     });
     const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
-    expect(drift.differences[0]).toMatch(/10 minutes.*5 minutes/s);
+    expect(drift.differences[0]).toMatch(/10 minutes.*2 minutes/s);
     expect(drift.actions.map((a) => a.type)).toEqual(["SET_TRIGGER_CONFIG"]);
   });
 
@@ -150,11 +150,11 @@ describe("workflowDrift", () => {
   });
 
   it("repairs a step timeout wiped by hand", () => {
-    const spec = liveScanSpec("w1");
+    const spec = liveEtherscanSpec("w1");
     const facts = specFacts(spec);
-    facts.steps[1] = { ...facts.steps[1], timeoutSeconds: null };
+    facts.steps[0] = { ...facts.steps[0], timeoutSeconds: null };
     const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
-    expect(drift.differences[0]).toMatch(/step scan-native no longer read/);
+    expect(drift.differences[0]).toMatch(/step poll no longer read/);
     const update = drift.actions[0] as {
       type: string;
       input: Record<string, unknown>;

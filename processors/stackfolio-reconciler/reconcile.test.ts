@@ -12,7 +12,7 @@ import {
 } from "./reconcile.js";
 import {
   connectionOf,
-  liveScanSpec,
+  liveEtherscanSpec,
   type Connections,
 } from "./specs.js";
 
@@ -28,7 +28,7 @@ const wallet = (
     chainId: 1,
     ignored: false,
     ledger: [],
-    backfill: null,
+    backfill: { state: "DONE", startBlock: 0, nextBlock: 0 },
     cursor: null,
     nativeBalance: null,
     label: null,
@@ -83,6 +83,10 @@ class FakeIO {
         this.dispatched.push({ id, actions });
         return Promise.resolve();
       },
+      dispatchWallet: (id, actions) => {
+        this.dispatched.push({ id, actions });
+        return Promise.resolve();
+      },
     };
   }
 
@@ -91,7 +95,7 @@ class FakeIO {
     walletId: string,
     over: Partial<WorkflowFacts> = {},
   ): { name: string; facts: WorkflowFacts } {
-    const spec = liveScanSpec(walletId);
+    const spec = liveEtherscanSpec(walletId);
     return {
       name: spec.key,
       facts: {
@@ -100,7 +104,7 @@ class FakeIO {
         version: 3,
         name: spec.displayName,
         triggerKind: "interval",
-        triggerConfig: { seconds: 300, label: spec.key },
+        triggerConfig: { seconds: 120, label: spec.key },
         steps: spec.steps.map((s, i) => ({
           id: `s${i}`,
           name: s.name,
@@ -127,7 +131,7 @@ describe("reconcilePortfolio", () => {
     await reconcilePortfolio(doc, emptyRecorded(), fake.io());
 
     expect(fake.created).toHaveLength(1);
-    expect(fake.created[0].key).toBe("live-scan-w1");
+    expect(fake.created[0].key).toBe("live-etherscan-w1");
     const types = fake.created[0].actions.map(
       (a) => (a as { type: string }).type,
     );
@@ -162,7 +166,7 @@ describe("reconcilePortfolio", () => {
       input: { connectionId: string; workflowIds: string[] };
     };
     expect(resources.input.connectionId).toBe("eth-1");
-    expect(resources.input.workflowIds).toEqual(["wf-live-scan-w1"]);
+    expect(resources.input.workflowIds).toEqual(["wf-live-etherscan-w1"]);
 
     const check = fake.dispatched
       .flatMap((d) => d.actions)
@@ -299,7 +303,7 @@ describe("reconcilePortfolio", () => {
       .find((a) => (a as { type: string }).type === "RECORD_RESOURCES") as {
       input: { workflowIds: string[] };
     };
-    expect(resources.input.workflowIds).toEqual(["wf-live-scan-w1"]);
+    expect(resources.input.workflowIds).toEqual(["wf-live-etherscan-w1"]);
   });
 
   it("waits, not crashes, without a Powerhouse connection", async () => {
@@ -322,6 +326,57 @@ describe("reconcilePortfolio", () => {
     const codes = check.input.issues.map((i) => i.code);
     expect(codes).toContain("REACTOR_CONNECTION");
     expect(codes).toContain("WORKFLOW_WAITING");
+  });
+
+  it("reimports from genesis a wallet whose node-walk finished short", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [
+      wallet("w1", {
+        backfill: { state: "DONE", startBlock: 26383540, nextBlock: 26394149 },
+      }),
+    ];
+    fake.connectionStatus["eth-1"] = "OK";
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: [] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+
+    const reset = fake.dispatched
+      .flatMap((d) => d.actions)
+      .find((a) => (a as { type: string }).type === "SET_BACKFILL_STATE") as {
+      input: Record<string, unknown>;
+    };
+    expect(reset.input).toEqual({
+      state: "NATIVE",
+      startBlock: 0,
+      nextBlock: 0,
+    });
+    // and the history workflow is wanted again, in the same pass
+    expect(fake.created.map((c) => c.key)).toContain("etherscan-backfill-w1");
+  });
+
+  it("leaves a wallet that already walks from genesis alone", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [
+      wallet("w1", {
+        backfill: { state: "NATIVE", startBlock: 0, nextBlock: 5000 },
+      }),
+    ];
+    fake.connectionStatus["eth-1"] = "OK";
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: [] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+
+    const resets = fake.dispatched
+      .flatMap((d) => d.actions)
+      .filter((a) => (a as { type: string }).type === "SET_BACKFILL_STATE");
+    expect(resets).toEqual([]);
+    expect(fake.created.map((c) => c.key)).toContain("etherscan-backfill-w1");
   });
 });
 

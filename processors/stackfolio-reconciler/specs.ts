@@ -113,69 +113,42 @@ export function connectionOf(step: StepSpec, connections: Connections) {
 const firedAt = "{{trigger.payload.firedAt}}";
 
 /**
- * One wallet's live chain: token transfers, the newest native blocks, the
- * head balance, then everything filed onto the account. Two import steps
- * because the engine passes one whole value per reference; the ledger
- * dedupes either way.
+ * One wallet's live chain, polled from the Etherscan V2 API: everything
+ * since the scan cursor plus the head balance, filed onto the account in
+ * one import step. The poller never answers a lower block than the
+ * cursor, so quiet minutes no-op instead of tripping the regression
+ * guard.
  */
-export function liveScanSpec(walletDocumentId: string): WorkflowSpec {
+export function liveEtherscanSpec(walletDocumentId: string): WorkflowSpec {
   return {
-    key: `live-scan-${walletDocumentId}`,
-    displayName: `Live scan ${walletDocumentId.slice(0, 8)}`,
-    trigger: { kind: "interval", seconds: 300 },
+    key: `live-etherscan-${walletDocumentId}`,
+    displayName: `Live Etherscan ${walletDocumentId.slice(0, 8)}`,
+    trigger: { kind: "interval", seconds: 120 },
     steps: [
       {
-        name: "scan-logs",
+        name: "poll",
         piece: "ethereum",
-        action: "scan-account-logs",
-        config: { accountDocumentId: walletDocumentId },
-      },
-      {
-        name: "scan-native",
-        piece: "ethereum",
-        action: "scan-native-transactions",
+        action: "fetch-etherscan-recent",
         timeoutSeconds: 120,
-        config: {
-          accountDocumentId: walletDocumentId,
-          maxBlocks: 2000,
-          direction: "HEAD",
-        },
-      },
-      {
-        name: "fetch-state",
-        piece: "ethereum",
-        action: "fetch-account-state",
         config: { accountDocumentId: walletDocumentId },
       },
       {
-        name: "import-logs",
+        name: "import",
         piece: "ethereum",
         action: "import-events-to-wallet-account",
         config: {
           walletDocumentId,
           batchId: firedAt,
           importedAt: firedAt,
-          eventsJson: "{{steps.scan-logs.output.rows}}",
+          eventsJson: "{{steps.poll.output.rows}}",
           scanProgressJson: {
-            lastLogsBlock: "{{steps.scan-logs.output.lastBlock}}",
+            lastNativeScanBlock: "{{steps.poll.output.lastBlock}}",
             ranAt: firedAt,
           },
-        },
-      },
-      {
-        name: "import-native",
-        piece: "ethereum",
-        action: "import-events-to-wallet-account",
-        config: {
-          walletDocumentId,
-          batchId: firedAt,
-          importedAt: firedAt,
-          eventsJson: "{{steps.scan-native.output.rows}}",
-          scanProgressJson: {
-            lastNativeScanBlock: "{{steps.scan-native.output.nextBlock}}",
-            ranAt: firedAt,
+          nativeStateJson: {
+            balance: "{{steps.poll.output.balanceWei}}",
+            blockNumber: "{{steps.poll.output.lastBlock}}",
           },
-          nativeStateJson: "{{steps.fetch-state.output}}",
         },
       },
     ],
@@ -183,25 +156,24 @@ export function liveScanSpec(walletDocumentId: string): WorkflowSpec {
 }
 
 /**
- * One wallet's history walk: a bounded chunk of native blocks per run, from
- * the document's backfill cursor. The reconciler retires it at DONE.
+ * One wallet's history from the Etherscan V2 API: one confirmed window
+ * per run (100k blocks), from the document's backfill cursor - which is
+ * 0 for a genesis walk. The import advances the cursor and retires the
+ * walk at DONE. Plan-gated categories skip with a note; nothing else
+ * stops a window from importing.
  */
-export function nativeBackfillSpec(walletDocumentId: string): WorkflowSpec {
+export function etherscanBackfillSpec(walletDocumentId: string): WorkflowSpec {
   return {
-    key: `native-backfill-${walletDocumentId}`,
-    displayName: `Native backfill ${walletDocumentId.slice(0, 8)}`,
+    key: `etherscan-backfill-${walletDocumentId}`,
+    displayName: `Etherscan backfill ${walletDocumentId.slice(0, 8)}`,
     trigger: { kind: "interval", seconds: 60 },
     steps: [
       {
         name: "walk",
         piece: "ethereum",
-        action: "scan-native-transactions",
-        timeoutSeconds: 120,
-        config: {
-          accountDocumentId: walletDocumentId,
-          maxBlocks: 2000,
-          direction: "BACKFILL",
-        },
+        action: "fetch-etherscan-history",
+        timeoutSeconds: 300,
+        config: { accountDocumentId: walletDocumentId },
       },
       {
         name: "import",
@@ -214,11 +186,6 @@ export function nativeBackfillSpec(walletDocumentId: string): WorkflowSpec {
           eventsJson: "{{steps.walk.output.rows}}",
           backfillDone: "{{steps.walk.output.done}}",
           backfillNextBlock: "{{steps.walk.output.nextBlock}}",
-          // No scanProgressJson here: the live scanner owns
-          // lastNativeScanBlock and already sits at the head - writing the
-          // walk's lagging cursor from here would trip the regression guard
-          // and fail the whole import. Backfill progress lives in
-          // backfill.nextBlock alone.
         },
       },
     ],

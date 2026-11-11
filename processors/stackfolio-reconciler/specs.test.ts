@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildWorkflow,
-  liveScanSpec,
-  nativeBackfillSpec,
+  etherscanBackfillSpec,
+  liveEtherscanSpec,
   pricesSpec,
   stakingSpec,
   withPublish,
@@ -29,24 +29,37 @@ const newIds = (prefix: string) => {
 const types = (actions: { type: string }[]) => actions.map((a) => a.type);
 
 describe("specs", () => {
-  it("live scan walks logs, native, state and imports twice", () => {
-    const spec = liveScanSpec("w1");
-    expect(spec.trigger).toEqual({ kind: "interval", seconds: 300 });
+  it("live Etherscan polls since the cursor and imports rows, progress and balance", () => {
+    const spec = liveEtherscanSpec("w1");
+    expect(spec.trigger).toEqual({ kind: "interval", seconds: 120 });
     expect(spec.steps.map((s) => s.action)).toEqual([
-      "scan-account-logs",
-      "scan-native-transactions",
-      "fetch-account-state",
-      "import-events-to-wallet-account",
+      "fetch-etherscan-recent",
       "import-events-to-wallet-account",
     ]);
+    const importStep = spec.steps[1].config;
+    expect(importStep).toMatchObject({
+      scanProgressJson: {
+        lastNativeScanBlock: "{{steps.poll.output.lastBlock}}",
+        ranAt: "{{trigger.payload.firedAt}}",
+      },
+      nativeStateJson: {
+        balance: "{{steps.poll.output.balanceWei}}",
+        blockNumber: "{{steps.poll.output.lastBlock}}",
+      },
+    });
   });
 
-  it("backfill walks one bounded chunk per run", () => {
-    const spec = nativeBackfillSpec("w1");
+  it("Etherscan backfill walks windows from the document cursor", () => {
+    const spec = etherscanBackfillSpec("w1");
     expect(spec.steps.map((s) => s.action)).toEqual([
-      "scan-native-transactions",
+      "fetch-etherscan-history",
       "import-events-to-wallet-account",
     ]);
+    expect(spec.steps[0].config).toEqual({ accountDocumentId: "w1" });
+    expect(spec.steps[1].config).toMatchObject({
+      backfillDone: "{{steps.walk.output.done}}",
+      backfillNextBlock: "{{steps.walk.output.nextBlock}}",
+    });
   });
 
   it("prices list held assets via holdings and the reactor registry", () => {
@@ -74,18 +87,12 @@ describe("specs", () => {
   });
 
   it("builds a new workflow in runtime order", () => {
-    const actions = buildWorkflow(liveScanSpec("w1"), newIds("i"), "2026-11-11T00:00:00.000Z", connections);
+    const actions = buildWorkflow(liveEtherscanSpec("w1"), newIds("i"), "2026-11-11T00:00:00.000Z", connections);
     expect(types(actions)).toEqual([
       "SET_WORKFLOW_NAME",
       "SET_TRIGGER",
       "ADD_STEP",
       "ADD_STEP",
-      "ADD_STEP",
-      "ADD_STEP",
-      "ADD_STEP",
-      "ADD_EDGE",
-      "ADD_EDGE",
-      "ADD_EDGE",
       "ADD_EDGE",
       "ADD_EDGE",
       "SET_POLICY",
@@ -101,9 +108,9 @@ describe("specs", () => {
     expect(trigger.input).toMatchObject({
       pieceName: "@powerhousedao/ethereum-piece",
       triggerName: "on-interval",
-      config: { seconds: 300, label: "live-scan-w1" },
+      config: { seconds: 120, label: "live-etherscan-w1" },
     });
-    const publish = actions[13] as { input: Record<string, unknown> };
+    const publish = actions[7] as { input: Record<string, unknown> };
     expect(publish.input).toEqual({ publishedAt: "2026-11-11T00:00:00.000Z" });
   });
 
@@ -134,7 +141,7 @@ describe("specs", () => {
 
   it("withPublish adds policy and a stamped publish, keeping status last", () => {
     const actions = buildWorkflow(
-      nativeBackfillSpec("w1"),
+      etherscanBackfillSpec("w1"),
       newIds("x"),
       "2026-11-11T00:00:00.000Z",
       connections,

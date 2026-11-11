@@ -1,6 +1,8 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { ethereumAuth, etherscanConfig } from "../auth.js";
 import { authProps } from "../client.js";
+import { globalState } from "../reactor.js";
+import { WALLET_ACCOUNT_TYPE } from "./import-events-to-wallet-account.js";
 import {
   createEtherscanClient,
   etherscanHeadBlock,
@@ -96,20 +98,23 @@ export async function fetchEtherscanHistory(
 
 export const ethereumFetchEtherscanHistoryAction = createAction({
   auth: ethereumAuth,
+  requireReactor: "read",
   name: "fetch-etherscan-history",
   displayName: "Fetch Etherscan History",
   description:
     "Import one confirmed window of an address's complete history from the Etherscan V2 API (native, internal, tokens, approvals) as ledger rows, answering the cursor for the next window. Rows are keyed by transaction hash, so re-imports are no-ops.",
   props: {
-    address: Property.ShortText({
-      displayName: "Address",
-      description: "The 0x address to import.",
+    accountDocumentId: Property.ShortText({
+      displayName: "Wallet account document",
+      description:
+        "The stackfolio/wallet-account document whose address and backfill cursor drive the import.",
       required: true,
     }),
     startBlock: Property.Number({
-      displayName: "Window start block",
-      description: "First block of this window (the backfill cursor).",
-      required: true,
+      displayName: "Window start block (override)",
+      description:
+        "Leave empty to import from the document's backfill.nextBlock (the normal wiring). Set only to force a specific window.",
+      required: false,
     }),
     confirmations: Property.Number({
       displayName: "Confirmations",
@@ -137,9 +142,29 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
       baseUrl: auth.baseUrl,
     });
     const props = context.propsValue;
+    const documentId = props.accountDocumentId.trim();
+    const document = await context.reactor.get(documentId);
+    if (document.header.documentType !== WALLET_ACCOUNT_TYPE) {
+      throw new Error(
+        `Document ${documentId} is a ${document.header.documentType}, not a ${WALLET_ACCOUNT_TYPE}.`,
+      );
+    }
+    const global = globalState<{
+      address: string;
+      backfill: { nextBlock: number | null } | null;
+    }>(document);
+    const address = global.address ?? "";
+    if (address === "") {
+      throw new Error(
+        `Document ${documentId} has no address yet - set the account details before importing.`,
+      );
+    }
+    const cursor = global.backfill?.nextBlock;
+    const startBlock =
+      props.startBlock ?? (cursor === null || cursor === undefined ? 0 : cursor);
     const out = await fetchEtherscanHistory(client, {
-      address: props.address,
-      startBlock: props.startBlock,
+      address,
+      startBlock,
       confirmations: props.confirmations ?? 9,
       windowBlocks: props.windowBlocks ?? 100_000,
       pageSize: props.pageSize ?? 10_000,

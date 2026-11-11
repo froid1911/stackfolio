@@ -1,4 +1,5 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
+import { parseJsonish } from "../jsonish.js";
 import { globalState, toGlobalAction } from "../reactor.js";
 
 export const ETH_STAKING_TYPE = "stackfolio/eth-staking";
@@ -35,13 +36,8 @@ function epochSeconds(iso: string | null | undefined): number | null {
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
 }
 
-function parseArray(json: string, prop: string): unknown[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    throw new Error(`${prop} must be a JSON array.`);
-  }
+function parseArray(value: unknown, prop: string): unknown[] {
+  const parsed = parseJsonish(value, prop);
   if (!Array.isArray(parsed)) {
     throw new Error(`${prop} must be a JSON array.`);
   }
@@ -66,17 +62,17 @@ export const ethereumImportStakingToDocAction = createAction({
       displayName: "Staking document id",
       required: true,
     }),
-    validatorsJson: Property.LongText({
+    validatorsJson: Property.Json({
       displayName: "Validators (JSON)",
       description: "{{steps.validators.output.validators}}",
       required: true,
     }),
-    balancesJson: Property.LongText({
+    balancesJson: Property.Json({
       displayName: "Balance points (JSON)",
       description: "{{steps.validators.output.balances}}",
       required: true,
     }),
-    withdrawalsJson: Property.LongText({
+    withdrawalsJson: Property.Json({
       displayName: "Withdrawals (JSON)",
       description:
         'Optional rows [{"withdrawalRef":…,"validatorIndex":…,"timestamp":"…","amountGwei":"…","blockNumber":…}]',

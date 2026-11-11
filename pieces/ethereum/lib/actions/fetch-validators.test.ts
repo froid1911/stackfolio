@@ -171,6 +171,48 @@ describe("fetch-validators", () => {
     expect(result.error).toContain("40");
   });
 
+  it("resolves validators by withdrawal address via the list endpoint", async () => {
+    fetchMock.mockImplementation(
+      (url: string, init?: { method?: string; body?: string }) => {
+      if (url.endsWith("/eth/v1/beacon/genesis")) {
+        return json({ data: { genesis_time: String(GENESIS_TIME) } });
+      }
+      if (url.endsWith("/validators") && init?.method === "POST") {
+        expect(JSON.parse(init.body ?? "[]")).toEqual({
+          addresses: [`0x${CRED_01.slice(-40)}`],
+        });
+        return json({ data: [activeValidator] });
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    const result = (await ethereumFetchValidatorsAction.run({
+      propsValue: {
+        indicesJson: null,
+        withdrawalAddressesJson: [`0x${CRED_01.slice(-40)}`],
+        hour: "2026-11-11T10:00:00.000Z",
+      },
+      auth: {
+        props: {
+          rpcUrl: "http://127.0.0.1:8545",
+          beaconUrl: "http://127.0.0.1:5052",
+        },
+      },
+    } as unknown as Parameters<
+      typeof ethereumFetchValidatorsAction.run
+    >[0])) as {
+      validators: Array<{ index: number }>;
+      balances: Array<Record<string, unknown>>;
+      error: string | null;
+    };
+
+    expect(result.error).toBeNull();
+    expect(result.validators[0]?.index).toBe(7);
+    expect(result.balances).toEqual([
+      { validatorIndex: 7, day: "2026-11-11", balanceGwei: 32512000000 },
+    ]);
+  });
+
   it("rejects malformed index lists", async () => {
     await expect(
       ethereumFetchValidatorsAction.run({

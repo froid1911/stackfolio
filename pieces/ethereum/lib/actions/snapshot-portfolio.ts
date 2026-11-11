@@ -1,5 +1,6 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { formatScaled, parseScaled } from "../decimal.js";
+import { parseJsonish } from "../jsonish.js";
 import { toGlobalAction } from "../reactor.js";
 
 const VALUE_SCALE = 8;
@@ -40,7 +41,7 @@ export const ethereumSnapshotPortfolioAction = createAction({
       displayName: "Portfolio document id",
       required: true,
     }),
-    holdingsJson: Property.LongText({
+    holdingsJson: Property.Json({
       displayName: "Holdings output (JSON)",
       description: "The full JSON object of the holdings step.",
       required: true,
@@ -56,12 +57,10 @@ export const ethereumSnapshotPortfolioAction = createAction({
   },
   async run(context) {
     const p = context.propsValue;
-    let holdings: HoldingsOutput;
-    try {
-      holdings = JSON.parse(p.holdingsJson) as HoldingsOutput;
-    } catch {
-      throw new Error("holdingsJson must be the holdings step's JSON output.");
-    }
+    const holdings = parseJsonish(
+      p.holdingsJson,
+      "holdingsJson",
+    ) as HoldingsOutput;
     const rows = (holdings.holdings ?? []).filter(
       (row) => typeof row.asset === "string",
     );

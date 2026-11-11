@@ -1,5 +1,6 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { formatScaled, parseScaled, scaledProduct } from "../decimal.js";
+import { parseJsonish } from "../jsonish.js";
 import { globalState } from "../reactor.js";
 
 const VALUE_SCALE = 8;
@@ -67,7 +68,7 @@ export const ethereumHoldingsFromLedgerAction = createAction({
       displayName: "Portfolio document id",
       required: true,
     }),
-    walletDocumentIdsJson: Property.LongText({
+    walletDocumentIdsJson: Property.Json({
       displayName: "Wallet document ids (JSON array)",
       required: true,
     }),
@@ -87,12 +88,7 @@ export const ethereumHoldingsFromLedgerAction = createAction({
   },
   async run(context) {
     const p = context.propsValue;
-    let walletIds: unknown;
-    try {
-      walletIds = JSON.parse(p.walletDocumentIdsJson);
-    } catch {
-      throw new Error("walletDocumentIdsJson must be a JSON array.");
-    }
+    const walletIds = parseJsonish(p.walletDocumentIdsJson, "walletDocumentIdsJson");
     if (!Array.isArray(walletIds)) {
       throw new Error("walletDocumentIdsJson must be a JSON array.");
     }

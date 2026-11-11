@@ -5,13 +5,10 @@ import type { EventRow } from "../types.js";
 
 export const WALLET_ACCOUNT_TYPE = "stackfolio/wallet-account";
 
-function parseArray(json: string, prop: string): unknown[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    throw new Error(`${prop} must be a JSON array.`);
-  }
+import { parseJsonish } from "../jsonish.js";
+
+function parseArray(value: unknown, prop: string): unknown[] {
+  const parsed = parseJsonish(value, prop);
   if (!Array.isArray(parsed)) {
     throw new Error(`${prop} must be a JSON array.`);
   }
@@ -47,7 +44,7 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
       displayName: "Wallet account document id",
       required: true,
     }),
-    eventsJson: Property.LongText({
+    eventsJson: Property.Json({
       displayName: "Event rows (JSON)",
       description:
         "The JSON array of decoded event rows from the scan step ({{steps.scan.output.rows}}).",
@@ -62,13 +59,13 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
       displayName: "Imported at (ISO timestamp)",
       required: true,
     }),
-    scanProgressJson: Property.LongText({
+    scanProgressJson: Property.Json({
       displayName: "Scan progress (JSON)",
       description:
         'Optional cursor payload, e.g. {"lastLogsBlock":21000,"ranAt":"…"}. Dispatched as RECORD_SCAN_PROGRESS.',
       required: false,
     }),
-    nativeStateJson: Property.LongText({
+    nativeStateJson: Property.Json({
       displayName: "Native balance (JSON)",
       description:
         'Optional head-state payload {"balance":"<wei>","blockNumber":21000}. Dispatched as SET_NATIVE_BALANCE.',
@@ -116,7 +113,7 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
       );
     }
     if (p.scanProgressJson) {
-      const progress = JSON.parse(p.scanProgressJson) as {
+      const progress = parseJsonish(p.scanProgressJson, "scanProgressJson") as {
         lastLogsBlock?: number;
         lastNativeScanBlock?: number;
         lastEventTimestamp?: string;
@@ -132,7 +129,7 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
       );
     }
     if (p.nativeStateJson) {
-      const native = JSON.parse(p.nativeStateJson) as {
+      const native = parseJsonish(p.nativeStateJson, "nativeStateJson") as {
         balance: string;
         blockNumber: number;
       };

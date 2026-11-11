@@ -1,4 +1,5 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
+import { parseJsonish } from "../jsonish.js";
 import { globalState, toGlobalAction } from "../reactor.js";
 
 export const ASSET_REGISTRY_TYPE = "stackfolio/asset-registry";
@@ -52,7 +53,7 @@ export const ethereumImportTokensToRegistryAction = createAction({
       displayName: "Asset registry document id",
       required: true,
     }),
-    tokensJson: Property.LongText({
+    tokensJson: Property.Json({
       displayName: "Token metadata (JSON)",
       description:
         "The JSON array from the metadata step ({{steps.metadata.output.tokens}}).",
@@ -65,12 +66,7 @@ export const ethereumImportTokensToRegistryAction = createAction({
   },
   async run(context) {
     const p = context.propsValue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(p.tokensJson);
-    } catch {
-      throw new Error("tokensJson must be a JSON array.");
-    }
+    const parsed = parseJsonish(p.tokensJson, "tokensJson");
     if (!Array.isArray(parsed)) {
       throw new Error("tokensJson must be a JSON array.");
     }

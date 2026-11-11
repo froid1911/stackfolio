@@ -1,4 +1,5 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
+import { parseJsonish } from "../jsonish.js";
 import { globalState, toGlobalAction } from "../reactor.js";
 
 export const PRICE_BOOK_TYPE = "stackfolio/price-book";
@@ -34,7 +35,7 @@ export const ethereumImportPricesToBookAction = createAction({
       displayName: "Price book document id",
       required: true,
     }),
-    pricesJson: Property.LongText({
+    pricesJson: Property.Json({
       displayName: "Price rows (JSON)",
       description: "{{steps.prices.output.prices}}",
       required: true,
@@ -51,12 +52,7 @@ export const ethereumImportPricesToBookAction = createAction({
   },
   async run(context) {
     const p = context.propsValue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(p.pricesJson);
-    } catch {
-      throw new Error("pricesJson must be a JSON array.");
-    }
+    const parsed = parseJsonish(p.pricesJson, "pricesJson");
     if (!Array.isArray(parsed)) {
       throw new Error("pricesJson must be a JSON array.");
     }

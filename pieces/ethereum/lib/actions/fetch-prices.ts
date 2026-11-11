@@ -1,4 +1,5 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
+import { parseJsonish } from "../jsonish.js";
 
 const ETH_IDENTIFIER = "eip155:1/slip44:60";
 
@@ -34,7 +35,7 @@ export const ethereumFetchPricesAction = createAction({
         "Bucket the prices are recorded at, e.g. 2026-11-11T10:00:00.000Z. Passed through to the price book.",
       required: true,
     }),
-    registryJson: Property.LongText({
+    registryJson: Property.Json({
       displayName: "Asset registry state (JSON)",
       description:
         "The asset-registry document's global state ({{steps.registry.output.state.global}}); its coingeckoId fields map identifiers to CoinGecko ids.",
@@ -70,9 +71,10 @@ export const ethereumFetchPricesAction = createAction({
     const registry = new Map<string, string>();
     if (props.registryJson) {
       try {
-        const parsed = JSON.parse(props.registryJson) as {
-          assets?: RegistryAsset[];
-        };
+        const parsed = parseJsonish(
+          props.registryJson,
+          "registryJson",
+        ) as { assets?: RegistryAsset[] };
         for (const asset of parsed.assets ?? []) {
           if (
             typeof asset.identifier === "string" &&

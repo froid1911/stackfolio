@@ -1,0 +1,145 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  buildWorkflow,
+  liveScanSpec,
+  nativeBackfillSpec,
+  pricesSpec,
+  stakingSpec,
+  withPublish,
+  type WorkflowSpec,
+} from "./specs.js";
+
+const resources = {
+  portfolioDocumentId: "p1",
+  registryDocumentId: "r1",
+  priceBookDocumentId: "b1",
+  stakingDocumentId: "s1",
+  walletDocumentIds: ["w1", "w2"],
+};
+
+const newIds = (prefix: string) => {
+  let n = 0;
+  return () => `${prefix}${++n}`;
+};
+
+const types = (actions: { type: string }[]) => actions.map((a) => a.type);
+
+describe("specs", () => {
+  it("live scan walks logs, native, state and imports twice", () => {
+    const spec = liveScanSpec("w1");
+    expect(spec.trigger).toEqual({ kind: "interval", seconds: 300 });
+    expect(spec.steps.map((s) => s.action)).toEqual([
+      "scan-account-logs",
+      "scan-native-transactions",
+      "fetch-account-state",
+      "import-events-to-wallet-account",
+      "import-events-to-wallet-account",
+    ]);
+  });
+
+  it("backfill walks one bounded chunk per run", () => {
+    const spec = nativeBackfillSpec("w1");
+    expect(spec.steps.map((s) => s.action)).toEqual([
+      "scan-native-transactions",
+      "import-events-to-wallet-account",
+    ]);
+  });
+
+  it("prices list held assets via holdings and the reactor registry", () => {
+    const spec = pricesSpec(resources);
+    expect(spec.steps.map((s) => [s.name, s.action])).toEqual([
+      ["holdings", "holdings-from-ledger"],
+      ["registry", "document-get"],
+      ["prices", "fetch-prices"],
+      ["import", "import-prices-to-book"],
+    ]);
+    expect(spec.trigger).toEqual({ kind: "interval", seconds: 3600 });
+  });
+
+  it("staking appends the snapshot pair only when enabled", () => {
+    const on = stakingSpec({ ...resources, autoSnapshotEnabled: true });
+    const off = stakingSpec({ ...resources, autoSnapshotEnabled: false });
+    expect(on.steps.map((s) => s.name)).toEqual([
+      "validators",
+      "import",
+      "holdings",
+      "snapshot",
+    ]);
+    expect(off.steps.map((s) => s.name)).toEqual(["validators", "import"]);
+    expect(on.trigger).toEqual({ kind: "interval", seconds: 86_400 });
+  });
+
+  it("builds a new workflow in runtime order", () => {
+    const actions = buildWorkflow(liveScanSpec("w1"), newIds("i"), "2026-11-11T00:00:00.000Z");
+    expect(types(actions)).toEqual([
+      "SET_WORKFLOW_NAME",
+      "SET_TRIGGER",
+      "ADD_STEP",
+      "ADD_STEP",
+      "ADD_STEP",
+      "ADD_STEP",
+      "ADD_STEP",
+      "ADD_EDGE",
+      "ADD_EDGE",
+      "ADD_EDGE",
+      "ADD_EDGE",
+      "ADD_EDGE",
+      "SET_POLICY",
+      "PUBLISH_WORKFLOW",
+      "SET_WORKFLOW_STATUS",
+    ]);
+    const trigger = actions[1] as { input: Record<string, unknown> };
+    expect(trigger.input).toMatchObject({
+      pieceName: "@powerhousedao/ethereum-piece",
+      triggerName: "on-interval",
+      config: { seconds: 300, label: "live-scan-w1" },
+    });
+    const publish = actions[13] as { input: Record<string, unknown> };
+    expect(publish.input).toEqual({ publishedAt: "2026-11-11T00:00:00.000Z" });
+  });
+
+  it("chains manual workflows without a trigger", () => {
+    const spec: WorkflowSpec = {
+      key: "manual-one",
+      displayName: "Manual one",
+      trigger: { kind: "manual" },
+      steps: [
+        { name: "a", piece: "ethereum", action: "fetch-account-state", config: {} },
+        { name: "b", piece: "ethereum", action: "fetch-account-state", config: {} },
+      ],
+    };
+    const actions = buildWorkflow(spec, newIds("m"), "2026-11-11T00:00:00.000Z");
+    expect(types(actions)).toEqual([
+      "SET_WORKFLOW_NAME",
+      "ADD_STEP",
+      "ADD_STEP",
+      "ADD_EDGE",
+      "SET_POLICY",
+      "PUBLISH_WORKFLOW",
+      "SET_WORKFLOW_STATUS",
+    ]);
+    const edge = actions[3] as { input: Record<string, unknown> };
+    // b hangs off a, not off a phantom trigger id.
+    expect(edge.input).toMatchObject({ from: "m1", to: "m2" });
+  });
+
+  it("withPublish adds policy and a stamped publish, keeping status last", () => {
+    const actions = buildWorkflow(
+      nativeBackfillSpec("w1"),
+      newIds("x"),
+      "2026-11-11T00:00:00.000Z",
+    );
+    // buildWorkflow already publishes: idempotent.
+    expect(withPublish(actions, "2026-11-12T00:00:00.000Z")).toBe(actions);
+
+    const unpublished = actions.filter((a) => a.type !== "PUBLISH_WORKFLOW");
+    const repaired = withPublish(unpublished, "2026-11-12T00:00:00.000Z");
+    const publishAt = types(repaired).indexOf("PUBLISH_WORKFLOW");
+    const statusAt = types(repaired).indexOf("SET_WORKFLOW_STATUS");
+    expect(publishAt).toBeGreaterThan(-1);
+    expect(statusAt).toBe(publishAt + 1); // policy, publish, then status
+    const publish = repaired[publishAt] as { input: Record<string, unknown> };
+    expect(publish.input).toEqual({ publishedAt: "2026-11-12T00:00:00.000Z" });
+  });
+});

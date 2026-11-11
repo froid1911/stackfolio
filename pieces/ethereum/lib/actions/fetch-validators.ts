@@ -1,6 +1,7 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
-import { beaconGet } from "../beacon.js";
+import { beaconGet, beaconPost } from "../beacon.js";
 import { ethereumAuth } from "../auth.js";
+import { parseJsonish } from "../jsonish.js";
 
 const FAR_FUTURE = 1n << 63n;
 const SECONDS_PER_EPOCH = 32n * 12n;
@@ -15,6 +16,15 @@ interface BeaconValidatorData {
     withdrawable_epoch?: unknown;
     activation_timestamp?: unknown;
   };
+}
+
+interface ValidatorRow {
+  index: number;
+  publicKey: string;
+  withdrawalAddress: string | null;
+  activationTimestamp: string | null;
+  withdrawableTimestamp: string | null;
+  exitedTimestamp: string | null;
 }
 
 /** Withdrawal credentials only encode an address for ETH1 (0x01) and
@@ -62,12 +72,18 @@ export const ethereumFetchValidatorsAction = createAction({
   name: "fetch-validators",
   displayName: "Fetch Validators",
   description:
-    "Read validator keys, withdrawal addresses and the current head balance for a list of validator indices from a beacon-chain node. Unreachable beacon? The run reports the error instead of throwing, so schedulers keep their cadence.",
+    "Read validator keys, withdrawal addresses and the current head balance for validator indices - and for every validator whose withdrawal address belongs to the portfolio (the beacon resolves address to index). Unreachable beacon? The run reports the error instead of throwing, so schedulers keep their cadence.",
   props: {
-    indicesJson: Property.LongText({
-      displayName: "Validator indices (JSON array)",
+    indicesJson: Property.Json({
+      displayName: "Validator indices (JSON)",
       description: 'A JSON array of validator indices, e.g. [7,9,11].',
-      required: true,
+      required: false,
+    }),
+    withdrawalAddressesJson: Property.Json({
+      displayName: "Withdrawal addresses (JSON)",
+      description:
+        'A JSON array of ETH1 withdrawal addresses; the beacon resolves each to its validator set ["0x9e5b…"].',
+      required: false,
     }),
     hour: Property.ShortText({
       displayName: "Run hour (ISO timestamp)",
@@ -77,43 +93,74 @@ export const ethereumFetchValidatorsAction = createAction({
     }),
   },
   async run(context) {
-    let indices: unknown;
-    try {
-      indices = JSON.parse(context.propsValue.indicesJson);
-    } catch {
-      throw new Error(
-        "indicesJson must be a JSON array of validator indices.",
-      );
-    }
-    if (!Array.isArray(indices)) {
-      throw new Error("indicesJson must be a JSON array.");
-    }
-    const hour = context.propsValue.hour;
+    const p = context.propsValue;
+    const parseOptArray = (value: unknown, prop: string): unknown[] => {
+      if (value === undefined || value === null) return [];
+      const parsed = parseJsonish(value, prop);
+      if (!Array.isArray(parsed)) {
+        throw new Error(`${prop} must be a JSON array.`);
+      }
+      return parsed;
+    };
+    const indices = parseOptArray(p.indicesJson, "indicesJson");
+    const addresses = parseOptArray(
+      p.withdrawalAddressesJson,
+      "withdrawalAddressesJson",
+    );
+    const hour = p.hour;
     if (!Number.isFinite(Date.parse(hour))) {
-      throw new Error("hour must be an ISO timestamp, e.g. 2026-11-11T10:00:00.000Z.");
+      throw new Error(
+        "hour must be an ISO timestamp, e.g. 2026-11-11T10:00:00.000Z.",
+      );
     }
     const day = hour.slice(0, 10);
 
     const baseUrl =
       context.auth.props.beaconUrl?.trim() || "http://127.0.0.1:5052";
 
-    const validators: Array<{
-      index: number;
-      publicKey: string;
-      withdrawalAddress: string | null;
-      activationTimestamp: string | null;
-      withdrawableTimestamp: string | null;
-      exitedTimestamp: string | null;
-    }> = [];
+    const validators: ValidatorRow[] = [];
     const balances: Array<{
       validatorIndex: number;
       day: string;
       balanceGwei: number;
     }> = [];
     const errors: string[] = [];
+    const seen = new Set<number>();
+
+    const pushRow = (data: BeaconValidatorData, fallbackIndex: number | null) => {
+      const index = Number(data.index ?? fallbackIndex);
+      if (!Number.isInteger(index) || index < 0 || seen.has(index)) return;
+      seen.add(index);
+      const validator = data.validator ?? {};
+      const withdrawable = epochTime(validator.withdrawable_epoch, genesisTime);
+      validators.push({
+        index,
+        publicKey:
+          typeof validator.pubkey === "string" ? validator.pubkey : "",
+        withdrawalAddress: withdrawalAddress(validator.withdrawal_credentials),
+        activationTimestamp:
+          validator.activation_timestamp === undefined ||
+          validator.activation_timestamp === null ||
+          validator.activation_timestamp === ""
+            ? null
+            : new Date(Number(validator.activation_timestamp) * 1000).toISOString(),
+        withdrawableTimestamp: withdrawable,
+        // A set exit epoch means the validator left; the closest honest
+        // timestamp we have is when its balance becomes withdrawable.
+        exitedTimestamp:
+          (toBigInt(validator.exit_epoch) ?? FAR_FUTURE) >= FAR_FUTURE
+            ? null
+            : withdrawable,
+      });
+      balances.push({
+        validatorIndex: index,
+        day,
+        balanceGwei: Number(data.balance ?? 0),
+      });
+    };
 
     let genesisTime: number | null = null;
-    if (indices.length > 0) {
+    if (indices.length > 0 || addresses.length > 0) {
       try {
         const genesis = await beaconGet<{ genesis_time?: string }>(
           "/eth/v1/beacon/genesis",
@@ -126,40 +173,34 @@ export const ethereumFetchValidatorsAction = createAction({
       }
     }
 
+    if (addresses.length > 0) {
+      try {
+        const list = await beaconPost<BeaconValidatorData[]>(
+          "/eth/v1/beacon/states/head/validators",
+          baseUrl,
+          {
+            addresses: addresses.filter(
+              (a): a is string => typeof a === "string",
+            ),
+          },
+        );
+        for (const entry of list) pushRow(entry, null);
+      } catch (error) {
+        errors.push(
+          `validators by address: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
     for (const entry of indices) {
       const index = typeof entry === "number" ? entry : Number(entry);
-      if (!Number.isInteger(index) || index < 0) continue;
+      if (!Number.isInteger(index) || index < 0 || seen.has(index)) continue;
       try {
         const data = await beaconGet<BeaconValidatorData>(
           `/eth/v1/beacon/states/head/validators/${index}`,
           baseUrl,
         );
-        const validator = data.validator ?? {};
-        const withdrawable = epochTime(validator.withdrawable_epoch, genesisTime);
-        validators.push({
-          index,
-          publicKey:
-            typeof validator.pubkey === "string" ? validator.pubkey : "",
-          withdrawalAddress: withdrawalAddress(validator.withdrawal_credentials),
-          activationTimestamp:
-            validator.activation_timestamp === undefined ||
-            validator.activation_timestamp === null ||
-            validator.activation_timestamp === ""
-              ? null
-              : new Date(Number(validator.activation_timestamp) * 1000).toISOString(),
-          withdrawableTimestamp: withdrawable,
-          // A set exit epoch means the validator left; the closest honest
-          // timestamp we have is when its balance becomes withdrawable.
-          exitedTimestamp:
-            (toBigInt(validator.exit_epoch) ?? FAR_FUTURE) >= FAR_FUTURE
-              ? null
-              : withdrawable,
-        });
-        balances.push({
-          validatorIndex: index,
-          day,
-          balanceGwei: Number(data.balance ?? 0),
-        });
+        pushRow(data, index);
       } catch (error) {
         errors.push(
           `validator ${index}: ${error instanceof Error ? error.message : String(error)}`,

@@ -11,6 +11,7 @@ import { actions as portfolioActions } from "document-models/portfolio";
 import { actions as walletActions } from "document-models/wallet-account";
 import { useEffect, useRef, useState } from "react";
 import { createPublicClient, http } from "viem";
+import { forwardEnsAddress } from "../lib/ens.js";
 import { planSetup } from "../lib/setup.js";
 
 const DEFAULT_RPC = "http://127.0.0.1:8545";
@@ -305,7 +306,7 @@ export function AddAccountForm({
     setError(null);
     try {
       const client = createPublicClient({ transport: http(rpc) });
-      const resolved = await client.getEnsAddress({ name: ens.trim() });
+      const resolved = await forwardEnsAddress(client, ens.trim());
       if (resolved) setAddress(resolved);
       else setError(`${ens.trim()} has no address on ${rpc}.`);
     } catch (cause) {

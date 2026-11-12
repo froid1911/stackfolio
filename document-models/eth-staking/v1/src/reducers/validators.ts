@@ -8,12 +8,22 @@ export const ethStakingValidatorsOperations: EthStakingValidatorsOperations = {
     );
     for (const validator of action.input.validators) {
       const known = byIndex.get(validator.index);
-      if (known !== undefined && known !== validator.publicKey) {
+      // A watched-but-unresolved row holds an empty placeholder key; the
+      // beacon's real key must be able to fill it. Two different non-empty
+      // keys for one index is the conflict worth refusing.
+      if (
+        known !== undefined &&
+        known !== "" &&
+        validator.publicKey !== "" &&
+        known !== validator.publicKey
+      ) {
         throw new ValidatorConflictError(
           `Validator index ${validator.index} is already registered with a different public key`,
         );
       }
-      byIndex.set(validator.index, validator.publicKey);
+      if (known === undefined || known === "") {
+        byIndex.set(validator.index, validator.publicKey);
+      }
     }
     for (const validator of action.input.validators) {
       const existing = state.validators.find(

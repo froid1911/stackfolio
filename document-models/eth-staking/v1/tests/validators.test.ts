@@ -189,6 +189,43 @@ describe("ValidatorsOperations", () => {
     expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
+  it("fills a watched placeholder key but refuses a real re-registration", () => {
+    let document = utils.createDocument();
+    document = reducer(
+      document,
+      upsertValidators({
+        validators: [
+          {
+            index: 42,
+            publicKey: "",
+            withdrawalAddress: null,
+            activationTimestamp: null,
+            withdrawableTimestamp: null,
+            exitedTimestamp: null,
+          },
+        ],
+      }),
+    );
+    // The beacon resolves the watched index; the empty key must accept it.
+    document = reducer(
+      document,
+      upsertValidators({
+        validators: [validator({ index: 42, publicKey: "0xbeef" })],
+      }),
+    );
+    expect(document.state.global.validators[0].publicKey).toBe("0xbeef");
+    // A second, different real key for the same index stays a conflict.
+    const rejected = reducer(
+      document,
+      upsertValidators({
+        validators: [validator({ index: 42, publicKey: "0xd00d" })],
+      }),
+    );
+    expect(
+      rejected.operations.global[rejected.operations.global.length - 1].error,
+    ).toBeDefined();
+  });
+
   it("removes the validator with its balances and withdrawals, keeping the rest", () => {
     let document = utils.createDocument();
     document = reducer(

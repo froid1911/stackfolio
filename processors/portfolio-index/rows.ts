@@ -146,10 +146,17 @@ export function portfolioRows(
     });
   }
   const labels: AddressLabelRow[] = [];
+  // One row per address: the table keys on (document, address), while the
+  // address list now keeps one entry per (address, chain) with the same
+  // label on each — first wins, the rest carry nothing new.
+  const labelled = new Set<string>();
   for (const entry of list(state.addresses)) {
     const addressEntry = asRecord(entry);
     const address = str(addressEntry?.address);
     if (!addressEntry || address === null) continue;
+    const key = address.toLowerCase();
+    if (labelled.has(key)) continue;
+    labelled.add(key);
     labels.push({
       document_id: documentId,
       address,

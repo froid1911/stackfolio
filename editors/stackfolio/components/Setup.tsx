@@ -16,6 +16,20 @@ import { planSetup } from "../lib/setup.js";
 const DEFAULT_RPC = "http://127.0.0.1:8545";
 const DEFAULT_BEACON = "http://127.0.0.1:5052";
 
+/** Chains an added address opens by default; every one gets its own
+ * wallet-account document (and thus ledger and workflows), but one add
+ * gesture covers the whole set. All answer through the Etherscan V2
+ * multisuite key. */
+export const EVM_CHAINS: { id: number; name: string }[] = [
+  { id: 1, name: "Ethereum" },
+  { id: 10, name: "OP Mainnet" },
+  { id: 56, name: "BNB Smart Chain" },
+  { id: 137, name: "Polygon" },
+  { id: 8453, name: "Base" },
+  { id: 42161, name: "Arbitrum" },
+  { id: 43114, name: "Avalanche" },
+];
+
 /**
  * The first-run wizard: adopt or create the drive's singletons, record who
  * the book runs for, point at an execution and beacon node, and add the
@@ -314,6 +328,27 @@ export function AddAccountForm({
   const [rpc, setRpc] = useState(DEFAULT_RPC);
   const [ensBusy, setEnsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Chains to open for this address, all off the ones it already has. */
+  const known = new Set(
+    (
+      (
+        document as
+          | { state?: { global?: { addresses?: { address: string; chainId: number }[] } } }
+          | undefined
+      )?.state?.global?.addresses ?? []
+    )
+      .filter((entry) => entry.address.toLowerCase() === address.trim().toLowerCase())
+      .map((entry) => entry.chainId),
+  );
+  const [chosen, setChosen] = useState<Set<number> | null>(null);
+  const active = chosen ?? new Set(EVM_CHAINS.map((c) => c.id).filter((id) => !known.has(id)));
+  const toggle = (id: number) =>
+    setChosen((prev) => {
+      const next = new Set(prev ?? active);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   /** One-shot local reverse lookup: ask the node, never a third party. */
   async function lookupEns() {
     if (!ens.trim()) return;
@@ -341,30 +376,40 @@ export function AddAccountForm({
   }
 
   async function add() {
-    if (!document || !address) return;
+    if (!document || !address || active.size === 0) return;
     const label = ens.trim() || null;
-    dispatch([
-      portfolioActions.addAddress({
-        id: generateId(),
-        address,
-        chainId: 1,
-        label: label ?? undefined,
-        ensName: label ?? undefined,
-        timestamp: new Date().toISOString(),
-      }),
-    ]);
-    const created = await addDocument(
-      drive.header.id,
-      label ?? `${address.slice(0, 6)}…${address.slice(-4)}`,
-      "stackfolio/wallet-account",
+    const chainName = (id: number) => EVM_CHAINS.find((c) => c.id === id)?.name ?? `${id}`;
+    const nameOf = (id: number) => {
+      const base = label ?? `${address.slice(0, 6)}…${address.slice(-4)}`;
+      return id === 1 ? base : `${base} (${chainName(id)})`;
+    };
+    const timestamp = new Date().toISOString();
+    dispatch(
+      [...active].map((chainId) =>
+        portfolioActions.addAddress({
+          id: generateId(),
+          address,
+          chainId,
+          label: label ?? undefined,
+          ensName: label ?? undefined,
+          timestamp,
+        }),
+      ),
     );
-    const details = walletActions.setAccountDetails({
-      address,
-      chainId: 1,
-      label: label ?? undefined,
-    });
-    // The wallet document arrives through the store; bind on first sight.
-    await bindWallet(created.id, details);
+    for (const chainId of [...active].sort((a, b) => a - b)) {
+      const created = await addDocument(
+        drive.header.id,
+        nameOf(chainId),
+        "stackfolio/wallet-account",
+      );
+      const details = walletActions.setAccountDetails({
+        address,
+        chainId,
+        label: label ?? undefined,
+      });
+      // The wallet document arrives through the store; bind on first sight.
+      await bindWallet(created.id, details);
+    }
     onDone();
   }
 
@@ -389,6 +434,25 @@ export function AddAccountForm({
         <h3>Address</h3>
         <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="0x…" />
       </label>
+      <div>
+        <h3>Chains (every one gets its own ledger)</h3>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {EVM_CHAINS.map((chain) => (
+            <label key={chain.id} className="flex items-center gap-1 text-sm">
+              {known.has(chain.id) ? (
+                <input type="checkbox" checked disabled title="already tracked here" />
+              ) : (
+                <input
+                  type="checkbox"
+                  checked={active.has(chain.id)}
+                  onChange={() => toggle(chain.id)}
+                />
+              )}
+              {chain.name}
+            </label>
+          ))}
+        </div>
+      </div>
       <label>
         <h3>RPC for the lookup</h3>
         <input value={rpc} onChange={(e) => setRpc(e.target.value)} />
@@ -397,9 +461,9 @@ export function AddAccountForm({
       <button
         type="button"
         onClick={() => void add()}
-        disabled={!document || !address || !address.startsWith("0x")}
+        disabled={!document || !address || !address.startsWith("0x") || active.size === 0}
       >
-        Add the account
+        {active.size > 1 ? `Add the account on ${active.size} chains` : "Add the account"}
       </button>
     </div>
   );

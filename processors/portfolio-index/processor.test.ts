@@ -200,6 +200,35 @@ describe("portfolio-index", () => {
     ]);
   });
 
+  it("keeps one label row when one address is tracked on several chains", async () => {
+    const { db, processor } = await harness();
+    let portfolio = portfolioReducer(
+      portfolioUtils.createDocument(),
+      portfolioActions.setPortfolioDetails({ name: "Frank" }),
+    );
+    for (const chainId of [1, 10, 8453]) {
+      portfolio = portfolioReducer(
+        portfolio,
+        portfolioActions.addAddress({
+          id: `ad-${chainId}`,
+          address: COUNTERPARTY,
+          chainId,
+          label: "Cold wallet",
+          timestamp: "2026-11-11T00:00:00.000Z",
+        }),
+      );
+    }
+    await processor.onOperations(replay(portfolio));
+
+    const rows = await db
+      .selectFrom("address_labels")
+      .selectAll()
+      .where("address", "=", COUNTERPARTY)
+      .execute();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].label).toBe("Cold wallet");
+  });
+
   it("drops every row when the document is deleted", async () => {
     const { db, processor } = await harness();
     const wallet = walletDocument();

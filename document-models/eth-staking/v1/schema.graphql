@@ -70,6 +70,10 @@ input ValidatorInput {
   exitedTimestamp: Int
 }
 
+input RemoveValidatorsInput {
+  indices: [Int!]!
+}
+
 # history
 
 input RecordBalancesInput {

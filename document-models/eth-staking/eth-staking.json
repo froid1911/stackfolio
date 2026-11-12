@@ -25,15 +25,11 @@
         {
           "id": "2b58272a-f524-4bbc-a0b7-01311b977285",
           "name": "validators",
-          "description": "The tracked validator set",
           "operations": [
             {
               "id": "85e3d805-ccf6-4106-952d-34b7e6bf0b3d",
               "name": "UPSERT_VALIDATORS",
-              "description": "",
-              "schema": "input UpsertValidatorsInput {\n  validators: [ValidatorInput!]!\n}\n\ninput ValidatorInput {\n  index: Int!\n  publicKey: String!\n  withdrawalAddress: String\n  activationTimestamp: Int\n  withdrawableTimestamp: Int\n  exitedTimestamp: Int\n}",
-              "template": "",
-              "reducer": "const byIndex = new Map(state.validators.map((v) => [v.index, v.publicKey]));\nfor (const validator of action.input.validators) {\n  const known = byIndex.get(validator.index);\n  if (known !== undefined && known !== validator.publicKey) {\n    throw new ValidatorConflictError(\n      `Validator index ${validator.index} is already registered with a different public key`,\n    );\n  }\n  byIndex.set(validator.index, validator.publicKey);\n}\nfor (const validator of action.input.validators) {\n  const existing = state.validators.find((v) => v.index === validator.index);\n  if (existing) {\n    existing.publicKey = validator.publicKey;\n    existing.withdrawalAddress = validator.withdrawalAddress ?? null;\n    existing.activationTimestamp = validator.activationTimestamp ?? null;\n    existing.withdrawableTimestamp = validator.withdrawableTimestamp ?? null;\n    existing.exitedTimestamp = validator.exitedTimestamp ?? null;\n  } else {\n    state.validators.push({\n      index: validator.index,\n      publicKey: validator.publicKey,\n      withdrawalAddress: validator.withdrawalAddress ?? null,\n      activationTimestamp: validator.activationTimestamp ?? null,\n      withdrawableTimestamp: validator.withdrawableTimestamp ?? null,\n      exitedTimestamp: validator.exitedTimestamp ?? null,\n    });\n  }\n}",
+              "scope": "global",
               "errors": [
                 {
                   "id": "dd8d29fe-f599-408d-a982-70814b85152d",
@@ -43,15 +39,29 @@
                   "template": ""
                 }
               ],
+              "schema": "input UpsertValidatorsInput {\n  validators: [ValidatorInput!]!\n}\n\ninput ValidatorInput {\n  index: Int!\n  publicKey: String!\n  withdrawalAddress: String\n  activationTimestamp: Int\n  withdrawableTimestamp: Int\n  exitedTimestamp: Int\n}",
+              "reducer": "const byIndex = new Map(state.validators.map((v) => [v.index, v.publicKey]));\nfor (const validator of action.input.validators) {\n  const known = byIndex.get(validator.index);\n  if (known !== undefined && known !== validator.publicKey) {\n    throw new ValidatorConflictError(\n      `Validator index ${validator.index} is already registered with a different public key`,\n    );\n  }\n  byIndex.set(validator.index, validator.publicKey);\n}\nfor (const validator of action.input.validators) {\n  const existing = state.validators.find((v) => v.index === validator.index);\n  if (existing) {\n    existing.publicKey = validator.publicKey;\n    existing.withdrawalAddress = validator.withdrawalAddress ?? null;\n    existing.activationTimestamp = validator.activationTimestamp ?? null;\n    existing.withdrawableTimestamp = validator.withdrawableTimestamp ?? null;\n    existing.exitedTimestamp = validator.exitedTimestamp ?? null;\n  } else {\n    state.validators.push({\n      index: validator.index,\n      publicKey: validator.publicKey,\n      withdrawalAddress: validator.withdrawalAddress ?? null,\n      activationTimestamp: validator.activationTimestamp ?? null,\n      withdrawableTimestamp: validator.withdrawableTimestamp ?? null,\n      exitedTimestamp: validator.exitedTimestamp ?? null,\n    });\n  }\n}",
+              "examples": [],
+              "template": "",
+              "description": ""
+            },
+            {
+              "id": "remove-validators",
+              "name": "REMOVE_VALIDATORS",
+              "description": "Unwatch a validator: its row, balance history and withdrawals leave the document. The chain is untouched.",
+              "schema": "input RemoveValidatorsInput {\n  indices: [Int!]!\n}",
+              "template": "Unwatch a validator: its row, balance history and withdrawals leave the document. The chain is untouched.",
+              "reducer": "const wanted = new Set(action.input.indices);\nstate.validators = state.validators.filter((v) => !wanted.has(v.index));\nstate.balanceHistory = state.balanceHistory.filter(\n  (p) => !wanted.has(p.validatorIndex),\n);\nstate.withdrawals = state.withdrawals.filter(\n  (w) => !wanted.has(w.validatorIndex),\n);",
+              "errors": [],
               "examples": [],
               "scope": "global"
             }
-          ]
+          ],
+          "description": "The tracked validator set"
         },
         {
           "id": "fefe64ae-aa77-47f5-8b4c-04931cd41c86",
           "name": "history",
-          "description": "Daily balances, withdrawals and scan progress",
           "operations": [
             {
               "id": "e5054cea-0dab-4b7e-aacf-0e0b62cc0c81",
@@ -102,7 +112,8 @@
               "examples": [],
               "scope": "global"
             }
-          ]
+          ],
+          "description": "Daily balances, withdrawals and scan progress"
         }
       ],
       "version": 1,

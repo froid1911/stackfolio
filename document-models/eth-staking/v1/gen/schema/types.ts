@@ -95,6 +95,10 @@ export type RecordWithdrawalsInput = {
   withdrawals: Array<WithdrawalInput>;
 };
 
+export type RemoveValidatorsInput = {
+  indices: Array<Scalars["Int"]["input"]>;
+};
+
 export type StakeCursor = {
   lastBalanceDay: Maybe<Scalars["DateTime"]["output"]>;
   lastWithdrawalBlock: Maybe<Scalars["Int"]["output"]>;

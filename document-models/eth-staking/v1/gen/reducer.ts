@@ -6,7 +6,10 @@ import type {
   RecordStakeScanProgressAction,
   RecordWithdrawalsAction,
 } from "./history/actions.js";
-import type { UpsertValidatorsAction } from "./validators/actions.js";
+import type {
+  RemoveValidatorsAction,
+  UpsertValidatorsAction,
+} from "./validators/actions.js";
 
 import { ethStakingHistoryOperations } from "../src/reducers/history.js";
 import { ethStakingValidatorsOperations } from "../src/reducers/validators.js";
@@ -15,6 +18,7 @@ import {
   RecordBalancesInputSchema,
   RecordStakeScanProgressInputSchema,
   RecordWithdrawalsInputSchema,
+  RemoveValidatorsInputSchema,
   UpsertValidatorsInputSchema,
 } from "./schema/zod.js";
 
@@ -44,6 +48,18 @@ const stateReducer: StateReducer<EthStakingPHState> = (
       ethStakingValidatorsOperations.upsertValidatorsOperation(
         state.global,
         action as UpsertValidatorsAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "REMOVE_VALIDATORS": {
+      memoizedSchema(RemoveValidatorsInputSchema).parse(action.input);
+
+      ethStakingValidatorsOperations.removeValidatorsOperation(
+        state.global,
+        action as RemoveValidatorsAction,
         dispatch,
       );
 

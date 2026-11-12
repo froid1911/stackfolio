@@ -1,7 +1,17 @@
-import { actions, reducer, utils } from "document-models/eth-staking/v1";
+import { generateMock } from "document-model/mock";
+import {
+  actions,
+  isEthStakingDocument,
+  recordBalances,
+  recordWithdrawals,
+  reducer,
+  removeValidators,
+  RemoveValidatorsInputSchema,
+  upsertValidators,
+  utils,
+} from "document-models/eth-staking/v1";
 import { describe, expect, it } from "vitest";
 
-const { upsertValidators } = actions;
 
 const validator = (overrides: Record<string, unknown> = {}) => ({
   index: 100,
@@ -158,5 +168,85 @@ describe("ValidatorsOperations", () => {
     expect(stored.withdrawalAddress).toBeNull();
     expect(stored.activationTimestamp).toBeNull();
     expect(stored.withdrawableTimestamp).toBe(1700000000);
+  });
+
+  it("should handle removeValidators operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(RemoveValidatorsInputSchema());
+
+    const updatedDocument = reducer(document, removeValidators(input));
+
+    expect(isEthStakingDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    // A rejected operation records its error; give it the state it needs.
+    expect(updatedDocument.operations.global[0].error).toBeUndefined();
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "REMOVE_VALIDATORS",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
+  });
+
+  it("removes the validator with its balances and withdrawals, keeping the rest", () => {
+    let document = utils.createDocument();
+    document = reducer(
+      document,
+      upsertValidators({
+        validators: [
+          {
+            index: 7,
+            publicKey: "0xaaaa",
+            withdrawalAddress: null,
+            activationTimestamp: null,
+            withdrawableTimestamp: null,
+            exitedTimestamp: null,
+          },
+          {
+            index: 9,
+            publicKey: "0xbbbb",
+            withdrawalAddress: null,
+            activationTimestamp: null,
+            withdrawableTimestamp: null,
+            exitedTimestamp: null,
+          },
+        ],
+      }),
+    );
+    document = reducer(
+      document,
+      recordBalances({
+        points: [
+          { validatorIndex: 7, day: "2026-11-11", balanceGwei: "32000000000" },
+          { validatorIndex: 9, day: "2026-11-11", balanceGwei: "31000000000" },
+        ],
+        ranAt: "2026-11-11T10:00:00.000Z",
+      }),
+    );
+    document = reducer(
+      document,
+      recordWithdrawals({
+        withdrawals: [
+          {
+            id: "00000000-0000-4000-8000-000000000007",
+            validatorIndex: 7,
+            timestamp: "2026-11-10T00:00:00.000Z",
+            amountGwei: "1000000000",
+            blockNumber: 20000000,
+            withdrawalRef: 7000,
+          },
+        ],
+      }),
+    );
+
+    document = reducer(document, removeValidators({ indices: [7] }));
+
+    const state = document.state.global;
+    expect(state.validators.map((v) => v.index)).toEqual([9]);
+    expect(
+      state.balanceHistory.every((p) => p.validatorIndex === 9),
+    ).toBe(true);
+    expect(state.withdrawals).toHaveLength(0);
   });
 });

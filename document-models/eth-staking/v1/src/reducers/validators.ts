@@ -38,4 +38,14 @@ export const ethStakingValidatorsOperations: EthStakingValidatorsOperations = {
       }
     }
   },
+  removeValidatorsOperation(state, action) {
+    const wanted = new Set(action.input.indices);
+    state.validators = state.validators.filter((v) => !wanted.has(v.index));
+    state.balanceHistory = state.balanceHistory.filter(
+      (p) => !wanted.has(p.validatorIndex),
+    );
+    state.withdrawals = state.withdrawals.filter(
+      (w) => !wanted.has(w.validatorIndex),
+    );
+  },
 };

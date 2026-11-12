@@ -1,7 +1,13 @@
-import { actions, reducer, utils } from "document-models/eth-staking/v1";
+import {
+  actions,
+  recordBalances,
+  recordStakeScanProgress,
+  recordWithdrawals,
+  reducer,
+  utils,
+} from "document-models/eth-staking/v1";
 import { describe, expect, it } from "vitest";
 
-const { recordBalances, recordWithdrawals, recordStakeScanProgress } = actions;
 
 const withdrawal = (overrides: Record<string, unknown> = {}) => ({
   id: "wd-1",
@@ -19,8 +25,16 @@ describe("HistoryOperations", () => {
       utils.createDocument(),
       recordBalances({
         points: [
-          { validatorIndex: 100, day: "2026-11-09", balanceGwei: "31000000000" },
-          { validatorIndex: 100, day: "2026-11-10", balanceGwei: "31001000000" },
+          {
+            validatorIndex: 100,
+            day: "2026-11-09",
+            balanceGwei: "31000000000",
+          },
+          {
+            validatorIndex: 100,
+            day: "2026-11-10",
+            balanceGwei: "31001000000",
+          },
         ],
         ranAt: "2026-11-11T00:00:00.000Z",
       }),
@@ -34,7 +48,11 @@ describe("HistoryOperations", () => {
       utils.createDocument(),
       recordBalances({
         points: [
-          { validatorIndex: 100, day: "2026-11-09", balanceGwei: "31000000000" },
+          {
+            validatorIndex: 100,
+            day: "2026-11-09",
+            balanceGwei: "31000000000",
+          },
         ],
         ranAt: "2026-11-10T00:00:00.000Z",
       }),
@@ -43,7 +61,11 @@ describe("HistoryOperations", () => {
       document,
       recordBalances({
         points: [
-          { validatorIndex: 100, day: "2026-11-09", balanceGwei: "31500000000" },
+          {
+            validatorIndex: 100,
+            day: "2026-11-09",
+            balanceGwei: "31500000000",
+          },
         ],
         ranAt: "2026-11-10T01:00:00.000Z",
       }),
@@ -90,7 +112,9 @@ describe("HistoryOperations", () => {
   it("should reject a non-decimal withdrawal amount", () => {
     const document = reducer(
       utils.createDocument(),
-      recordWithdrawals({ withdrawals: [withdrawal({ amountGwei: "32.5.1" })] }),
+      recordWithdrawals({
+        withdrawals: [withdrawal({ amountGwei: "32.5.1" })],
+      }),
     );
 
     expect(document.operations.global[0].error).toBe(
@@ -138,7 +162,10 @@ describe("HistoryOperations", () => {
       "lastBalanceDay would regress from 2026-11-09T00:00:00.000Z to 2026-11-08T00:00:00.000Z",
     );
 
-    document = reducer(document, recordStakeScanProgress({ lastWithdrawalBlock: 1 }));
+    document = reducer(
+      document,
+      recordStakeScanProgress({ lastWithdrawalBlock: 1 }),
+    );
     expect(document.operations.global[2].error).toBe(
       "lastWithdrawalBlock would regress from 21000000 to 1",
     );

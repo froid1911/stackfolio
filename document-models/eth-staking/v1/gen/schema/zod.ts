@@ -8,6 +8,7 @@ import type {
   RecordBalancesInput,
   RecordStakeScanProgressInput,
   RecordWithdrawalsInput,
+  RemoveValidatorsInput,
   StakeCursor,
   UpsertValidatorsInput,
   Validator,
@@ -83,6 +84,14 @@ export function RecordWithdrawalsInputSchema(): z.ZodObject<
 > {
   return z.object({
     withdrawals: z.array(z.lazy(() => WithdrawalInputSchema())),
+  });
+}
+
+export function RemoveValidatorsInputSchema(): z.ZodObject<
+  Properties<RemoveValidatorsInput>
+> {
+  return z.object({
+    indices: z.array(z.number()),
   });
 }
 

@@ -82,9 +82,11 @@ Pure function: `(manifest-for-chain, account, txReceipts) → { rows, decodedTxH
 
 ### 3. Log fetch integration (Etherscan path)
 
-Today `fetch-etherscan-history/recent` build rows from the tx list only. Extension: after the generic row pass, for candidate txs in the batch, fetch receipts (`txreceiptstatus` endpoint / RPC `eth_getTransactionReceipt` on local chains) with a per-page budget (same style as `scanLogsPage`'s log caps). Feed receipts to the decode engine; merge: rows = generic − decoded-tx rows + semantic rows. Candidates are computed per page from the **current** registry document (the action reads it via the reactor context), so publishing a new protocol manifest immediately affects subsequent pages — hot-add without redeploy.
+Today `fetch-etherscan-history/recent` build rows from the tx list only. Receipt fetching (§3 cost model, one decision settled): per page, **one** `eth_getLogs`-class query (`logscan` on the indexer; direct `eth_getLogs` on local RPC) filtered to the chain's registry contract addresses over the page's block window → candidate tx hashes; then `eth_getTransactionReceipt` (proxy `proxy` module) **only for hits** — hits are a small fraction of any page, keeping receipt cost proportional to protocol activity, not tx volume. Feed receipts to the decode engine; merge: rows = generic − decoded-tx rows + semantic rows. Candidates are computed per page from the **current** registry document (the action reads it via the reactor context), so publishing a new protocol manifest immediately affects subsequent pages — hot-add without redeploy.
 
 RPC-scan path (`scan-account-logs`) applies the same engine where it encounters registry contracts.
+
+**Retrofit (already-imported history)**: decoding only affects future pages, but every wallet's existing backfill is complete — its whole past would otherwise stay generic. New wallet-account operation `REPLACE_EVENTS { remove: [{id, sequenceIndex}], add: [ImportedEventInput…] }`: removes the named rows, then applies the import path's validation/dedup to the additions, all in one reducer — review overrides (`ignored`, `notes`) from removed rows are carried onto a matching-id addition; `RETYPE_EVENT` edits are overwritten by decode (decoded beats hand-guessed) and counted in the migration report. At registry launch, the reconciler publishes a one-shot `redecode-<wallet>` workflow per wallet: re-walks the backfill window (budgeted like backfill; receipts as above), emits `REPLACE_EVENTS` per page. Idempotent — reruns no-op when rows already semantic.
 
 ### 4. Ledger schema extension
 
@@ -94,23 +96,29 @@ RPC-scan path (`scan-account-logs`) applies the same engine where it encounters 
 
 `LedgerEvent` and `IMPORT_EVENTS` inputs gain optional `valuation: { unit: "EUR", price: "1234.56", source: "COINGECKO" | "MANUAL" | "UNPRICED", pinnedAt }`. A new workflow step `pin-prices` (piece action; reuses `fetch-prices` internals) batches rows lacking valuations — price at event timestamp, native quote unit from the price book — and dispatches a new operation `PIN_VALUATIONS(events: [{id, sequenceIndex, valuation}])`. Manual override = same operation, `source: MANUAL`; the reducer refuses to overwrite a `MANUAL` valuation with an oracle value. Rows the oracle can't price become `UNPRICED` (explicit, counted, surfaced).
 
+Historical depth: `fetch-prices` today is spot-only; pinning *historical* timestamps is a new capability. v1 = CoinGecko daily close (`/history`, granularity **DAY**) — `valuation` carries `granularity: "DAY"`; sub-daily precision is a later oracle upgrade, not silently pretended at. Pinning the whole past is one call per (asset, day) — a budgeted backfiller with its own cursor, seeded newest-first so recent months price first; assets/days the oracle lacks stay `UNPRICED`.
+
 ### 6. Positions and debts
 
-- **Tokenized positions are tokens**: aTokens, cTokens, sUSDS, debt tokens. The asset-registry model's `kind` enum (`ERC20`/`NATIVE` today) extends with `POSITION` and `DEBT`; the protocol entry's `contracts[].kind` tells `import-tokens-to-registry` which tag to apply on registration; `snapshot-portfolio` already sums wallet token balances — positions therefore fall out of existing balance tracking. Debt tokens count as **liabilities**, not negative assets: `PortfolioState` gains `liabilities: [{asset, amount}]`, `netWorth = assets − liabilities`.
+- **Tokenized positions are tokens**: aTokens, cTokens, sUSDS, debt tokens. The asset-registry model's `kind` enum (`ERC20`/`NATIVE` today) extends with `POSITION` and `DEBT`; the protocol entry's `contracts[].kind` tells `import-tokens-to-registry` which tag to apply on registration; `snapshot-portfolio` already sums wallet token balances — positions therefore fall out of existing balance tracking. Debt tokens count as **liabilities**, not negative assets. Snapshot-scoped, matching how every other value lives in this model: `Snapshot` gains `liabilities: [{asset, amount}]` and `netWorth = totalValue − liabilitiesValue`; existing charts/consumers of `Snapshot.totalValue` are untouched. Liabilities are computed by `snapshot-portfolio` from balances of registry assets tagged `kind: DEBT`; a debt token has no oracle of its own — it values **1:1 against its underlying** (aUSDC-debt → USDC price), a mapping carried on the protocol manifest contract entry (`underlying: "…USDC…"`).
 - **Non-tokenized**: new action `fetch-positions` per wallet-chain — multicall of manifest `POSITION`/`DEBT` token balances plus, for uniswap-v3, `NonfungiblePositionManager.getPositions` decoded via `univ3-position-math` into underlying amounts. Dispatches `SET_POSITIONS(wallet, positions: [{protocol, kind: "SPOT"|"LP", assets:[{asset, amount}], note}])` onto the portfolio document (idempotent full replace per wallet+chain).
 - Views: Accounts/Assets gain a `DeFi` section — positions grouped by protocol, debts and net worth; rotki-parity without a liabilities database.
 
 ### 7. Accounting fold (`processors/accounting-index/`)
 
-Processor over the existing event stream (same substrate as `portfolio-index`), **pure** reducer core in `fold.ts`:
+Processor sharing `portfolio-index`'s substrate (whole-state diff per operation batch — events arrive out of timestamp order, and they stay mutable after import: `PIN_VALUATIONS`, `RETYPE_EVENT`, `SET_EVENT_IGNORED`, `REPLACE_EVENTS`). The pure core:
 
 ```ts
-fold(state, event: PricedLedgerEvent, settings: { method: "FCFS" }) -> state
+fold(state, group: TxGroup, ctx: { method: "FCFS", knownAddresses: AddressSet }) -> state
 ```
 
-- State: per (wallet, asset): open lots `[{ eventId, quantity, unitCost }]`, fiat cost basis; realized events `{ sourceEventId, asset, quantity, cost, proceeds, pnl }`; income buckets (data table: subtype → bucket — `YIELD`/`STAKING` → income; `SPEND`/fee → expense or basis); per (wallet, month) aggregates.
-- Method: **FCFS first** (my call — the most universally accepted default; HO/ACB become settings variants later). Spend/sell semantics: consume open lots in insertion order; unmatched quantity (e.g. genesis receipts, pre-import history) → `UNPRICED_IN` bucket, counted, never fabricated.
-- Input is only ledger events **with** pinned valuations; fold performs no I/O. Checkpoint: `{ cursor, foldVersion, settingsHash, state }`; any change to fold logic, method, or quote unit → deterministic replay from genesis (correct first, shadow-replay optimization later).
+- **Ingestion = full refold of the staged ledger, every batch** (my call for v1). The fold is pure in-memory over ≤ tens of thousands of rows — microseconds; `replay == incremental` holds by construction instead of by test. The checkpoint stores `{ foldVersion, ctxHash, state, inputHash }` purely to skip recompute when the staged input didn't change; any edit or late pin changes `inputHash` → refold. Incremental re-fold from earliest-touched-timestamp is a later optimization gated on measured size, not v1 architecture.
+- Input: ledger events **with** pinned valuations, grouped by `eventIdentifier` (one tx), ordered by `(timestamp, eventIdentifier, sequenceIndex)`; ignored rows excluded; no I/O.
+- **Lot opening — pairing over spend (not market)**: within a group, `TRADE` legs (and decoded swap pairs) pair SPEND↔RECEIVE: the acquired asset's lot opens at the **cost paid** — FCFS consumption of the spent asset's lots, split pro-rata across multiple acquired legs — never at its own market price (market pricing would book phantom PnL on every swap). Unpaired `RECEIVE`/`YIELD`/`STAKING`/`AIRDROP` opens its lot at pinned market value; unmatched spend quantity (pre-import history) → `UNPRICED_IN`, counted, never fabricated.
+- **Self-transfers are not disposals**: `ctx.knownAddresses` = the portfolio's wallet address set (carried in `ctxHash`; snapshot-refresh changes it → refold). A `SPEND` whose counterparty is a known address and whose subtype isn't protocol-semantic moves its lot to the receiving (wallet, asset) **at original cost** — no PnL, no basis reset; fees on it still fold as expense.
+- Method: **FCFS first** (my call — the most universally accepted default; HO/ACB become settings variants later). Spend/sell semantics: consume open lots in insertion order.
+- State: per (wallet, asset): open lots `[{ eventId, quantity, unitCost }]`, fiat cost basis; realized events `{ sourceEventId, asset, quantity, cost, proceeds, pnl }`; income buckets (data table: subtype → bucket); per (wallet, month) aggregates.
+- **Scope**: Bitcoin ledgers are ledger events → in scope like any wallet. **Hyperliquid fills are out of scope for v1** — they live in a separate document, not the ledger; the PnL page shows an explicit out-of-scope banner naming excluded accounts (anti-silent-gap rule), and a second fold input over HL fills is a later add-on.
 - Read model + `portfolio-api` subgraph extensions: `openLots`, `realizedEvents`, `incomeByMonth`, `pnlReport(from,to,grouping)`, `unpricedSummary`. No report documents; the truth lives in ledger ops, the report is derived state.
 - View: PnL page — period selector, income/expense summary, realized-events table (each row links the source ledger event and consumed lots), open-lots browser, unpriced-items warning banner.
 
@@ -125,7 +133,8 @@ Seed: aave-v3, sky, uniswap-v2, uniswap-v3, ens. After the log-fetch path is liv
 ## Testing
 
 - Decode engine: table tests on **captured real receipts** (frankp/fr4nk tx fixtures: aave supply/withdraw+borrow, sky conversion, uni v2 swap, uni v3 mint, ens registration) — golden rows in, golden rows out.
-- Fold: property tests — Σ open-lot quantity per asset == quantity implied by ledger; replay == incremental; deterministic given same ops.
+- Fold: property tests — Σ open-lot quantity per asset == quantity implied by ledger; full-refold determinism; **round-trip swap books zero net realized PnL except fees** (pairing correctness); self-transfer carries basis and books no PnL; late `PIN_VALUATIONS`/`RETYPE` change output exactly as a genesis replay does.
+- `REPLACE_EVENTS`: review-override carry-over; idempotent rerun; validation reuse.
 - Pin: oracle mocked; timestamp-rounding boundaries; MANUAL-overwrite refusal.
 - Manifests: topics-fixture test recomputes every topic from ABI fragments.
 - Live e2e as per provider precedent: bounded real fetch → real doc → ledger/positions/pnl visibly populated.
@@ -133,3 +142,8 @@ Seed: aave-v3, sky, uniswap-v2, uniswap-v3, ens. After the log-fetch path is liv
 ## Left to the builder
 
 Exact manifest JSON field names beyond the sketch; fold checkpoint encoding; subgraph schema shape for the report queries; PnL page layout; `UNPRICED` thresholds in UI copy; plugin interface signature beyond name+inputs.
+
+## Open owner questions (answered at approval)
+
+1. **Historical price granularity**: v1 pins at CoinGecko **daily close** granularity. Accept daily-rounded historical valuations (with manual override per row), or should precise-timestamp pricing be a launch requirement (paid oracle key)?
+2. **Retrofit budget**: the one-shot re-decode re-walks each wallet's full history (extra indexer calls, days of budgeted work on heavy wallets) and overwrites `RETYPE_EVENT` review edits where decode disagrees. Proceed with full-history retrofit, or decode forward-only and leave old history generic?

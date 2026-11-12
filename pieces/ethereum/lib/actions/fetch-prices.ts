@@ -199,18 +199,24 @@ export const ethereumFetchPricesAction = createAction({
       list.push(entry);
     }
     for (const [platform, group] of byPlatform) {
-      try {
-        const fetched = await get(
-          `${base}/simple/token_price/${platform}?contract_addresses=${group
-            .map((a) => a.address)
-            .join(",")}&vs_currencies=${currency}`,
-        );
-        collect(
-          fetched,
-          group.map((a) => ({ asset: a.asset, key: a.address })),
-        );
-      } catch (error) {
-        errors.push(error instanceof Error ? error.message : String(error));
+      // CoinGecko takes at most 20 contract addresses per call; a longer
+      // list is a 400 for the whole group, so the walk of a busy wallet
+      // (hundreds of tokens) has to go in slices.
+      for (let from = 0; from < group.length; from += 20) {
+        const chunk = group.slice(from, from + 20);
+        try {
+          const fetched = await get(
+            `${base}/simple/token_price/${platform}?contract_addresses=${chunk
+              .map((a) => a.address)
+              .join(",")}&vs_currencies=${currency}`,
+          );
+          collect(
+            fetched,
+            chunk.map((a) => ({ asset: a.asset, key: a.address })),
+          );
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : String(error));
+        }
       }
     }
 

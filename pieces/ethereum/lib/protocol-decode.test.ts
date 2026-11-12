@@ -84,12 +84,12 @@ describe("decodeReceipts - aave v3 borrow", () => {
 });
 
 describe("decodeReceipts - uniswap v2 swap", () => {
-  it("turns the account leg of a matched Swap into a TRADE", () => {
+  it("keeps the swap leg's direction and tags the protocol", () => {
     const { rows, decodedTxHashes } = decode("uni-v2-swap");
     expect(decodedTxHashes).toHaveLength(1);
     expect(rows).toEqual([
       expect.objectContaining({
-        type: "TRADE",
+        type: "RECEIVE",
         subtype: "NONE",
         asset: "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
         amount: "368782794148278446808",

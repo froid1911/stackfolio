@@ -175,7 +175,9 @@ export function decodeReceipts(
         if (semantic.type === "TRADE") {
           for (const leg of legs) {
             if (leg.claimed) continue;
-            leg.type = "TRADE";
+            // Keep the leg's SPEND/RECEIVE direction: the ledger has no
+            // other way to say which side of the swap it is. The pairing
+            // is the shared eventIdentifier; the protocol tag is the note.
             leg.subtype = semantic.subtype;
             leg.counterparty = protocol.id;
             leg.claimed = true;

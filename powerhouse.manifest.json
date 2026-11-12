@@ -78,6 +78,10 @@
     {
       "id": "stackfolio-reconciler",
       "name": "stackfolio-reconciler"
+    },
+    {
+      "id": "accounting-index",
+      "name": "accounting-index"
     }
   ],
   "subgraphs": [

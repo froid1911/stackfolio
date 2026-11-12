@@ -128,6 +128,7 @@
     "document-model": "6.2.3-dev.96",
     "graphql": "16.12.0",
     "graphql-tag": "2.12.6",
+    "jsdom": "^31.0.0",
     "kysely": "0.28.16",
     "oxfmt": "0.68.0",
     "oxlint": "1.83.0",

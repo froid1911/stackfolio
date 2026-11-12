@@ -222,7 +222,10 @@ export function TransactionsSection({ driveId }: { driveId: string }) {
   const accounts = useAccounts(driveId);
   const assets = useAssets(driveId);
   // A P&L row can pin the view to particular ledger events: ?ids=…
-  const { ids } = useSearchParams();
+  // The issues sub-tab addresses itself: ?sub=issues, so a sidebar deep
+  // link or a shared link lands there directly.
+  const { ids, sub } = useSearchParams();
+  const setSearchParams = useSetSearchParams();
   const [filter, setFilter] = useState<EventsFilter>(() => ({
     ignored: false,
     first: 50,
@@ -231,6 +234,7 @@ export function TransactionsSection({ driveId }: { driveId: string }) {
       : {}),
   }));
   const page = useEventsPage(driveId, filter);
+  const issues = useIssues(driveId);
   return (
     <Transactions
       accounts={accounts}
@@ -238,6 +242,14 @@ export function TransactionsSection({ driveId }: { driveId: string }) {
       filter={filter}
       setFilter={setFilter}
       page={page}
+      sub={sub === "issues" ? "issues" : "events"}
+      issues={issues}
+      onSub={(next) =>
+        setSearchParams(
+          (prev) => ({ ...prev, ...(next === "issues" ? { sub: "issues" } : { sub: undefined }) }),
+          { replace: true },
+        )
+      }
     />
   );
 }

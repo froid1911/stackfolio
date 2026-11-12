@@ -1,11 +1,20 @@
 /**
- * The ledger: every imported event, newest first, filtered by account,
- * asset and kind. The row write path stays in the wallet document; the
- * index only reads.
+ * The History page: the events table, an "Issues" sub-tab over the
+ * reconciler's open check issues, CSV export of the filtered set, and
+ * rows that open the event detail (the shell owns routing; this
+ * component only reports intent through callbacks).
  */
 import { useState } from "react";
-import type { AccountRow, Asset, EventsFilter, EventRow, QueryState } from "../lib/graphql.js";
+import type {
+  AccountRow,
+  Asset,
+  EventsFilter,
+  EventRow,
+  Issue,
+  QueryState,
+} from "../lib/graphql.js";
 import { fmtAmount } from "../lib/format.js";
+import { toCsv } from "../lib/csv.js";
 import { short } from "./Dashboard.js";
 
 const TYPE_TABS: { id: string; label: string; types?: string[] }[] = [
@@ -18,18 +27,58 @@ const TYPE_TABS: { id: string; label: string; types?: string[] }[] = [
 
 const PAGE = 50;
 
+const EVENT_HEADERS = [
+  "timestamp",
+  "type",
+  "subtype",
+  "asset",
+  "amount",
+  "counterparty",
+  "account",
+  "notes",
+];
+
+/** The filtered page as CSV rows - the guard lives in lib/csv. */
+export function eventsCsv(rows: EventRow[], symbolOf: (asset: string) => string): string {
+  return toCsv(
+    EVENT_HEADERS,
+    rows.map((e) => [
+      e.timestamp,
+      e.type,
+      e.subtype,
+      symbolOf(e.asset),
+      e.amount,
+      e.counterpartyLabel ?? e.counterparty,
+      e.label ?? e.address,
+      e.notes,
+    ]),
+  );
+}
+
+export type HistorySub = "events" | "issues";
+
 export function Transactions({
   accounts,
   assets,
   filter,
   setFilter,
   page,
+  sub = "events",
+  issues,
+  onSub,
+  onOpenEvent,
+  onOpenAccount,
 }: {
   accounts: QueryState<AccountRow[]>;
   assets: QueryState<Asset[]>;
   filter: EventsFilter;
   setFilter: (f: EventsFilter) => void;
   page: QueryState<{ rows: EventRow[]; total: number }>;
+  sub?: HistorySub;
+  issues?: QueryState<Issue[]>;
+  onSub?: (sub: HistorySub) => void;
+  onOpenEvent?: (eventId: string) => void;
+  onOpenAccount?: (address: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [showIgnored, setShowIgnored] = useState(false);
@@ -39,171 +88,298 @@ export function Transactions({
   const offset = filter.offset ?? 0;
 
   const typeTab = TYPE_TABS.find((t) => sameTypes(t.types, filter.types))?.id ?? "all";
+  const symbolOf = (asset: string) => decimals.get(asset)?.symbol ?? asset;
 
   return (
     <div className="p-6">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex overflow-hidden rounded-lg border border-border text-xs">
-          {TYPE_TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setFilter({ ...filter, types: t.types, offset: 0 })}
-              className={`px-3 py-1.5 ${typeTab === t.id ? "bg-primary font-medium text-primary-foreground" : "hover:bg-muted"}`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <select
-          className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
-          value={filter.address ?? ""}
-          onChange={(e) => setFilter({ ...filter, address: e.target.value || undefined, offset: 0 })}
-        >
-          <option value="">All accounts</option>
-          {(accounts.data ?? []).map((a) => (
-            <option key={`${a.documentId}`} value={a.address}>
-              {a.label || short(a.address)}
-            </option>
-          ))}
-        </select>
-        <select
-          className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
-          value={filter.asset ?? ""}
-          onChange={(e) => setFilter({ ...filter, asset: e.target.value || undefined, offset: 0 })}
-        >
-          <option value="">All assets</option>
-          {(assets.data ?? []).map((a) => (
-            <option key={a.identifier} value={a.identifier}>
-              {a.symbol}
-            </option>
-          ))}
-        </select>
-        <input
-          className="w-44 rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
-          placeholder="Search notes, counterparties…"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setFilter({ ...filter, query: e.target.value || undefined, offset: 0 });
-          }}
-        />
-        <label className="flex items-center gap-1 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={showIgnored}
-            onChange={(e) => {
-              setShowIgnored(e.target.checked);
-              setFilter({ ...filter, ignored: e.target.checked ? undefined : false, offset: 0 });
-            }}
-          />
-          show ignored
-        </label>
-      </div>
-
-      {filter.ids && filter.ids.length > 0 && (
-        <div className="mt-3 flex items-center gap-3 rounded-lg border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs">
-          <span>
-            Pinned to {filter.ids.length} linked ledger event
-            {filter.ids.length === 1 ? "" : "s"} from the P&L view.
-          </span>
           <button
             type="button"
-            className="text-accent underline-offset-2 hover:underline"
-            onClick={() => setFilter({ ...filter, ids: undefined, offset: 0 })}
+            data-sub="events"
+            onClick={() => onSub?.("events")}
+            className={`px-3 py-1.5 ${sub === "events" ? "bg-primary font-medium text-primary-foreground" : "hover:bg-muted"}`}
           >
-            Show all
+            Events
+          </button>
+          <button
+            type="button"
+            data-sub="issues"
+            onClick={() => onSub?.("issues")}
+            className={`px-3 py-1.5 ${sub === "issues" ? "bg-primary font-medium text-primary-foreground" : "hover:bg-muted"}`}
+          >
+            Issues
+            {issues?.data && issues.data.length > 0 ? ` (${issues.data.length})` : ""}
           </button>
         </div>
-      )}
+        {sub === "issues" ? null : (
+          <>
+            <div className="flex overflow-hidden rounded-lg border border-border text-xs">
+              {TYPE_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setFilter({ ...filter, types: t.types, offset: 0 })}
+                  className={`px-3 py-1.5 ${typeTab === t.id ? "bg-primary font-medium text-primary-foreground" : "hover:bg-muted"}`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <select
+              className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+              value={filter.address ?? ""}
+              onChange={(e) => setFilter({ ...filter, address: e.target.value || undefined, offset: 0 })}
+            >
+              <option value="">All accounts</option>
+              {(accounts.data ?? []).map((a) => (
+                <option key={`${a.documentId}`} value={a.address}>
+                  {a.label || short(a.address)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+              value={filter.asset ?? ""}
+              onChange={(e) => setFilter({ ...filter, asset: e.target.value || undefined, offset: 0 })}
+            >
+              <option value="">All assets</option>
+              {(assets.data ?? []).map((a) => (
+                <option key={a.identifier} value={a.identifier}>
+                  {a.symbol}
+                </option>
+              ))}
+            </select>
+            <input
+              className="w-44 rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+              placeholder="Search notes, counterparties…"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setFilter({ ...filter, query: e.target.value || undefined, offset: 0 });
+              }}
+            />
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={showIgnored}
+                onChange={(e) => {
+                  setShowIgnored(e.target.checked);
+                  setFilter({ ...filter, ignored: e.target.checked ? undefined : false, offset: 0 });
+                }}
+              />
+              show ignored
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                const blob = new Blob(["﻿" + eventsCsv(rows, symbolOf)], {
+                  type: "text/csv;charset=utf-8",
+                });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement("a");
+                anchor.href = url;
+                anchor.download = `stackfolio-events-${new Date().toISOString().slice(0, 10)}.csv`;
+                anchor.style.display = "none";
+                document.body.appendChild(anchor);
+                anchor.click();
+                document.body.removeChild(anchor);
+                URL.revokeObjectURL(url);
+              }}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-muted"
+            >
+              Export CSV
+            </button>
+          </>
+        )}
+      </div>
 
-      {page.error && <p className="mt-3 text-sm text-red-700">{page.error}</p>}
-
-      <div className="mt-4 overflow-x-auto rounded-xl border border-border">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">When</th>
-              <th className="px-3 py-2">Kind</th>
-              <th className="px-3 py-2 text-right">Amount</th>
-              <th className="px-3 py-2">Counterparty</th>
-              <th className="px-3 py-2">Account</th>
-              <th className="px-3 py-2">Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((e) => {
-              const asset = decimals.get(e.asset);
-              const signed = e.type === "RECEIVE" ? "+" : e.type === "SPEND" ? "−" : "";
-              return (
-                <tr key={`${e.documentId}/${e.eventId}`} className="border-t border-border">
-                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                    {new Date(e.timestamp).toLocaleString()}
-                  </td>
+      {sub === "issues" ? (
+        <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">Severity</th>
+                <th className="px-3 py-2">Check</th>
+                <th className="px-3 py-2">Message</th>
+                <th className="px-3 py-2">Account</th>
+                <th className="px-3 py-2">Since</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(issues?.data ?? []).map((issue) => (
+                <tr key={`${issue.documentId}/${issue.seq}`} className="border-t border-border">
                   <td className="px-3 py-2">
-                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px]">
-                      {e.type.toLowerCase()}
-                      {e.subtype !== "NONE" ? ` · ${e.subtype.toLowerCase().replace("_", " ")}` : ""}
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                        issue.severity === "ERROR"
+                          ? "border-error text-error"
+                          : issue.severity === "WARNING"
+                            ? "border-warning text-warning"
+                            : "border-border text-muted-foreground"
+                      }`}
+                    >
+                      {issue.severity.toLowerCase()}
                     </span>
-                    {e.source === "MANUAL" && (
-                      <span className="ml-1 text-[10px] text-muted-foreground">manual</span>
+                  </td>
+                  <td className="px-3 py-2">{issue.code}</td>
+                  <td className="px-3 py-2">{issue.message}</td>
+                  <td className="px-3 py-2">
+                    {issue.accountId ? (
+                      <button
+                        type="button"
+                        className="text-accent underline-offset-2 hover:underline"
+                        onClick={() => {
+                          setFilter({
+                            ...filter,
+                            ids: undefined,
+                            address: issue.accountId as string,
+                            offset: 0,
+                          });
+                          onSub?.("events");
+                        }}
+                      >
+                        {issue.accountId.slice(0, 10)}…
+                      </button>
+                    ) : (
+                      "—"
                     )}
                   </td>
-                  <td
-                    className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${
-                      e.type === "RECEIVE" ? "text-success" : e.type === "SPEND" || e.type === "TRADE" ? "" : ""
-                    }`}
-                  >
-                    {signed}
-                    {fmtAmount(e.amount, asset?.decimals ?? 18, 6)}{" "}
-                    <span className="text-muted-foreground">{asset?.symbol ?? e.asset}</span>
-                  </td>
-                  <td className="px-3 py-2">
-                    {e.counterpartyLabel ?? (e.counterparty ? short(e.counterparty) : "—")}
-                  </td>
                   <td className="px-3 py-2 text-muted-foreground">
-                    {e.label ?? short(e.address)}
-                  </td>
-                  <td className="max-w-60 truncate px-3 py-2 text-muted-foreground" title={e.notes ?? ""}>
-                    {e.notes ?? ""}
+                    {new Date(issue.at).toLocaleString()}
                   </td>
                 </tr>
-              );
-            })}
-            {rows.length === 0 && !page.loading && (
-              <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                  No events match these filters yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+              {(issues?.data ?? []).length === 0 && !issues?.loading && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+                    No open issues. The reconciler is happy.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <>
+          {filter.ids && filter.ids.length > 0 && (
+            <div className="mt-3 flex items-center gap-3 rounded-lg border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs">
+              <span>
+                Pinned to {filter.ids.length} linked ledger event
+                {filter.ids.length === 1 ? "" : "s"} from the P&L view.
+              </span>
+              <button
+                type="button"
+                className="text-accent underline-offset-2 hover:underline"
+                onClick={() => setFilter({ ...filter, ids: undefined, offset: 0 })}
+              >
+                Show all
+              </button>
+            </div>
+          )}
 
-      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-        <span>
-          {total > 0 ? `${offset + 1}–${Math.min(offset + PAGE, total)} of ${total}` : ""}
-        </span>
-        <span className="flex gap-2">
-          <button
-            type="button"
-            disabled={offset === 0}
-            onClick={() => setFilter({ ...filter, offset: Math.max(0, offset - PAGE) })}
-            className="rounded-lg border border-border px-3 py-1 disabled:opacity-40"
-          >
-            Newer
-          </button>
-          <button
-            type="button"
-            disabled={offset + PAGE >= total}
-            onClick={() => setFilter({ ...filter, offset: offset + PAGE })}
-            className="rounded-lg border border-border px-3 py-1 disabled:opacity-40"
-          >
-            Older
-          </button>
-        </span>
-      </div>
+          {page.error && <p className="mt-3 text-sm text-red-700">{page.error}</p>}
+
+          <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">When</th>
+                  <th className="px-3 py-2">Kind</th>
+                  <th className="px-3 py-2 text-right">Amount</th>
+                  <th className="px-3 py-2">Counterparty</th>
+                  <th className="px-3 py-2">Account</th>
+                  <th className="px-3 py-2">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((e) => {
+                  const asset = decimals.get(e.asset);
+                  const signed = e.type === "RECEIVE" ? "+" : e.type === "SPEND" ? "−" : "";
+                  return (
+                    <tr
+                      key={`${e.documentId}/${e.eventId}`}
+                      className="cursor-pointer border-t border-border hover:bg-muted/30"
+                      onClick={() => onOpenEvent?.(e.eventId)}
+                    >
+                      <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
+                        {new Date(e.timestamp).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="rounded-full border border-border px-2 py-0.5 text-[10px]">
+                          {e.type.toLowerCase()}
+                          {e.subtype !== "NONE" ? ` · ${e.subtype.toLowerCase().replace("_", " ")}` : ""}
+                        </span>
+                        {e.source === "MANUAL" && (
+                          <span className="ml-1 text-[10px] text-muted-foreground">manual</span>
+                        )}
+                      </td>
+                      <td
+                        className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${
+                          e.type === "RECEIVE" ? "text-success" : e.type === "SPEND" || e.type === "TRADE" ? "" : ""
+                        }`}
+                      >
+                        {signed}
+                        {fmtAmount(e.amount, asset?.decimals ?? 18, 6)}{" "}
+                        <span className="text-muted-foreground">{asset?.symbol ?? e.asset}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        {e.counterpartyLabel ?? (e.counterparty ? short(e.counterparty) : "—")}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        <button
+                          type="button"
+                          className="hover:underline"
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            onOpenAccount?.(e.address);
+                          }}
+                        >
+                          {e.label ?? short(e.address)}
+                        </button>
+                      </td>
+                      <td className="max-w-60 truncate px-3 py-2 text-muted-foreground" title={e.notes ?? ""}>
+                        {e.notes ?? ""}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {rows.length === 0 && !page.loading && (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                      No events match these filters yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {total > 0 ? `${offset + 1}–${Math.min(offset + PAGE, total)} of ${total}` : ""}
+            </span>
+            <span className="flex gap-2">
+              <button
+                type="button"
+                disabled={offset === 0}
+                onClick={() => setFilter({ ...filter, offset: Math.max(0, offset - PAGE) })}
+                className="rounded-lg border border-border px-3 py-1 disabled:opacity-40"
+              >
+                Newer
+              </button>
+              <button
+                type="button"
+                disabled={offset + PAGE >= total}
+                onClick={() => setFilter({ ...filter, offset: offset + PAGE })}
+                className="rounded-lg border border-border px-3 py-1 disabled:opacity-40"
+              >
+                Older
+              </button>
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }

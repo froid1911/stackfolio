@@ -178,12 +178,12 @@ export const ethereumFetchValidatorsAction = createAction({
     }
 
     if (addresses.length > 0) {
-      // ETH1 (0x01) and compound (0x02) credentials embed the address, and
-      // the id filter usually resolves them. Prysm rejects 32-byte
-      // credential ids that aren't BLS public keys (HTTP 400 on 0x02), so
-      // rejected addresses are resolved afterwards by one bounded
-      // client-side scan of the head validator set.
-      const hexes = new Map<string, string[]>(); // address -> failed credentials
+      // ETH1 (0x01) and compound (0x02) credentials embed the address.
+      // Some beacons (Prysm) reject a 32-byte id that isn't a BLS public
+      // key, so the address lookup is a scan of the head validator set;
+      // only the Prysm id path is tried first, and only for 0x01.
+      const wanted = new Map<string, string>(); // last-40 hex -> address
+      const skipped = new Set<string>(); // resolved by the id probe
       for (const address of addresses) {
         if (typeof address !== "string") continue;
         const hex = address.toLowerCase().replace(/^0x/, "");
@@ -191,9 +191,7 @@ export const ethereumFetchValidatorsAction = createAction({
           errors.push(`withdrawal address ${address} is malformed`);
           continue;
         }
-        // ETH1 (0x01) credentials resolve through the id filter everywhere;
-        // compound (0x02) ids look like malformed public keys to Prysm, so
-        // only 0x01 is answered by id and 0x02 falls through to the scan.
+        wanted.set(hex, address);
         const eth1 = `0x01${"0".repeat(24)}${hex}`;
         try {
           const list = await beaconGet<BeaconValidatorData[]>(
@@ -201,52 +199,57 @@ export const ethereumFetchValidatorsAction = createAction({
             baseUrl,
           );
           for (const entry of list) pushRow(entry, null);
+          if (list.length > 0) skipped.add(hex);
         } catch {
-          errors.push(`validators by ${eth1}: the beacon refused the lookup`);
+          // no id support for credential ids - the scan below covers it
         }
-        (hexes.get(hex) ?? hexes.set(hex, []).get(hex)!).push(
-          `0x02${"0".repeat(24)}${hex}`,
-        );
       }
-      if (hexes.size > 0) {
-        // The head validator set is scanned in one pass of paged POSTs
-        // (a GET id list of a hundred thousand indices overflows both the
-        // URL limit and the response size a string can hold), and each
-        // page is matched against every wanted credential at once.
-        const tails = new Map<string, string[]>(); // last-40 hex -> creds
-        for (const [hex, failed] of hexes) {
-          const key = hex.slice(-40);
-          (tails.get(key) ?? tails.set(key, []).get(key)!).push(...failed);
-        }
+      const scanWanted = new Map(
+        [...wanted].filter(([hex]) => !skipped.has(hex)),
+      );
+      const seenHex = new Set<string>(); // found by the scan
+      if (scanWanted.size > 0) {
+        // One pass of paged POSTs over the head set (a GET id list of a
+        // hundred thousand indices overflows both the URL limit and the
+        // response size a string can hold); each page is matched against
+        // every wanted address at once. A failing page names the
+        // addresses still unfound: everything before it was scanned.
         const page = 100_000;
-        try {
-          for (let from = 0; ; from += page) {
-            // The beacon API's ids are strings: index text, pubkey hex or
-            // credential hex - bare numbers are a 400.
-            const ids = Array.from({ length: page }, (_, i) => String(from + i));
-            const list = await beaconPost<BeaconValidatorData[]>(
+        for (let from = 0; ; from += page) {
+          // The beacon API's ids are strings: index text, pubkey hex or
+          // credential hex - bare numbers are a 400.
+          const ids = Array.from({ length: page }, (_, i) => String(from + i));
+          let list: BeaconValidatorData[];
+          try {
+            list = await beaconPost<BeaconValidatorData[]>(
               "/eth/v1/beacon/states/head/validators",
               baseUrl,
               { ids, statuses: [] },
             );
-            if (list.length === 0) break;
-            for (const entry of list) {
-              const credential = entry.validator?.withdrawal_credentials;
-              if (typeof credential !== "string") continue;
-              if (tails.has(credential.toLowerCase().slice(-40))) {
-                pushRow(entry, null);
-              }
-            }
-            if (list.length < ids.length) break; // scanned past the tip
-          }
-        } catch (error) {
-          for (const failed of tails.values()) {
-            errors.push(
-              `validators by ${failed.join(", ")}: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
+          } catch (error) {
+            const lost = [...scanWanted.entries()].filter(
+              ([hex]) => !seenHex.has(hex),
             );
+            if (lost.length > 0) {
+              errors.push(
+                `validators by ${lost.map(([, a]) => a).join(", ")}: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+            }
+            break;
           }
+          if (list.length === 0) break;
+          for (const entry of list) {
+            const credential = entry.validator?.withdrawal_credentials;
+            if (typeof credential !== "string") continue;
+            const tail = credential.toLowerCase().slice(-40);
+            if (scanWanted.has(tail)) {
+              seenHex.add(tail);
+              pushRow(entry, null);
+            }
+          }
+          if (list.length < ids.length) break; // scanned past the tip
         }
       }
     }

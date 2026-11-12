@@ -122,6 +122,8 @@ function parseScaled(value: string, scale: number): bigint | null {
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value);
   if (!match) return null;
   const [, sign, whole, fraction = ""] = match;
+  // At scale 0 a fractional string has no exact integer reading; the
+  // caller must see null, not the truncated whole part.
   if (fraction.length > scale) return null;
   const digits = whole + fraction.padEnd(scale, "0");
   const scaled = BigInt(digits);
@@ -150,4 +152,175 @@ export function unitCostPerWhole(
     .toString()
     .padStart(9, "0");
   return `${sign}${digits.slice(0, -8)}.${digits.slice(-8)}`;
+}
+
+// ---- holdings: read-time fold of the ledger into a balances matrix ----
+
+/** One ledger event as the fold needs it. */
+export interface HoldingsEventRow {
+  asset: string;
+  /** The wallet (address as stored, lower-case). */
+  address: string;
+  /** Raw token units, decimal string. */
+  amount: string;
+  ignored: boolean;
+}
+
+export interface HoldingsInput {
+  events: HoldingsEventRow[];
+  /** Registry decimals per asset; a missing entry leaves quantity raw. */
+  decimals: Record<string, number>;
+  /** Latest price per WHOLE unit, 8-decimal text. */
+  prices: Record<string, string>;
+  /** Portfolio price overrides; they win over `prices`. */
+  overrides: Record<string, string>;
+}
+
+export interface HoldingsRow {
+  asset: string;
+  wallet: string;
+  /** Token units as decimals allow (registry-less assets: raw units). */
+  quantity: string;
+  /** Fiat value at the priced unit, 8-decimal text trimmed; null when
+   * the asset is unpriced or unregistered — never a guess. */
+  value: string | null;
+}
+
+const VALUE_SCALE = 8;
+
+/** Trim a scaled decimal of trailing zeros ("1.50000000" -> "1.5", "2" stays). */
+function trimZeros(text: string): string {
+  if (!text.includes(".")) return text;
+  return text.replace(/\.?0+$/, "");
+}
+
+function pow10(n: number): bigint {
+  return 10n ** BigInt(n);
+}
+
+/**
+ * Fold the drive's ledger events into (asset, wallet) holdings: ignored
+ * events drop, nets per pair fold exactly in raw units, zero nets drop,
+ * quantity renders at registry decimals, and value multiplies the priced
+ * unit (override first). Unpriced or unregistered assets carry null
+ * values — the view shows them, the totals do not count them.
+ */
+export function holdingsFromRows(input: HoldingsInput): HoldingsRow[] {
+  const nets = new Map<string, { raw: bigint; asset: string; wallet: string }>();
+  for (const event of input.events) {
+    if (event.ignored) continue;
+    const amount = parseScaled(event.amount, 0);
+    if (amount === null) continue;
+    const key = `${event.asset}\u0000${event.address}`;
+    const net = nets.get(key);
+    if (net) net.raw += amount;
+    else nets.set(key, { raw: amount, asset: event.asset, wallet: event.address });
+  }
+
+  const rows: HoldingsRow[] = [];
+  for (const { raw, asset, wallet } of nets.values()) {
+    if (raw === 0n) continue;
+    const decimals = input.decimals[asset];
+    const price = input.overrides[asset] ?? input.prices[asset];
+    const quantity =
+      decimals === undefined ? raw.toString() : trimZeros(formatScaledLocal(raw, decimals));
+    let value: string | null = null;
+    if (decimals !== undefined && price !== undefined) {
+      const unit = parseScaled(price, VALUE_SCALE);
+      if (unit !== null) {
+        // value = raw / 10^decimals * price  (scaled arithmetic, exact)
+        const scaled = (unit * raw) / pow10(decimals);
+        value = trimZeros(formatScaledLocal(scaled, VALUE_SCALE));
+      }
+    }
+    rows.push({ asset, wallet, quantity, value });
+  }
+  rows.sort((a, b) => a.asset.localeCompare(b.asset) || a.wallet.localeCompare(b.wallet));
+  return rows;
+}
+
+/** formatScaled for this module (no pieces dependency in the subgraph). */
+function formatScaledLocal(scaled: bigint, scale: number): string {
+  const negative = scaled < 0n;
+  const digits = (negative ? -scaled : scaled).toString().padStart(scale + 1, "0");
+  const whole = digits.slice(0, -scale) || "0";
+  const fraction = digits.slice(-scale);
+  const sign = negative ? "-" : "";
+  return scale === 0 ? `${sign}${whole}` : `${sign}${whole}.${fraction}`;
+}
+
+export interface AssetTotal {
+  asset: string;
+  quantity: string;
+  /** null when the asset carries no valued row. */
+  value: string | null;
+}
+
+export interface AccountTotal {
+  wallet: string;
+  value: string;
+}
+
+export interface BalancesTotals {
+  perAsset: AssetTotal[];
+  perAccount: AccountTotal[];
+  total: string;
+}
+
+/**
+ * Pivot holdings rows into per-asset and per-account totals plus the
+ * grand total, all in exact decimal arithmetic on the 8-decimal value
+ * strings (never float). Quantity sums need equal decimals per asset —
+ * rows carry token units at the registry's decimals, so they share scale.
+ */
+export function buildBalances(rows: HoldingsRow[]): BalancesTotals {
+  const scaleOf = (text: string): number => {
+    const dot = text.indexOf(".");
+    return dot < 0 ? 0 : text.length - dot - 1;
+  };
+  const sum = (values: string[]): string => {
+    const scale = values.reduce((m, v) => Math.max(m, scaleOf(v)), 8);
+    let acc = 0n;
+    for (const v of values) {
+      // Raw unit strings can exceed 2^53; Number(v)*10^scale would round.
+      const parsed = parseScaled(v, scale);
+      // An unparseable value (exponent form, junk) must not silently
+      // drop: it crosses through when it is alone.
+      if (parsed === null) return values.length === 1 ? v : "0";
+      acc += parsed;
+    }
+    return trimZeros(formatScaledLocal(acc, scale));
+  };
+
+  const byAsset = new Map<string, HoldingsRow[]>();
+  const byWallet = new Map<string, string[]>();
+  for (const row of rows) {
+    const assetRows = byAsset.get(row.asset);
+    if (assetRows) assetRows.push(row);
+    else byAsset.set(row.asset, [row]);
+    if (row.value !== null) {
+      const values = byWallet.get(row.wallet);
+      if (values) values.push(row.value);
+      else byWallet.set(row.wallet, [row.value]);
+    }
+  }
+
+  const perAsset: AssetTotal[] = [...byAsset.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([asset, assetRows]) => ({
+      asset,
+      // Quantities mix renderings: registry decimals give "2", a
+      // registry-less asset gives raw units — one scale would truncate
+      // the fractional row. The per-asset scale is the widest.
+      quantity: sum(assetRows.map((r) => r.quantity)),
+      value: assetRows.every((r) => r.value === null)
+        ? null
+        : sum(assetRows.filter((r) => r.value !== null).map((r) => r.value as string)),
+    }));
+  const perAccount: AccountTotal[] = [...byWallet.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([wallet, values]) => ({ wallet, value: sum(values) }));
+  const total =
+    perAccount.length === 0 ? "0" : sum(perAccount.map((a) => a.value));
+  return { perAsset, perAccount, total };
 }

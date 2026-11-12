@@ -2,9 +2,12 @@ import type { BaseSubgraph, Context } from "@powerhousedao/reactor-api";
 import { AccountingIndex } from "processors/accounting-index";
 import { PortfolioIndex } from "processors/portfolio-index";
 import {
+  buildBalances,
   driveFileIds,
   forwardEnsAddress,
+  holdingsFromRows,
   unitCostPerWhole,
+  type HoldingsInput,
 } from "./lib.js";
 
 /**
@@ -49,6 +52,110 @@ export const getResolvers = (
           ])
           .orderBy("address")
           .execute();
+      },
+
+      // ---- holdings: read-time fold of the ledger into a matrix ----
+      //
+      // Not a table: the snapshot state carries no account attribution
+      // (snapshot-portfolio collapses per-wallet nets), so the matrix is
+      // folded here from the same indexed events the events view reads,
+      // exactly like pieces/ethereum's holdings-from-ledger does for the
+      // total — kept in step by the same source. Values price the net at
+      // prices_latest with the portfolio's overrides winning; unpriced or
+      // unregistered assets cross with a null value and stay out of the
+      // totals, never guessed. Native ETH balances are indexed separately
+      // (accounts.native_balance); the ledger has no event for them, so
+      // they are folded in here as (chain's native asset, wallet) rows.
+      holdings: async (_parent: unknown, args: { driveId: string }, ctx: Context) => {
+        const ids = await driveFileIds(subgraph, args.driveId, ctx);
+        if (!ids || ids.length === 0)
+          return { holdings: [], perAsset: [], perAccount: [], total: "0" };
+        const [events, assets, prices, overrides, accounts, labels] =
+          await Promise.all([
+            query(args.driveId).selectFrom("events").where("document_id", "in", ids)
+              .select(["asset", "address", "amount", "ignored", "chain_id"])
+              .execute(),
+            query(args.driveId).selectFrom("assets").where("document_id", "in", ids)
+              .select(["identifier", "symbol", "decimals", "chain_id"])
+              .execute(),
+            query(args.driveId).selectFrom("prices_latest").where("document_id", "in", ids)
+              .select(["asset", "price"])
+              .orderBy("fetched_at", "desc")
+              .execute(),
+            query(args.driveId).selectFrom("price_overrides").where("document_id", "in", ids)
+              .select(["asset", "price"])
+              .execute(),
+            query(args.driveId).selectFrom("accounts").where("document_id", "in", ids)
+              .select(["address", "chain_id", "native_balance"])
+              .execute(),
+            query(args.driveId).selectFrom("address_labels").where("document_id", "in", ids)
+              .select(["address", "label", "ens_name"])
+              .execute(),
+          ]);
+
+        const decimals: Record<string, number> = {};
+        const symbols: Record<string, string> = {};
+        for (const asset of assets) {
+          decimals[asset.identifier] = asset.decimals;
+          symbols[asset.identifier] = asset.symbol;
+        }
+        // Native ETH identifiers price per chain without a registry row
+        // (slip44:60); the ledger stores the same identifier, so both are
+        // 18-decimal and named here as a fallback to the registry.
+        const nativeOf = (chainId: number) => `eip155:${chainId}/slip44:60`;
+        for (const p of prices) {
+          if (p.asset.endsWith("/slip44:60") && !(p.asset in decimals)) {
+            decimals[p.asset] = 18;
+            symbols[p.asset] = p.asset.startsWith("eip155:1/") ? "ETH" : `ETH(${p.asset.slice(7, p.asset.indexOf("/"))})`;
+          }
+        }
+
+        const ledgerEvents: HoldingsInput["events"] = events.map((e) => ({
+          asset: e.asset,
+          address: e.address,
+          amount: e.amount,
+          ignored: e.ignored,
+        }));
+        // Native balances come from the account rows, not the ledger;
+        // each account's balance belongs to its own chain's identifier.
+        const nativeEvents: HoldingsInput["events"] = accounts
+          .filter((a) => a.native_balance && BigInt(a.native_balance) !== 0n)
+          .map((a) => ({
+            asset: nativeOf(a.chain_id),
+            address: a.address,
+            amount: a.native_balance as string,
+            ignored: false,
+          }));
+
+        // Prices: later (newer) rows win — fetched_at descending, so the
+        // last write per asset is the freshest.
+        const rows = holdingsFromRows({
+          events: [...ledgerEvents, ...nativeEvents],
+          decimals,
+          prices: Object.fromEntries(prices.map((p) => [p.asset, p.price])),
+          overrides: Object.fromEntries(overrides.map((o) => [o.asset, o.price])),
+        });
+
+        const labelByAddress = new Map(
+          labels.map((l) => [l.address, { label: l.label, ensName: l.ens_name }]),
+        );
+        const totals = buildBalances(rows);
+        return {
+          holdings: rows.map((row) => ({
+            ...row,
+            symbol: symbols[row.asset] ?? row.asset.slice(-6).toUpperCase(),
+          })),
+          perAsset: totals.perAsset.map((t) => ({
+            ...t,
+            symbol: symbols[t.asset] ?? t.asset.slice(-6).toUpperCase(),
+          })),
+          perAccount: totals.perAccount.map((a) => ({
+            ...a,
+            label: labelByAddress.get(a.wallet)?.label ?? null,
+            ensName: labelByAddress.get(a.wallet)?.ensName ?? null,
+          })),
+          total: totals.total,
+        };
       },
 
       events: async (

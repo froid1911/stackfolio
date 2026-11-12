@@ -5,7 +5,7 @@ export const schema: DocumentNode = gql`
   type PortfolioApiSubgraphQueries {
     "Every wallet account the drive tracks, with its scan progress."
     accounts(driveId: String!): [PortfolioApiAccount!]!
-    "One ledger page, newest first. Filters compose; \`query\` matches asset, address, label, note or identifier."
+    "One ledger page, newest first. Filters compose; 'query' matches asset, address, label, note or identifier."
     events(
       driveId: String!
       "Ledger event ids to pin to; a deep link from another view."
@@ -32,6 +32,8 @@ export const schema: DocumentNode = gql`
     priceOverrides(driveId: String!): [PortfolioApiOverride!]!
     "Portfolio history, newest first."
     snapshots(driveId: String!, first: Int): [PortfolioApiSnapshot!]!
+    "Balances matrix over the ledger: holdings per (asset, wallet) with per-asset and per-account totals; ignored events excluded."
+    holdings(driveId: String!): PortfolioApiBalances!
     validators(driveId: String!): [PortfolioApiValidator!]!
     stakingBalances(
       driveId: String!
@@ -40,9 +42,9 @@ export const schema: DocumentNode = gql`
       to: String
     ): [PortfolioApiStakingBalance!]!
     withdrawals(driveId: String!, validatorIndex: Int): [PortfolioApiWithdrawal!]!
-    "Open cost-basis lots, oldest source event first. \`wallet\` filters to one address as stored (lower-case)."
+    "Open cost-basis lots, oldest source event first. 'wallet' filters to one address as stored (lower-case)."
     openLots(driveId: String!, wallet: String): [PortfolioApiLot!]!
-    "Realized disposals, newest first; \`consumed\` names the lots each one drew from."
+    "Realized disposals, newest first; 'consumed' names the lots each one drew from."
     realizedEvents(
       driveId: String!
       wallet: String
@@ -169,6 +171,41 @@ export const schema: DocumentNode = gql`
     asset: String!
     amount: String!
     value: String!
+  }
+
+  "One (asset, wallet) holding, folded from the ledger at read time."
+  type PortfolioApiHolding {
+    asset: String!
+    symbol: String!
+    "The wallet address as stored (lower-case)."
+    wallet: String!
+    "Token units at the asset's decimals (raw units when unregistered)."
+    quantity: String!
+    "Fiat value at the latest price (portfolio overrides win); null when the asset is unpriced or unregistered - never a guess."
+    value: String
+  }
+
+  type PortfolioApiAssetTotal {
+    asset: String!
+    symbol: String!
+    quantity: String!
+    "null when no row of the asset carries a value."
+    value: String
+  }
+
+  type PortfolioApiAccountTotal {
+    wallet: String!
+    ensName: String
+    label: String
+    value: String!
+  }
+
+  "The balances matrix: holdings rows plus per-asset and per-account totals."
+  type PortfolioApiBalances {
+    holdings: [PortfolioApiHolding!]!
+    perAsset: [PortfolioApiAssetTotal!]!
+    perAccount: [PortfolioApiAccountTotal!]!
+    total: String!
   }
 
   type PortfolioApiValidator {

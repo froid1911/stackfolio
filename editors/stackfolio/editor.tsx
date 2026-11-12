@@ -73,6 +73,29 @@ export default function Editor({ children }: EditorProps) {
   if (mode === null && nodes) setMode(plan.ready ? "tabs" : "wizard");
   const activeMode = mode;
 
+  // Every hook runs BEFORE the early returns below - the wizard/loading
+  // branch must not change the hook count (React rule; the overlays and
+  // the command palette added hooks, so all of it moved up here).
+  // The asset detail names a registered asset; match the URL slug
+  // against the drive's registry ids (the only candidate set that can
+  // resolve it - balances rows are a subset).
+  const registryIds = useAssetIds(driveId);
+  const portfolioId = portfolioNodeId(list);
+  // The address deep link resolves against the book's addresses (read
+  // from the portfolio document's own state).
+  const portfolioIds = usePortfolioAddresses(portfolioId);
+  const portfolioActions = usePortfolioActions(portfolioId);
+  const eventPageIds = useEventIds(driveId, active === "history");
+  const eventDetail = useDetail(
+    active === "history" ? "history" : "dashboard",
+    eventPageIds,
+  );
+  const accountBookDetail = useDetail(
+    active === "address-book" ? "address-book" : "dashboard",
+    portfolioIds,
+  );
+  const assetDetail = useDetail(active === "assets" || active === "balances" ? active : "dashboard", registryIds);
+
   if (children) return <div className="h-full w-full">{children}</div>;
 
   if (activeMode === null) {
@@ -87,32 +110,6 @@ export default function Editor({ children }: EditorProps) {
   }
 
   const go = (target: Page | "files") => setSearchParams({ page: target });
-  // Cutover: `?page=` is canonical now (it addresses drawer pages the
-  // old tab strip never had). A legacy `?tab=` link lands on the right
-  // page and the URL is rewritten to ?page= once, so shared links
-  // converge on the canonical form; the legacy mapping in nav.ts keeps
-  // old bookmarks resolving.
-
-  // The asset detail names a registered asset; match the URL slug
-  // against the drive's registry ids (the only candidate set that can
-  // resolve it - balances rows are a subset).
-  const registryIds = useAssetIds(driveId);
-  const portfolioId = portfolioNodeId(list);
-  // The address deep link resolves against the book's addresses (read
-  // from the portfolio document's own state).
-  const portfolioBook = usePortfolioAddresses(portfolioId);
-  const portfolioIds = portfolioBook;
-  const portfolioActions = usePortfolioActions(portfolioId);
-  const eventPageIds = useEventIds(driveId, active === "history");
-  const eventDetail = useDetail(
-    active === "history" ? "history" : "dashboard",
-    eventPageIds,
-  );
-  const accountBookDetail = useDetail(
-    active === "address-book" ? "address-book" : "dashboard",
-    portfolioIds,
-  );
-  const assetDetail = useDetail(active === "assets" || active === "balances" ? active : "dashboard", registryIds);
 
 
   // Ctrl/Cmd+K from anywhere; the palette's own Escape closes it (the
@@ -130,6 +127,19 @@ export default function Editor({ children }: EditorProps) {
 
   // Detail overlays address through ?detail=<kind>:<slug> (lib/detail);
   // closing removes the param, leaving the page - and history intact.
+  // Ctrl/Cmd+K from anywhere; the palette's own Escape closes it (the
+  // handler must not close twice through the bubbled event, so it only
+  // fires Escape when the palette is open - CommandPalette calls
+  // onClose on its own keydown; this listener covers window-level
+  // opens from the shortcut and closing when focus is outside).
+  useEffect(() => {
+    const handler = paletteKeyHandler(paletteOpen, () => setPaletteOpen(true), () =>
+      setPaletteOpen(false),
+    );
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [paletteOpen]);
+
   const closeDetail = () =>
     setSearchParams({ detail: undefined }, { replace: false });
 

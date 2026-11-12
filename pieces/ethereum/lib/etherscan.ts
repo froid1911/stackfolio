@@ -118,7 +118,10 @@ export function createEtherscanClient(opts: {
   const doFetch = opts.fetchImpl ?? fetch;
   const sleep =
     opts.sleepFn ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
-  const spacingMs = opts.spacingMs ?? 250;
+  // The key's real budget, measured: "Max calls per sec rate limit
+  // reached (3/sec)". Stay just under it so the retrying path is the
+  // exception, not the steady state.
+  const spacingMs = opts.spacingMs ?? 340;
   const chainId = opts.chainId ?? 1;
 
   const cachePath = (params: Record<string, string | number>): string | null =>

@@ -144,6 +144,29 @@ describe("fetch-prices", () => {
     ]);
   });
 
+  it("expands exponent-form dust prices to plain decimals", async () => {
+    // Dead tokens answer 1.084e-9; the price book reducer rejects exponent
+    // text and the whole RECORD_PRICES used to fail on it.
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes("contract_addresses=")) {
+        return {
+          ok: true,
+          json: () => ({
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": { eur: 1.084e-9 },
+          }),
+        };
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    const result = await runAction([USDC], null);
+
+    expect(result.prices).toEqual([
+      { asset: USDC, price: "0.000000001084", source: "COINGECKO", hour: HOUR },
+    ]);
+    expect(result.error).toBeNull();
+  });
+
   it("never invents a price: unmapped assets surface in error", async () => {
     fetchMock.mockImplementation(() => Promise.resolve({ ok: true, json: () => ({}) }));
 

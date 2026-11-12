@@ -1,6 +1,7 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { ethereumAuth } from "../auth.js";
 import { authProps } from "../client.js";
+import { toDecimal } from "../history.js";
 import { parseJsonish } from "../jsonish.js";
 
 const ETH_IDENTIFIER = "eip155:1/slip44:60";
@@ -200,9 +201,18 @@ export const ethereumFetchPricesAction = createAction({
             ? (entry as Record<string, unknown>)[currency]
             : undefined;
         if (typeof price === "number" || typeof price === "string") {
+          const value =
+            typeof price === "number" ? price : Number.parseFloat(price);
+          if (!Number.isFinite(value) || value < 0) {
+            errors.push(`CoinGecko answered a bad price for ${asset}`);
+            continue;
+          }
           prices.push({
             asset,
-            price: String(price),
+            // Fixed-point text: JSON numbers arrive in exponent form for
+            // the dust of dead tokens (1.084e-9), and the price book takes
+            // plain decimals only.
+            price: toDecimal(value),
             source: "COINGECKO",
             hour: props.hour,
           });

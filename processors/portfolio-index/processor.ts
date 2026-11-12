@@ -13,6 +13,8 @@
  */
 import { RelationalDbProcessor } from "@powerhousedao/shared/processors";
 import type { OperationWithContext } from "document-model";
+import type { DocumentReader } from "../shared/delivery.js";
+import { stateFetcher } from "../shared/delivery.js";
 import { up } from "./migrations.js";
 import {
   hyperliquidRows,
@@ -76,27 +78,13 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
 
   /**
    * Fallback state source for deliveries that arrive without resulting
-   * state: an operation index behind, the reactor replays operations
-   * statelessly, and a skipped state would leave the rows stale until the
-   * document's next write. The factory wires this to the host module's
-   * document read; tests can supply a stub.
+   * state (`processors/shared/delivery.ts`): the factory wires this to
+   * the host module's document read; tests supply a stub.
    */
   private fetchState?: (documentId: string) => Promise<string | undefined>;
 
-  setDocumentReader(read: {
-    get(id: string): Promise<{ state: unknown }>;
-  }): void {
-    this.fetchState = async (documentId) => {
-      try {
-        const doc = await read.get(documentId);
-        return JSON.stringify(doc.state);
-      } catch (error) {
-        console.warn(
-          `[portfolio-index] state fetch failed for ${documentId}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return undefined; // deleted or unreadable
-      }
-    };
+  setDocumentReader(read: DocumentReader): void {
+    this.fetchState = stateFetcher(read, "portfolio-index");
   }
 
   onOperations(operations: OperationWithContext[]): Promise<void> {

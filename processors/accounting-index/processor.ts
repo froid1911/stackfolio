@@ -11,6 +11,8 @@
  */
 import { RelationalDbProcessor } from "@powerhousedao/shared/processors";
 import type { OperationWithContext } from "document-model";
+import type { DocumentReader } from "../shared/delivery.js";
+import { stateFetcher } from "../shared/delivery.js";
 import { down, up } from "./migrations.js";
 import {
   foldAll,
@@ -65,6 +67,13 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
   /** Writes are serialised: two batches must not interleave the fold. */
   private queue: Promise<void> = Promise.resolve();
 
+  /** Fallback state source for stateless deliveries; wired by the factory. */
+  private fetchState?: (documentId: string) => Promise<string | undefined>;
+
+  setDocumentReader(read: DocumentReader): void {
+    this.fetchState = stateFetcher(read, "accounting-index");
+  }
+
   onOperations(operations: OperationWithContext[]): Promise<void> {
     const next = this.queue.then(() => this.index(operations));
     this.queue = next.catch(() => undefined);
@@ -91,6 +100,7 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
   private async index(operations: OperationWithContext[]): Promise<void> {
     const latest = new Map<string, Latest>();
     const deleted = new Set<string>();
+    const statelessDocs = new Map<string, string>();
 
     for (const { operation, context } of operations) {
       const type = operation.action.type;
@@ -116,8 +126,21 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
         continue;
       }
       if (deleted.has(documentId)) continue;
-      if (!context.resultingState) continue;
+      if (!context.resultingState) {
+        statelessDocs.set(documentId, documentType);
+        continue;
+      }
+      statelessDocs.delete(documentId);
       latest.set(documentId, { documentType, resultingState: context.resultingState });
+    }
+
+    // A stateless delivery is not a reason to leave rows stale: read the
+    // document's current state off the reactor instead.
+    for (const [documentId, documentType] of statelessDocs) {
+      if (!this.fetchState) continue;
+      const state = await this.fetchState(documentId);
+      if (state === undefined) continue;
+      latest.set(documentId, { documentType, resultingState: state });
     }
 
     for (const documentId of deleted) {

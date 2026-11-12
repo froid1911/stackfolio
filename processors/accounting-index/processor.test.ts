@@ -231,6 +231,28 @@ describe("accounting-index", () => {
     });
   });
 
+  it("fetches the document state when a delivery carries none", async () => {
+    const { db, processor } = await harness();
+    const wallet = walletDocument();
+    processor.setDocumentReader({ get: async () => ({ state: wallet.state }) });
+
+    await processor.onOperations(replay(registryDocument()));
+    await processor.onOperations(replay(portfolioDocument()));
+    const op = testOperation({
+      documentId: wallet.header.id,
+      documentType: wallet.header.documentType,
+      type: "SET_LABEL",
+    });
+    await processor.onOperations([op]);
+
+    const lots = await db
+      .selectFrom("lots")
+      .selectAll()
+      .where("wallet", "=", W1)
+      .execute();
+    expect(lots).toHaveLength(1);
+  });
+
   it("stages chain identifiers longer than any conventional column", async () => {
     // Real log ids ("0x<64 hex>:log:<block>") and withdrawal ids overran
     // the first column sizes and the staging insert died under the host's

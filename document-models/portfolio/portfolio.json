@@ -104,10 +104,10 @@
               "errors": [
                 {
                   "id": "b543778e-992a-4351-94d1-07060173bb03",
-                  "name": "AddressNotFoundError",
                   "code": "ADDRESS_NOT_FOUND",
-                  "description": "No tracked address with that id",
-                  "template": ""
+                  "name": "AddressNotFoundError",
+                  "template": "",
+                  "description": "No tracked address with that id"
                 }
               ],
               "schema": "input RemoveAddressInput {\n  id: OID!\n}",
@@ -123,10 +123,10 @@
               "errors": [
                 {
                   "id": "b79c5880-855b-4e89-99a9-dff61e2e63cd",
-                  "name": "AddressNotFoundError",
                   "code": "ADDRESS_NOT_FOUND",
-                  "description": "No tracked address with that id",
-                  "template": ""
+                  "name": "AddressNotFoundError",
+                  "template": "",
+                  "description": "No tracked address with that id"
                 }
               ],
               "schema": "input SetAddressIgnoredInput {\n  id: OID!\n  ignored: Boolean!\n}",
@@ -149,10 +149,10 @@
               "errors": [
                 {
                   "id": "6e462e8e-da6e-4aa0-a323-8c7bf56d753a",
-                  "name": "InvalidAmountError",
                   "code": "INVALID_AMOUNT",
-                  "description": "The price is not a decimal amount",
-                  "template": ""
+                  "name": "InvalidAmountError",
+                  "template": "",
+                  "description": "The price is not a decimal amount"
                 }
               ],
               "schema": "input SetPriceOverrideInput {\n  asset: String!\n  price: String!\n  setAt: DateTime!\n}",
@@ -197,21 +197,21 @@
               "errors": [
                 {
                   "id": "d948b4ad-4298-457a-a729-76af507f7474",
-                  "name": "SnapshotEmptyError",
                   "code": "EMPTY_SNAPSHOT",
-                  "description": "A snapshot needs at least one value",
-                  "template": ""
+                  "name": "SnapshotEmptyError",
+                  "template": "",
+                  "description": "A snapshot needs at least one value"
                 },
                 {
                   "id": "9dc93373-1e97-4eb2-b70d-f2b61f1f74e1",
-                  "name": "InvalidAmountError",
                   "code": "INVALID_AMOUNT",
-                  "description": "A snapshot value is not a decimal amount",
-                  "template": ""
+                  "name": "InvalidAmountError",
+                  "template": "",
+                  "description": "A snapshot value is not a decimal amount"
                 }
               ],
               "schema": "input TakeSnapshotInput {\n  id: OID!\n  timestamp: DateTime!\n  totalValue: String!\n  netWorth: String\n  liabilities: [SnapshotLiabilityInput!]\n  perLocation: [LocationValueInput!]!\n  perAsset: [AssetValueInput!]!\n}\n\ninput SnapshotLiabilityInput {\n  asset: String!\n  amount: String!\n}\n\ninput LocationValueInput {\n  location: String!\n  value: String!\n}\n\ninput AssetValueInput {\n  asset: String!\n  amount: String!\n  value: String!\n}",
-              "reducer": "const isDecimal = (value: string) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nif (action.input.perLocation.length === 0 && action.input.perAsset.length === 0) {\n  throw new SnapshotEmptyError(\"A snapshot needs at least one location or asset value\");\n}\nconst amounts = [\n  action.input.totalValue,\n  ...action.input.perLocation.map((l) => l.value),\n  ...action.input.perAsset.flatMap((a) => [a.amount, a.value]),\n  ...(action.input.liabilities ?? []).map((l) => l.amount),\n];\nfor (const amount of amounts) {\n  if (!isDecimal(amount)) throw new InvalidAmountError(`${amount} is not a decimal amount`);\n}\nif (action.input.netWorth != null && !/^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(action.input.netWorth)) {\n  throw new InvalidAmountError(`${action.input.netWorth} is not a decimal amount`);\n}\nstate.snapshots.push({\n  id: action.input.id,\n  timestamp: action.input.timestamp,\n  totalValue: action.input.totalValue,\n  netWorth: action.input.netWorth ?? null,\n  liabilities: action.input.liabilities ?? [],\n  perLocation: action.input.perLocation,\n  perAsset: action.input.perAsset,\n});",
+              "reducer": "const isDecimal = (value: string) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\n// Ledger-derived holdings can net negative when a wallet's history\n// cannot account every inflow (internal transfers are invisible\n// without traces); the snapshot records that honestly instead of\n// losing the asset.\nconst isSignedDecimal = (value: string) => /^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nif (action.input.perLocation.length === 0 && action.input.perAsset.length === 0) {\n  throw new SnapshotEmptyError(\"A snapshot needs at least one location or asset value\");\n}\nconst signedAmounts = [\n  action.input.totalValue,\n  ...action.input.perLocation.map((l) => l.value),\n  ...action.input.perAsset.flatMap((a) => [a.amount, a.value]),\n];\nfor (const amount of signedAmounts) {\n  if (!isSignedDecimal(amount)) throw new InvalidAmountError(`${amount} is not a decimal amount`);\n}\nfor (const liability of action.input.liabilities ?? []) {\n  if (!isDecimal(liability.amount)) throw new InvalidAmountError(`${liability.amount} is not a decimal amount`);\n}\nif (action.input.netWorth != null && !/^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(action.input.netWorth)) {\n  throw new InvalidAmountError(`${action.input.netWorth} is not a decimal amount`);\n}\nstate.snapshots.push({\n  id: action.input.id,\n  timestamp: action.input.timestamp,\n  totalValue: action.input.totalValue,\n  netWorth: action.input.netWorth ?? null,\n  liabilities: action.input.liabilities ?? [],\n  perLocation: action.input.perLocation,\n  perAsset: action.input.perAsset,\n});",
               "examples": [],
               "template": "",
               "description": ""
@@ -223,10 +223,10 @@
               "errors": [
                 {
                   "id": "0f7c6b45-66cb-4c7c-a2bf-1690a5e056c7",
-                  "name": "SnapshotNotFoundError",
                   "code": "SNAPSHOT_NOT_FOUND",
-                  "description": "No snapshot with that id",
-                  "template": ""
+                  "name": "SnapshotNotFoundError",
+                  "template": "",
+                  "description": "No snapshot with that id"
                 }
               ],
               "schema": "input DeleteSnapshotInput {\n  id: OID!\n}",
@@ -292,20 +292,20 @@
         {
           "id": "a08bbd13-0901-4007-8b3b-55ea20f649a7",
           "name": "positions",
-          "description": "On-chain DeFi positions per wallet and chain",
           "operations": [
             {
               "id": "16fbc77b-6071-41d7-a0d5-641af3cbf5e3",
               "name": "SET_POSITIONS",
-              "description": "",
-              "schema": "input SetPositionsInput {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionInput!]!\n}\n\ninput PositionInput {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAssetInput!]!\n  note: String\n}\n\ninput PositionAssetInput {\n  asset: String!\n  amount: String!\n}",
-              "template": "",
-              "reducer": "const entry = {\n  wallet: action.input.wallet,\n  chainId: action.input.chainId,\n  fetchedAt: action.input.fetchedAt,\n  positions: action.input.positions,\n};\nconst index = state.positions.findIndex(\n  (p) => p.wallet === action.input.wallet && p.chainId === action.input.chainId,\n);\nif (index === -1) {\n  state.positions.push(entry);\n} else {\n  state.positions[index] = entry;\n};",
+              "scope": "global",
               "errors": [],
+              "schema": "input SetPositionsInput {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionInput!]!\n}\n\ninput PositionInput {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAssetInput!]!\n  note: String\n}\n\ninput PositionAssetInput {\n  asset: String!\n  amount: String!\n}",
+              "reducer": "const entry = {\n  wallet: action.input.wallet,\n  chainId: action.input.chainId,\n  fetchedAt: action.input.fetchedAt,\n  positions: action.input.positions,\n};\nconst index = state.positions.findIndex(\n  (p) => p.wallet === action.input.wallet && p.chainId === action.input.chainId,\n);\nif (index === -1) {\n  state.positions.push(entry);\n} else {\n  state.positions[index] = entry;\n};",
               "examples": [],
-              "scope": "global"
+              "template": "",
+              "description": ""
             }
-          ]
+          ],
+          "description": "On-chain DeFi positions per wallet and chain"
         }
       ],
       "version": 1,

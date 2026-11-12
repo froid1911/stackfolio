@@ -9,6 +9,12 @@ export const portfolioSnapshotsOperations: PortfolioSnapshotsOperations = {
   takeSnapshotOperation(state, action) {
     const isDecimal = (value: string) =>
       /^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(value);
+    // Ledger-derived holdings can net negative when a wallet's history
+    // cannot account every inflow (internal transfers are invisible
+    // without traces); the snapshot records that honestly instead of
+    // losing the asset.
+    const isSignedDecimal = (value: string) =>
+      /^-?(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(value);
     if (
       action.input.perLocation.length === 0 &&
       action.input.perAsset.length === 0
@@ -17,15 +23,20 @@ export const portfolioSnapshotsOperations: PortfolioSnapshotsOperations = {
         "A snapshot needs at least one location or asset value",
       );
     }
-    const amounts = [
+    const signedAmounts = [
       action.input.totalValue,
       ...action.input.perLocation.map((l) => l.value),
       ...action.input.perAsset.flatMap((a) => [a.amount, a.value]),
-      ...(action.input.liabilities ?? []).map((l) => l.amount),
     ];
-    for (const amount of amounts) {
-      if (!isDecimal(amount))
+    for (const amount of signedAmounts) {
+      if (!isSignedDecimal(amount))
         throw new InvalidAmountError(`${amount} is not a decimal amount`);
+    }
+    for (const liability of action.input.liabilities ?? []) {
+      if (!isDecimal(liability.amount))
+        throw new InvalidAmountError(
+          `${liability.amount} is not a decimal amount`,
+        );
     }
     if (
       action.input.netWorth != null &&

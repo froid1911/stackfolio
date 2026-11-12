@@ -1,12 +1,10 @@
 import {
-  actions,
   deleteSnapshot,
   reducer,
   takeSnapshot,
   utils,
 } from "document-models/portfolio/v1";
 import { describe, expect, it } from "vitest";
-
 
 const validInput = (overrides: Record<string, unknown> = {}) => ({
   id: "snap-1",
@@ -51,7 +49,7 @@ describe("SnapshotOperations", () => {
   it("should reject non-decimal snapshot amounts", () => {
     const cases: Array<Record<string, unknown>> = [
       { totalValue: "many" },
-      { perLocation: [{ location: "eip155:1", value: "-5" }] },
+      { perLocation: [{ location: "eip155:1", value: "-5.5.5" }] },
       {
         perAsset: [
           { asset: "eip155:1/slip44:60", amount: "1,5", value: "1000" },
@@ -67,6 +65,29 @@ describe("SnapshotOperations", () => {
         "is not a decimal amount",
       );
     }
+  });
+
+  it("should record a negative holding (ledger without full inflow coverage)", () => {
+    const document = reducer(
+      utils.createDocument(),
+      takeSnapshot(
+        validInput({
+          totalValue: "-7.5",
+          perAsset: [
+            {
+              asset: "eip155:1/erc20:0xc12d1c73ee7dc3615ba4e37e4ab7e05f8f4e1e3b",
+              amount: "-4.543350290722074076",
+              value: "-7.5",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(document.operations.global[0].error).toBeUndefined();
+    expect(
+      document.state.global.snapshots[0].perAsset[0].amount,
+    ).toBe("-4.543350290722074076");
   });
 
   it("should store liabilities and net worth", () => {

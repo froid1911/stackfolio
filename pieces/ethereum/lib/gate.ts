@@ -46,7 +46,14 @@ export function gated<T>(
     g.queue.push({
       lane,
       fn: fn,
-      settle: (value, error) => (error !== undefined ? reject(error) : resolve(value as T)),
+      settle: (value, error) =>
+        error !== undefined
+          ? reject(
+              error instanceof Error
+                ? error
+                : new Error("gated call failed", { cause: error }),
+            )
+          : resolve(value as T),
     });
     if (!g.busy) pump(g);
   });

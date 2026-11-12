@@ -133,6 +133,10 @@ Bun.serve({
           },
         },
       });
+      // Attach the state immediately: `message` may run before the first
+      // upstream read assigns it, and reading `conn.data` as undefined
+      // crashed the whole proxy (uncaught TypeError in the ws handler).
+      conn.data = state;
       client.data = { ...client.data, conn };
     },
     /** @param {WebSocket & { data: { conn?: ReturnType<typeof Bun.connect> | null } }} client */

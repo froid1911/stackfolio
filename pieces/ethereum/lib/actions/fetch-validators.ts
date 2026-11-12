@@ -13,6 +13,7 @@ interface BeaconValidatorData {
   validator?: {
     pubkey?: unknown;
     withdrawal_credentials?: unknown;
+    activation_epoch?: unknown;
     exit_epoch?: unknown;
     withdrawable_epoch?: unknown;
     activation_timestamp?: unknown;
@@ -56,7 +57,9 @@ function epochTime(
 ): string | null {
   if (genesisTime === null) return null;
   const value = toBigInt(epoch);
-  if (value === null || value <= 0n || value >= FAR_FUTURE) return null;
+  // Epoch 0 is real (the genesis set activates at genesis itself); only
+  // negatives and the FAR_FUTURE sentinel mean "not happened".
+  if (value === null || value < 0n || value >= FAR_FUTURE) return null;
   const seconds = BigInt(genesisTime) + value * SECONDS_PER_EPOCH;
   return new Date(Number(seconds) * 1000).toISOString();
 }
@@ -142,11 +145,15 @@ export const ethereumFetchValidatorsAction = createAction({
         publicKey:
           typeof validator.pubkey === "string" ? validator.pubkey : "",
         withdrawalAddress: withdrawalAddress(validator.withdrawal_credentials),
+        // A beacon that serves activation_timestamp (Lighthouse) wins;
+        // Prysm does not, so fall back to the epoch the way the exit and
+        // withdrawable timestamps are computed. Without this every
+        // validator read from Prysm looked "pending" forever.
         activationTimestamp:
           validator.activation_timestamp === undefined ||
           validator.activation_timestamp === null ||
           validator.activation_timestamp === ""
-            ? null
+            ? epochTime(validator.activation_epoch, genesisTime)
             : new Date(Number(validator.activation_timestamp) * 1000).toISOString(),
         withdrawableTimestamp: withdrawable,
         // A set exit epoch means the validator left; the closest honest

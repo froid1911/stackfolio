@@ -110,7 +110,11 @@ describe("fetch-validators", () => {
       index: 7,
       publicKey: PUBKEY,
       withdrawalAddress: `0x${CRED_01.slice(-40)}`,
-      activationTimestamp: null,
+      // Prysm serves no activation_timestamp; the epoch is the only
+      // activation fact, and it must reach the row as a timestamp.
+      activationTimestamp: new Date(
+        (GENESIS_TIME + 54 * 32 * 12) * 1000,
+      ).toISOString(),
       withdrawableTimestamp: null,
       exitedTimestamp: null,
     });

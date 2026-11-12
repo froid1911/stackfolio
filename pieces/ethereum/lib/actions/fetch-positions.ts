@@ -13,7 +13,26 @@ const SELECTORS = {
   tokenOfOwnerByIndex: "0x2f745c59",
   positions: "0x99fbab88",
   slot0: "0x3850c7bd",
+  // Aave v3 Pool / PoolDataProvider
+  getReservesList: "0xd1946dbc",
+  getReserveData: "0x35ea6a75",
+  getUserAccountData: "0xbf92857c",
 } as const;
+
+/**
+ * Public RPCs for the chains the sweep covers, used when no rpcUrl is
+ * given: the local node only answers for mainnet, and reading mainnet
+ * state under a Polygon label would be worse than reading nothing.
+ */
+const PUBLIC_RPC: Record<number, string> = {
+  1: "http://127.0.0.1:8545",
+  10: "https://mainnet.optimism.io",
+  56: "https://bsc-rpc.publicnode.com",
+  137: "https://polygon.drpc.org",
+  42161: "https://arbitrum-one-rpc.publicnode.com",
+  8453: "https://base-rpc.publicnode.com",
+  43114: "https://avalanche-c-chain-rpc.publicnode.com",
+};
 
 const pad = (value: string | number | bigint): string => {
   if (typeof value === "string") {
@@ -77,7 +96,10 @@ export const ethereumFetchPositionsAction = createAction({
     if (!Number.isInteger(props.chainId) || props.chainId <= 0) {
       throw new Error(`chainId ${props.chainId} is not a positive integer`);
     }
-    const rpcUrl = props.rpcUrl?.trim() || "http://127.0.0.1:8545";
+    const rpcUrl =
+      props.rpcUrl?.trim() ||
+      PUBLIC_RPC[props.chainId] ||
+      "http://127.0.0.1:8545";
 
     let rpcId = 0;
     const ethCall = async (to: string, data: string): Promise<string> => {
@@ -132,6 +154,83 @@ export const ethereumFetchPositionsAction = createAction({
       );
       if (!chain) continue;
       const univ3 = manifest.plugins.includes("univ3-position-math");
+
+      if (manifest.plugins.includes("aave-v3")) {
+        // Aave v3 money market: walk the pool's reserves and read the
+        // wallet's aToken (supplied) and variable-debt token (borrowed)
+        // balances. Supply and debt share the underlying asset id; the
+        // sign of the amount is what distinguishes them.
+        const pools = chain.contracts.filter(
+          (contract) =>
+            contract.kind === "CORE" && /^pool(-v\d+(\.\d+)*)?$/.test(contract.name),
+        );
+        for (const pool of pools) {
+          let list: string;
+          try {
+            list = await ethCall(pool.address, SELECTORS.getReservesList);
+          } catch {
+            continue; // not a pool at this address
+          }
+          const body = list.startsWith("0x") ? list.slice(2) : list;
+          const count = Number(BigInt(`0x${body.slice(64, 128)}`));
+          let accountNote: string | null = null;
+          try {
+            const acct = await ethCall(
+              pool.address,
+              `${SELECTORS.getUserAccountData}${pad(wallet)}`,
+            );
+            const factor = BigInt(word(acct, 5));
+            const health =
+              factor >= 1n << 255n
+                ? "unlimited"
+                : (Number(factor) / 1e27).toFixed(2);
+            accountNote = `health ${health}`;
+          } catch {
+            /* older pool without account data; the balances still stand */
+          }
+          for (let index = 0; index < count; index++) {
+            const underlying = `0x${body.slice(128 + index * 64 + 24, 128 + (index + 1) * 64)}`;
+            let reserveData: string;
+            try {
+              reserveData = await ethCall(
+                pool.address,
+                `${SELECTORS.getReserveData}${pad(underlying)}`,
+              );
+            } catch {
+              continue;
+            }
+            const aToken = `0x${word(reserveData, 8).slice(-40)}`;
+            const debtToken = `0x${word(reserveData, 10).slice(-40)}`;
+            const [supplied, borrowed] = await Promise.all([
+              ethCall(aToken, `${SELECTORS.balanceOfAddress}${pad(wallet)}`)
+                .then((r) => BigInt(word(r, 0)))
+                .catch(() => 0n),
+              ethCall(debtToken, `${SELECTORS.balanceOfAddress}${pad(wallet)}`)
+                .then((r) => BigInt(word(r, 0)))
+                .catch(() => 0n),
+            ]);
+            if (supplied > 0n) {
+              positions.push({
+                protocol: manifest.id,
+                kind: "SPOT",
+                assets: [{ asset: asset(underlying), amount: supplied.toString() }],
+                note: accountNote ? `supplied — ${accountNote}` : "supplied",
+              });
+            }
+            if (borrowed > 0n) {
+              positions.push({
+                protocol: manifest.id,
+                kind: "SPOT",
+                assets: [
+                  { asset: asset(underlying), amount: `-${borrowed.toString()}` },
+                ],
+                note: "borrowed",
+              });
+            }
+          }
+        }
+        continue;
+      }
 
       for (const contract of chain.contracts) {
         if (contract.kind !== "POSITION") continue;

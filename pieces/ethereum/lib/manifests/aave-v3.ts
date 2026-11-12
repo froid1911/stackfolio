@@ -1,13 +1,14 @@
 import type { ProtocolManifest } from "../manifest.js";
 
 /**
- * Aave v3. Pool addresses verified against rotki's EVM_POOLS and live
- * mainnet logs; event topics recomputed from the ABI fragments in this file
+ * Aave v3. Pool addresses come from bgd-labs/aave-address-book (the
+ * deployment Aave ships) and were verified live with getReservesList on
+ * each chain. Mainnet keeps the v3.0 pool too: its frozen reserves still
+ * hold funds. Event topics recomputed from the ABI fragments in this file
  * (manifest.test.ts enforces) and cross-checked with on-chain logs.
- * Aave v3 deploys the pool at the same addresses on most v3 chains.
  */
-const POOL = "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2";
-const OLD_POOL = "0x794a61358D6845594F94dc1DB02A252b5b4814aD";
+const MAINNET_POOL = "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2";
+const MAINNET_OLD_POOL = "0x794a61358D6845594F94dc1DB02A252b5b4814aD";
 
 const events = [
   {
@@ -42,14 +43,32 @@ const events = [
   },
 ];
 
-const chains = [1, 137, 42161, 10, 8453].map((chainId) => ({
-  chainId,
-  contracts: [
-    { name: "pool", address: POOL, kind: "CORE" as const },
-    { name: "pool-v3.1", address: OLD_POOL, kind: "CORE" as const },
+/** Pool addresses per chain from the address book; the v3 deployment
+ * shares 0x794a… across the old L2s, so it is not "same everywhere". */
+const POOLS: Record<number, Array<{ name: string; address: string }>> = {
+  1: [
+    { name: "pool", address: MAINNET_POOL },
+    { name: "pool-v3.0", address: MAINNET_OLD_POOL },
   ],
-  events,
-}));
+  10: [{ name: "pool", address: MAINNET_OLD_POOL }],
+  56: [{ name: "pool", address: "0x6807dc923806fE8Fd134338EABCA509979a7e0cB" }],
+  137: [{ name: "pool", address: MAINNET_OLD_POOL }],
+  8453: [{ name: "pool", address: "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5" }],
+  42161: [{ name: "pool", address: MAINNET_OLD_POOL }],
+  43114: [{ name: "pool", address: MAINNET_OLD_POOL }],
+};
+
+const chains = Object.keys(POOLS)
+  .map(Number)
+  .map((chainId) => ({
+    chainId,
+    contracts: POOLS[chainId].map((entry) => ({
+      name: entry.name,
+      address: entry.address,
+      kind: "CORE" as const,
+    })),
+    events,
+  }));
 
 export const aaveV3: ProtocolManifest = {
   id: "aave-v3",

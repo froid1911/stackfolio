@@ -8,6 +8,10 @@ const VAULT = "0x1111111111111111111111111111111111111111";
 const DEBT = "0x2222222222222222222222222222222222222222";
 const TOKEN0 = "0x00000000000000000000000000000000000000aa";
 const TOKEN1 = "0x00000000000000000000000000000000000000bb";
+const POOL = "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2";
+const A_TOKEN = "0x4d5f47fa6a74757f35c14fd3a6ef8e3c9bc514e8";
+const VAR_DEBT = "0x98c23e9d8f34fefb1b7bd6a91b7ff122f4e16f5c";
+const UNDERLYING = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
 const word = (value: bigint | number | string): string => {
   if (typeof value === "string") {
@@ -54,6 +58,18 @@ const registryDoc = {
                 { name: "vault", address: VAULT, kind: "POSITION" },
                 { name: "debt-token", address: DEBT, kind: "DEBT", underlying: "usdc" },
               ],
+              events: [event],
+            },
+          ],
+        },
+        {
+          id: "aave-v3",
+          status: "ACTIVE",
+          plugins: ["aave-v3"],
+          chains: [
+            {
+              chainId: 1,
+              contracts: [{ name: "pool", address: POOL, kind: "CORE" }],
               events: [event],
             },
           ],
@@ -112,6 +128,11 @@ const rpc = vi.fn(async (_url: string, init: { body: string }) => {
     result = packedFor(tokenId);
   } else if (to.toLowerCase() === VAULT) {
     result = `0x${word(12345)}`;
+  } else if (to.toLowerCase() === POOL && data.startsWith("0xd1946dbc")) {
+    // getReservesList: an empty market keeps the shared mock neutral.
+    result = `0x${word(32)}${word(0)}`;
+  } else if (to.toLowerCase() === POOL && data.startsWith("0xbf92857c")) {
+    result = `0x${[0, 0, 0, 0, 0].map((entry) => word(entry)).join("")}${word(1n << 255n)}`;
   } else {
     throw new Error(`unexpected eth_call target ${to}`);
   }
@@ -219,5 +240,78 @@ describe("fetch-positions", () => {
       input: Record<string, unknown>;
     }>;
     expect(actions[0].input.positions).toEqual([]);
+  });
+
+  it("sweeps the aave money market: supply positive, debt negative", async () => {
+    const aaveRpc = vi.fn(async (_url: string, init: { body: string }) => {
+      const request = JSON.parse(init.body) as {
+        params: Array<{ to: string; data: string }>;
+      };
+      const { to, data } = request.params[0];
+      let result = "0x";
+      if (to.toLowerCase() === POOL && data.startsWith("0xd1946dbc")) {
+        result = `0x${word(32)}${word(1)}${word(UNDERLYING)}`;
+      } else if (to.toLowerCase() === POOL && data.startsWith("0x35ea6a75")) {
+        const fields = [0, 0, 0, 0, 0, 0, 0, 0];
+        result = `0x${fields.map((entry) => word(entry)).join("")}${word(A_TOKEN)}${word(0)}${word(VAR_DEBT)}`;
+      } else if (to.toLowerCase() === POOL && data.startsWith("0xbf92857c")) {
+        const fields = [0, 0, 0, 0, 0];
+        result = `0x${fields.map((entry) => word(entry)).join("")}${word(1_230_000_000_000_000_000_000_000_000n)}`;
+      } else if (to.toLowerCase() === A_TOKEN && data.startsWith("0x70a08231")) {
+        result = `0x${word(5_000_000)}`;
+      } else if (to.toLowerCase() === VAR_DEBT && data.startsWith("0x70a08231")) {
+        result = `0x${word(2_000_000)}`;
+      } else {
+        throw new Error(`unexpected eth_call target ${to}`);
+      }
+      return { ok: true, status: 200, json: async () => ({ result }) };
+    });
+
+    const aaveOnlyDoc = {
+      header: { documentType: "stackfolio/protocol-registry" },
+      state: {
+        global: {
+          protocols: [
+            {
+              id: "aave-v3",
+              status: "ACTIVE",
+              plugins: ["aave-v3"],
+              chains: [
+                {
+                  chainId: 1,
+                  contracts: [{ name: "pool", address: POOL, kind: "CORE" }],
+                  events: [event],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    get.mockResolvedValueOnce(aaveOnlyDoc);
+    const output = (await run({ fetchImpl: aaveRpc })) as { positions: number };
+    expect(output.positions).toBe(2);
+    const actions = execute.mock.calls[0][2] as Array<{
+      input: { positions: Array<Record<string, unknown>> };
+    }>;
+    const positions = actions[0].input.positions;
+    const supplied = positions.find((p) => String(p.note).startsWith("supplied"));
+    const borrowed = positions.find((p) => p.note === "borrowed");
+    expect(supplied).toMatchObject({
+      protocol: "aave-v3",
+      note: "supplied — health 1.23",
+      assets: [
+        {
+          asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          amount: "5000000",
+        },
+      ],
+    });
+    expect(borrowed?.assets).toEqual([
+      {
+        asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        amount: "-2000000",
+      },
+    ]);
   });
 });

@@ -175,21 +175,33 @@ export const ethereumFetchValidatorsAction = createAction({
     }
 
     if (addresses.length > 0) {
-      try {
-        const list = await beaconPost<BeaconValidatorData[]>(
-          "/eth/v1/beacon/states/head/validators",
-          baseUrl,
-          {
-            addresses: addresses.filter(
-              (a): a is string => typeof a === "string",
-            ),
-          },
-        );
-        for (const entry of list) pushRow(entry, null);
-      } catch (error) {
-        errors.push(
-          `validators by address: ${error instanceof Error ? error.message : String(error)}`,
-        );
+      // Standard beacon nodes resolve validators by withdrawal
+      // credentials through the same id filter; query each credential
+      // separately so one node's odd rejection cannot sink the others.
+      // ETH1 (0x01) and compound (0x02) credentials embed the address.
+      for (const address of addresses) {
+        if (typeof address !== "string") continue;
+        const hex = address.toLowerCase().replace(/^0x/, "");
+        if (!/^[0-9a-f]{40}$/.test(hex)) {
+          errors.push(`withdrawal address ${address} is malformed`);
+          continue;
+        }
+        for (const prefix of ["0x01", "0x02"]) {
+          const credentials = `${prefix}${"0".repeat(24)}${hex}`;
+          try {
+            const list = await beaconGet<BeaconValidatorData[]>(
+              `/eth/v1/beacon/states/head/validators?id=${credentials}`,
+              baseUrl,
+            );
+            for (const entry of list) pushRow(entry, null);
+          } catch (error) {
+            errors.push(
+              `validators by ${credentials.slice(0, 6)}…${hex.slice(-6)}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          }
+        }
       }
     }
 

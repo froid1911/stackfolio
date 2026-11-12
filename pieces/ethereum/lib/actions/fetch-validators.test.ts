@@ -171,20 +171,24 @@ describe("fetch-validators", () => {
     expect(result.error).toContain("40");
   });
 
-  it("resolves validators by withdrawal address via the list endpoint", async () => {
+  it("resolves validators by withdrawal credentials via the id filter", async () => {
+    const address = `0x${CRED_01.slice(-40)}`.toLowerCase();
     fetchMock.mockImplementation(
-      (url: string, init?: { method?: string; body?: string }) => {
-      if (url.endsWith("/eth/v1/beacon/genesis")) {
-        return json({ data: { genesis_time: String(GENESIS_TIME) } });
-      }
-      if (url.endsWith("/validators") && init?.method === "POST") {
-        expect(JSON.parse(init.body ?? "[]")).toEqual({
-          addresses: [`0x${CRED_01.slice(-40)}`],
-        });
-        return json({ data: [activeValidator] });
-      }
-      throw new Error(`unexpected url ${url}`);
-    });
+      (url: string) => {
+        if (url.endsWith("/eth/v1/beacon/genesis")) {
+          return json({ data: { genesis_time: String(GENESIS_TIME) } });
+        }
+        if (url.includes("validators?id=")) {
+          const wanted = url.split("id=")[1];
+          const hex = address.replace(/^0x/, "");
+          if (wanted === `0x01${"0".repeat(24)}${hex}`) {
+            return json({ data: [activeValidator] });
+          }
+          return json({ data: [] });
+        }
+        throw new Error(`unexpected url ${url}`);
+      },
+    );
 
     const result = (await ethereumFetchValidatorsAction.run({
       propsValue: {

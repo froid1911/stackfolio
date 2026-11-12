@@ -177,7 +177,7 @@ describe("seed manifests", () => {
     expect(ids).toEqual(["aave-v3", "ens", "sky", "uniswap-v2", "uniswap-v3"]);
     const aave = SEED_MANIFESTS.find((m) => m.id === "aave-v3") as ProtocolManifest;
     expect(new Set(aave.chains.map((c) => c.chainId))).toEqual(
-      new Set([1, 10, 137, 42161, 8453]),
+      new Set([1, 10, 56, 137, 42161, 8453, 43114]),
     );
     const uniswap = SEED_MANIFESTS.find(
       (m) => m.id === "uniswap-v3",

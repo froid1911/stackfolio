@@ -82,6 +82,11 @@ const runAction = async (indices: number[], hour = "2026-11-11T10:00:00.000Z") =
 
 const json = (body: unknown) => ({ ok: true, status: 200, json: () => body });
 
+const expectPost = (body: string | undefined): string => {
+  if (!body) throw new Error("POST without a body");
+  return body;
+};
+
 beforeEach(() => {
   fetchMock.mockReset();
 });
@@ -233,11 +238,11 @@ describe("fetch-validators", () => {
           url.endsWith("/eth/v1/beacon/states/head/validators") &&
           init?.method === "POST"
         ) {
-          const body = JSON.parse(init?.body ?? "{}") as { ids: number[] };
+          const body = JSON.parse(init?.body ?? "{}") as { ids: string[] };
           const page = body.ids
-            .filter((i) => i < 10)
+            .filter((i) => Number(i) < 10)
             .map((i) =>
-              i === 9
+              Number(i) === 9
                 ? exitedValidator
                 : {
                     index: String(i),

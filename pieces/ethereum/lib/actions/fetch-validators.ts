@@ -109,9 +109,12 @@ export const ethereumFetchValidatorsAction = createAction({
       "withdrawalAddressesJson",
     );
     const hour = p.hour;
-    if (!Number.isFinite(Date.parse(hour))) {
+    // The day stamp must be a date; anything else (a workflow template
+    // left unresolved, a stray word) would poison every balance point's
+    // day, so it fails loudly instead of silently.
+    if (!/^\d{4}-\d{2}-\d{2}/.test(hour) || !Number.isFinite(Date.parse(hour))) {
       throw new Error(
-        "hour must be an ISO timestamp, e.g. 2026-11-11T10:00:00.000Z.",
+        `hour must be an ISO timestamp, e.g. 2026-11-11T10:00:00.000Z, got "${hour}".`,
       );
     }
     const day = hour.slice(0, 10);
@@ -218,7 +221,9 @@ export const ethereumFetchValidatorsAction = createAction({
         const page = 100_000;
         try {
           for (let from = 0; ; from += page) {
-            const ids = Array.from({ length: page }, (_, i) => from + i);
+            // The beacon API's ids are strings: index text, pubkey hex or
+            // credential hex - bare numbers are a 400.
+            const ids = Array.from({ length: page }, (_, i) => String(from + i));
             const list = await beaconPost<BeaconValidatorData[]>(
               "/eth/v1/beacon/states/head/validators",
               baseUrl,

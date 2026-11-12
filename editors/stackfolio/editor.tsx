@@ -14,7 +14,7 @@ import {
   useSetSearchParams,
 } from "@powerhousedao/reactor-browser";
 import type { EditorProps } from "document-model";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AccountsSection,
   AssetsSection,
@@ -27,6 +27,8 @@ import {
   TransactionsSection,
   portfolioNodeId,
 } from "./components/sections.js";
+import { CommandPalette, paletteKeyHandler } from "./components/CommandPalette.js";
+import type { SearchHit } from "./lib/search.js";
 import { Setup } from "./components/Setup.js";
 import { DriveContents } from "./components/DriveContents.js";
 import { FolderTree } from "./components/FolderTree.js";
@@ -56,6 +58,7 @@ export default function Editor({ children }: EditorProps) {
   const active: Page = pageParam({ page, tab }) ?? "dashboard";
   const driveId = drive.header.id;
   const [adding, setAdding] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   // The wizard runs to its own end: the plan turning ready mid-wizard must
   // not yank it away. The decision happens once the drive's nodes have
   // arrived, then sticks until Setup reports itself done.
@@ -78,6 +81,31 @@ export default function Editor({ children }: EditorProps) {
 
   const go = (target: Page | "files") => setSearchParams({ page: target });
 
+  // Ctrl/Cmd+K from anywhere; the palette's own Escape closes it (the
+  // handler must not close twice through the bubbled event, so it only
+  // fires Escape when the palette is open - CommandPalette calls
+  // onClose on its own keydown; this listener covers window-level
+  // opens from the shortcut and closing when focus is outside).
+  useEffect(() => {
+    const handler = paletteKeyHandler(paletteOpen, () => setPaletteOpen(true), () =>
+      setPaletteOpen(false),
+    );
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [paletteOpen]);
+
+  const goToHit = (hit: SearchHit) => {
+    setSearchParams(
+      {
+        page: hit.to.page,
+        detail: hit.to.detail ? `${hit.kind}:${hit.to.detail}` : undefined,
+        // A page hit is a fresh page view: drop stale detail/ids state.
+        ...(hit.kind === "page" ? { detail: undefined, ids: undefined, sub: undefined } : {}),
+      },
+      { replace: false },
+    );
+  };
+
   return (
     <Shell
       driveName={getDriveName(drive)}
@@ -85,7 +113,7 @@ export default function Editor({ children }: EditorProps) {
       filesActive={page === "files"}
       onNavigate={go}
       onOpenFiles={() => go("files")}
-      onSearchOpen={() => undefined}
+      onSearchOpen={() => setPaletteOpen(true)}
     >
       {page === "files" ? (
         <div className="flex h-full">
@@ -127,6 +155,12 @@ export default function Editor({ children }: EditorProps) {
           )}
         </>
       )}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        driveId={driveId}
+        onGo={goToHit}
+      />
     </Shell>
   );
 }

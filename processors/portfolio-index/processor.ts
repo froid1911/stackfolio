@@ -187,7 +187,7 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
         }
         default: {
           const s = stakingRows(documentId, parsed);
-          await this.writeStaking(s.validators, s.balances, s.withdrawals);
+          await this.writeStaking(documentId, s.validators, s.balances, s.withdrawals);
           break;
         }
       }
@@ -465,14 +465,14 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
   }
 
   private async writeStaking(
+    documentId: string,
     validators: ValidatorRow[],
     balances: BalancePointRow[],
     withdrawals: WithdrawalRow[],
   ): Promise<void> {
-    const documentId =
-      (validators.at(0) ?? balances.at(0) ?? withdrawals.at(0))?.document_id ??
-      "";
-
+    // The document id comes from the caller: when the last row is gone the
+    // lists are empty, and deriving an id from them would target the empty
+    // string and orphan the document's rows in the index.
     const storedValidators = await this.relationalDb
       .selectFrom("validators")
       .selectAll()

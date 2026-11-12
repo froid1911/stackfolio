@@ -377,4 +377,47 @@ describe("portfolio-index", () => {
     expect(refreshed.account_value_usd).toBeNull();
     expect(refreshed.updated_at).toBe("2026-11-11T11:00:00.000Z");
   });
+
+  it("deletes a validator row once the staking document watches nobody", async () => {
+    const { db, processor } = await harness();
+    const stakingDoc = (validators: unknown[]) => ({
+      header: {
+        id: "st-1",
+        documentType: "stackfolio/eth-staking",
+        name: "ETH staking",
+      },
+      state: {
+        global: {
+          validators,
+          balanceHistory: [],
+          withdrawals: [],
+          cursor: null,
+        },
+      },
+    });
+    await processor.onOperations(
+      replayEnvelope(
+        stakingDoc([
+          {
+            index: 7,
+            publicKey: "0xpub7",
+            withdrawalAddress: null,
+            activationTimestamp: null,
+            withdrawableTimestamp: null,
+            exitedTimestamp: null,
+          },
+        ]),
+      ),
+    );
+    // The derived document id of an empty row list is the empty string;
+    // deletes must still target this document or the row is orphaned.
+    await processor.onOperations(replayEnvelope(stakingDoc([])));
+
+    const rows = await db
+      .selectFrom("validators")
+      .selectAll()
+      .where("document_id", "=", "st-1")
+      .execute();
+    expect(rows).toEqual([]);
+  });
 });

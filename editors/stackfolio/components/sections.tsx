@@ -36,6 +36,9 @@ import {
   type DocWalletPositions,
 } from "./DeFi.js";
 import { AddAccountForm } from "./Setup.js";
+import { AddressBookView } from "./AddressBookView.js";
+import type { Detail } from "../lib/detail.js";
+import type { usePortfolioActions } from "../lib/mutations.js";
 import { actions as stakingActions } from "document-models/eth-staking";
 import { fireWorkflow, useWorkflowByName } from "../lib/workflows.js";
 import { useState } from "react";
@@ -273,6 +276,60 @@ export function TransactionsSection({ driveId }: { driveId: string }) {
           (prev) => ({ ...prev, ...(next === "issues" ? { sub: "issues" } : { sub: undefined }) }),
           { replace: true },
         )
+      }
+    />
+  );
+}
+
+/**
+ * The address book page: the portfolio document's `addresses` entries,
+ * edited through the portfolio actions; `?detail=account:<slug>` from
+ * the palette/Balances deep-links one entry (highlight) or an unknown
+ * address (prefilled add form).
+ */
+export function AddressBookSection({
+  list,
+  actions,
+  detail,
+}: {
+  list: { kind: string; id: string; documentType?: string }[];
+  actions: ReturnType<typeof usePortfolioActions>;
+  detail?: Detail;
+}) {
+  const { data: doc } = useDocumentSafe(portfolioNodeId(list));
+  const global = (
+    doc as { state?: { global?: { addresses?: unknown } } } | undefined
+  )?.state?.global;
+  const entries = (Array.isArray(global?.addresses) ? global.addresses : []) as Array<{
+    id: string;
+    address: string;
+    chainId: number;
+    label?: string | null;
+    ensName?: string | null;
+    ignored?: boolean;
+    addedAt?: string;
+  }>;
+  return (
+    <AddressBookView
+      entries={entries.map((e) => ({
+        id: e.id,
+        address: e.address,
+        chainId: e.chainId,
+        label: e.label ?? null,
+        ensName: e.ensName ?? null,
+        ignored: e.ignored ?? false,
+        addedAt: e.addedAt ?? new Date(0).toISOString(),
+      }))}
+      loading={doc === undefined}
+      portfolioReady={actions.ready}
+      onAdd={actions.addAddress}
+      onUpdate={actions.updateAddress}
+      onRemove={actions.removeAddress}
+      onIgnore={actions.setAddressIgnored}
+      deepLink={
+        detail
+          ? { address: detail.slug, resolved: detail.id !== undefined }
+          : undefined
       }
     />
   );

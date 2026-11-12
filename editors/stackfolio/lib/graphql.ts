@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useDocumentSafe } from "@powerhousedao/reactor-browser";
 import { gql } from "./gql.js";
 
 /**
@@ -313,6 +314,25 @@ export function useHoldings(driveId: string): QueryState<BalancesData | null> {
     { driveId },
     "holdings",
   );
+}
+
+/**
+ * The address book's addresses straight from the portfolio document —
+ * the candidate set for `account:` slugs (deep links). Reactor-browser's
+ * cache hook retrieves the document; the read is offline-cheap.
+ */
+export function usePortfolioAddresses(portfolioDocumentId: string | undefined): string[] {
+  const { data } = useDocumentSafe(portfolioDocumentId);
+  const addresses = (
+    data as
+      | { state?: { global?: { addresses?: Array<{ address?: unknown }> } } }
+      | undefined
+  )?.state?.global?.addresses;
+  const ids = (Array.isArray(addresses) ? addresses : [])
+    .map((a) => (typeof a.address === "string" ? a.address : ""))
+    .filter(Boolean);
+  const key = ids.join("\u0000");
+  return useMemo(() => (key ? key.split("\u0000") : []), [key]);
 }
 
 /** Just the registry's identifiers: the candidate set for `asset:` slugs. */

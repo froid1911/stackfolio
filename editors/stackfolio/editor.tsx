@@ -27,11 +27,14 @@ import {
   TransactionsSection,
   portfolioNodeId,
 } from "./components/sections.js";
+import { AddressBookSection } from "./components/sections.js";
 import { AssetDetail } from "./components/AssetDetail.js";
 import { CommandPalette, paletteKeyHandler } from "./components/CommandPalette.js";
 import { DetailNotFound } from "./components/DetailNotFound.js";
 import { useDetail } from "./lib/detail.js";
 import { useAssetIds } from "./lib/graphql.js";
+import { usePortfolioActions } from "./lib/mutations.js";
+import { usePortfolioAddresses } from "./lib/graphql.js";
 import type { SearchHit } from "./lib/search.js";
 import { Setup } from "./components/Setup.js";
 import { DriveContents } from "./components/DriveContents.js";
@@ -88,7 +91,18 @@ export default function Editor({ children }: EditorProps) {
   // against the drive's registry ids (the only candidate set that can
   // resolve it - balances rows are a subset).
   const registryIds = useAssetIds(driveId);
+  const portfolioId = portfolioNodeId(list);
+  // The address deep link resolves against the book's addresses (read
+  // from the portfolio document's own state).
+  const portfolioBook = usePortfolioAddresses(portfolioId);
+  const portfolioIds = portfolioBook;
+  const portfolioActions = usePortfolioActions(portfolioId);
+  const accountBookDetail = useDetail(
+    active === "address-book" ? "address-book" : "dashboard",
+    portfolioIds,
+  );
   const assetDetail = useDetail(active === "assets" || active === "balances" ? active : "dashboard", registryIds);
+
 
   // Ctrl/Cmd+K from anywhere; the palette's own Escape closes it (the
   // handler must not close twice through the bubbled event, so it only
@@ -159,6 +173,9 @@ export default function Editor({ children }: EditorProps) {
               }
               onCloseAccount={closeDetail}
             />
+          )}
+          {active === "address-book" && (
+            <AddressBookSection list={list} actions={portfolioActions} detail={accountBookDetail} />
           )}
           {active === "staking" && <StakingSection driveId={driveId} />}
           {active === "pnl" && <PnlSection driveId={driveId} list={list} />}

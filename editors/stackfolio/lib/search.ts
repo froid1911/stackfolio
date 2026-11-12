@@ -49,9 +49,19 @@ const CAP_PER_KIND = 8;
 const contains = (needle: string, haystack: string | null | undefined): boolean =>
   haystack !== null && haystack !== undefined && haystack.toLowerCase().includes(needle);
 
-/** Starts-with ranks above a mid-string hit. */
-const starts = (needle: string, haystack: string | null | undefined): number =>
-  haystack && haystack.toLowerCase().startsWith(needle) ? 0 : 1;
+/**
+ * Starts-with ranks above a mid-string hit, and word-start (the "a" in
+ * "D**a**shboard") below both: a search palette should not fire on any
+ * letter inside a word, but a word's initial letters are its name.
+ */
+const starts = (needle: string, haystack: string | null | undefined): number => {
+  if (!haystack) return 2;
+  const value = haystack.toLowerCase();
+  if (value.startsWith(needle)) return 0;
+  const at = value.indexOf(needle);
+  if (at > 0 && !/[\s(]/.test(value[at - 1])) return 2;
+  return 1;
+};
 
 /**
  * Build the palette's hits for `query`: nav pages always (empty query →

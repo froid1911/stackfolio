@@ -125,15 +125,15 @@ describe("buildHits", () => {
     const hits = buildHits("a", DATA)
       .filter((h) => h.kind === "page")
       .map((h) => h.to.page as Page);
-    // "a" matches every label except History and P&L; rank ties (none
-    // start with "a") and the table order decides.
+    // Word-initial letters ("Address", "Assets") rank above a letter
+    // buried mid-word ("D-a-shboard"); the rest tie on mid-word and keep
+    // nav table order.
     expect(hits).toEqual([
-      "dashboard",
-      "balances",
       "address-book",
       "assets",
-      "prices",
-      "defi",
+      "dashboard",
+      "balances",
+      "staking",
     ]);
   });
 });

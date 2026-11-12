@@ -4,33 +4,42 @@
  * Vite dev pre-bundles deps listed in optimizeDeps.include; @powerhousedao's
  * browser bundles (`document-model-*.js`, the connect chunks) are served
  * *raw* instead, so their bare imports of transitive CJS packages resolve to
- * the untransformed CommonJS entries. The browser can't import named
- * bindings from raw CJS, and one failing import kills the whole
- * dynamic-import chunk: every Connect document route hangs on "Loading
- * editor" forever. Failures observed on vite 8.0.14:
+ * the untransformed CommonJS entries — and raw CommonJS is unloadable in
+ * the browser: `exports.x =` assignments throw a missing-binding error for
+ * named imports ("does not provide an export named …"), a bare `module`
+ * reference throws outright, and a bare `process.env.NODE_ENV` throws
+ * ReferenceError. One failing import kills the whole dynamic-import chunk:
+ * every Connect document route hangs on "Loading editor" forever. Packages
+ * affected on vite 8.0.14 (all reached through the raw-served vendor
+ * bundles): safe-stable-stringify (document-model), void-elements
+ * (html-parse-stringify via react-i18next) and use-sync-external-store
+ * (react-i18next; wagmi/zustand reach the same files through
+ * pre-bundled graphs, which is why only these paths break).
  *
- *   safe-stable-stringify        → no export named 'stringify'
- *   void-elements                → no export named 'default'   (html-parse-stringify)
- *   use-sync-external-store/shim → no export named 'useSyncExternalStore' (react-i18next)
- *
- * For each affected file, the original CJS is copied to `<file>.cjs`
+ * Per entry file: the original CommonJS is copied to `<file>.cjs`
  * (untouched — Node `require` resolves through the package's
- * main/exports/require-condition and keeps landing on CommonJS) and the
- * entry becomes a pure-ESM shim:
+ * main/exports/require conditions and keeps landing on it; Vite dev serves
+ * `.cjs` raw, so it never executes in the browser), and the entry becomes a
+ * pure-ESM shim:
  *
- *   - `import { X } from "…/x.js"`   (no default import, e.g. safe-stable-stringify):
- *     a static re-export of the dev implementation — rollup/esbuild resolve
- *     named imports statically, and Vite dev serves the .js shim (transform
- *     with interop) while the .cjs stays raw, so the shim's own static
- *     import is browser-safe.
- *   - `import d from "…/x.js"` (default import, e.g. void-elements / the
- *     use-sync dispatchers): a runtime branch — browser (a runtime
- *     `process.env.NODE_ENV`, which Vite dev defines) dynamically imports
- *     the `.cjs` (interop default == its module.exports, whose
- *     `process.env.NODE_ENV` picks the dev build); a runtime `require`
- *     (Node, which never reaches this file through the package's
- *     conditions) takes the `.cjs` synchronously; plain bundlers without a
- *     runtime process statically re-export the dev implementation.
+ *   - browser: the dev implementation INLINED verbatim — a static import
+ *     of any raw file would hit the same wall. The body runs inside a
+ *     CommonJS wrapper (module/exports/process are its own bindings, the
+ *     environment a parameter), so nothing leaks into the ESM scope and
+ *     no `process.env` reference survives for the browser to trip on.
+ *     `require(…)` inside the implementation is mapped to ESM sources:
+ *     `react` via Vite's import map (the app's own instance), own-package
+ *     subpaths via this package's ESM faces. The wrapper returns the
+ *     CommonJS `module.exports` value (a captured entry-point assignment
+ *     wins over the exports bag), and the tail re-exports from it. The
+ *     runtime test and the dispatcher call reference `require`/`process`
+ *     only through computed globalThis keys: Rollup (Vite's dep
+ *     optimizer) rewrites bare occurrences of those identifiers in ESM
+ *     files, even in dead branches.
+ *   - Node: the untouched dispatcher — the shim resolves its `<file>.cjs`
+ *     sibling at runtime (`globalThis.require` on an absolute path, inert
+ *     to bundlers) — dev/prod selection intact. Node ESM (no `require`)
+ *     and bundlers take the wrapper branch.
  *
  * The patches live under node_modules/.pnpm, so they must be re-applied on
  * every install — hence postinstall. `--restore` rewrites the pristine CJS
@@ -41,14 +50,18 @@
 import { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-const store = join(process.cwd(), "node_modules", ".pnpm");
+// Overridable for tests: point the faces at a patch dir or a probe tree.
+const store = process.env.STACKFOLIO_MODULE_STORE ?? join(process.cwd(), "node_modules", ".pnpm");
 
-const SHIM_MARK = "Vite dev-interop shim";
+const SHIM_MARK = "Vite dev-interop shim v2";
 const restore = process.argv.includes("--restore");
 
-/** Copy `node_modules/.pnpm/<name>@*` package dirs for a package name. */
+/** Package dirs for a package name: pnpm store layout (`<name>@*` dirs)
+ * or a flat root (`node_modules` whose direct children are packages). */
 function pkgCopies(name) {
   const found = [];
+  const flat = join(store, name);
+  if (existsSync(join(flat, "package.json"))) found.push(flat);
   let entries;
   try {
     entries = readdirSync(store, { withFileTypes: true });
@@ -63,115 +76,255 @@ function pkgCopies(name) {
   return found;
 }
 
-/**
- * Files to give an ESM face. `tail` re-exports the implementation —
- * `__cjsModule.exports` is the CJS `module.exports` value (or, for static
- * re-exports of a plain implementation file, the module namespace) — under
- * the names ESM consumers import. `mode` picks the shim shape above:
- * "static" when consumers only name-import.
- */
-/** Named ESM re-exports after inlining an implementation whose
- * `exports.name = ...` assignments were kept (tail references `exports`). */
+/** Named ESM re-exports of an inlined implementation's `exports` bindings. */
 const NAMED = (names) => names.map((n) => "export const " + n + " = exports." + n + ";\n").join("");
 
+/**
+ * Entry files that get an ESM face. `tail` re-exports the inlined
+ * implementation (`exports` — the CJS `module.exports` value for
+ * single-file implementations, or the bindings an IIFE build assigned).
+ * `selfDeps` maps `require` specifiers the implementation uses to ESM
+ * sources: bare specifiers (react — provided through Vite's import map)
+ * and own-package subpaths (mapped to this package's ESM faces; the
+ * CommonJS self-require would loop back to the dispatcher).
+ */
 const FACES = [
   {
-    // @powerhousedao shared bundle imports { stringify } (and CJS consumers
-    // import default). Its CJS is a single implementation file, not a
-    // dev/prod dispatcher: re-export it directly.
+    // @powerhousedao's document-model bundle imports { stringify }; the
+    // entry is a single implementation file, no dev/prod dispatcher.
     name: "safe-stable-stringify",
     file: "index.js",
-    mode: "static",
     tail:
-      "export const configure = __cjsModule.exports.configure;\n" +
-      "export const stringify = __cjsModule.exports;\n" +
-      "export default __cjsModule.exports;\n",
+      "export const configure = exports.configure;\n" +
+      "export const stringify = exports.stringify;\n" +
+      "export default exports;\n",
   },
   {
     // html-parse-stringify (via react-i18next) default-imports this bare
-    // `module.exports = {…}` table.
+    // `module.exports = {…}` table. The inlined table is the `exports`
+    // binding itself (module.exports wiring is stripped), hence the
+    // prelude before re-exporting it as the default.
     name: "void-elements",
     file: "index.js",
-    mode: "runtime",
-    tail: "export default __cjsModule.exports;\n",
+    tail: "export default exports;\n",
   },
   {
     // react-i18next's ESM build named-imports the hook.
     name: "use-sync-external-store",
     file: "shim/index.js",
-    mode: "static",
+    selfDeps: [["react", "react"]],
     tail: NAMED(["useSyncExternalStore"]),
   },
   {
-    // The other subpath entries; zustand imports the root entry by name
-    // through its own pre-bundled build, these cover any raw ESM consumer.
+    // The root entry dispatches to the shim build (its browser entry);
+    // wagmi's pre-bundled graph and any raw consumer resolve here.
     name: "use-sync-external-store",
     file: "index.js",
-    mode: "static",
+    selfDeps: [["react", "react"]],
     tail: NAMED(["useSyncExternalStore"]),
   },
   {
     name: "use-sync-external-store",
     file: "with-selector.js",
-    mode: "static",
+    selfDeps: [
+      ["react", "react"],
+      ["use-sync-external-store/shim", "./shim/index.js"],
+    ],
     tail: NAMED(["useSyncExternalStoreWithSelector"]),
   },
   {
     name: "use-sync-external-store",
     file: "shim/with-selector.js",
-    mode: "static",
+    selfDeps: [
+      ["react", "react"],
+      ["use-sync-external-store/shim", "./index.js"],
+    ],
     tail: NAMED(["useSyncExternalStoreWithSelector"]),
   },
 ];
 
+const IDENT = (s) => "__dep_" + s.replace(/[^a-zA-Z0-9]/g, "_");
+
 /**
- * The dev implementation a CJS dispatcher selects — the `require(…)` from
- * its dev branch: `if (process.env.NODE_ENV === 'production') { … } else {
- * module.exports = require('…development.js') }`. (Matching the dev branch
- * specifically: the production line appears first in the file.)
+ * The dev implementation a dispatcher selects: the require() from its
+ * `else` (non-production) branch — `if (process.env.NODE_ENV ===
+ * 'production') { … } else { module.exports = require('…development.js') }`.
+ * (The dev branch specifically: production's require appears first.)
+ * Null when the entry is itself the implementation (single-file CJS).
  */
 function devImplOf(cur, fileDir) {
   const branches = [...cur.matchAll(/else\s*\{[^}]*?require\(\s*['"]([^'"]*?\.js)['"]/gs)];
   const rel = branches.length
     ? branches[0][1].replace(/^\.\//, "")
-    : (cur.match(/require\(\s*['"]([^'"]*?\.js)['"]/) ?? [])[1]?.replace(/^\.\//, "");
+    : null;
   if (!rel) return null;
   return existsSync(join(fileDir, rel)) ? rel : null;
 }
 
-function shimSource(stem, face, devRel, devSource) {
-  const devImport = devRel ? "./" + devRel.replace(/\\/g, "/") : "./" + stem + ".cjs";
-  const header =
-    "// " + SHIM_MARK + " (stackfolio postinstall): ESM view over the\n" +
-    "// CommonJS implementation — Vite dev serves .cjs raw, so ESM consumers\n" +
-    "// import through this shim instead.\n";
-  if (face.mode === "static") {
-    // Inline the dev implementation instead of importing it: Vite dev
-    // serves .js/.cjs raw without CJS interop, so an import would fail
-    // exactly like the original did. The dev build's guards
-    // (`"production" !== process.env.NODE_ENV && (function(){…})()`)
-    // become `true &&` — Vite dev defines process.env.NODE_ENV, and the
-    // inlined code runs the dev path. The dispatcher and production build
-    // remain in ./index.cjs for require() consumers.
-    return esmInline(devSource ?? "", face.tail, { keepExports: true });
+/**
+ * The ESM shim for one entry file.
+ *
+ * `implSource`: the browser build — the dev implementation, or the entry
+ * itself when the entry is the implementation. `stem`: basename without
+ * .js, i.e. the `.cjs` sibling written beside the entry.
+ *
+ * `tail` references the inlined implementation's `exports`; the Node
+ * branch rebinds the same tail to `__cjs.exports` (the dispatcher's).
+ */
+function shimSource(face, stem, implSource) {
+  const deps = face.selfDeps ?? [];
+  // The CommonJS implementation evaluates inside a CommonJS wrapper
+  // function: `exports`, `require`, `process` and `module` become
+  // parameters, so nothing leaks into the ESM module scope and nothing
+  // the browser lacks is referenced free (Vite dev's global
+  // `process.env.NODE_ENV` is shadowed — the implementation takes its
+  // no-NODE_ENV path). The source goes in verbatim: ESM and CommonJS
+  // share one grammar, so any parseable CJS body is valid here too.
+  const lines = implSource.split("\n");
+  const kept = [];
+
+  /**
+   * Does the `module.exports = <rhs>` assignment end on line `idx`?
+   * A balanced single line, or a bracketed literal spanning lines whose
+   * brackets close later. Returns the consumed extra-line count via
+   * consume(); balanced() decides eligibility and caches the end line.
+   */
+  const rhsEnd = new Map();
+  function balanced(rhs, ls, idx) {
+    // String-aware bracket scan: quotes toggle string mode, so brackets
+    // and braces inside string literals never affect the depth.
+    let depth = 0;
+    let str = null; // active quote char
+    const scan = (line) => {
+      let escaped = false;
+      for (const ch of line) {
+        if (str) {
+          if (escaped) escaped = false;
+          else if (ch === "\\") escaped = true;
+          else if (ch === str) str = null;
+          continue;
+        }
+        if (ch === '"' || ch === "'" || ch === "`") { str = ch; continue; }
+        if (ch === "(" || ch === "{" || ch === "[") depth++;
+        else if (ch === ")" || ch === "}" || ch === "]") depth--;
+      }
+    };
+    scan(rhs);
+    if (depth <= 0) {
+      const closed = depth === 0;
+      rhsEnd.set(idx, idx);
+      return closed;
+    }
+    let j = idx + 1;
+    for (; j < ls.length && depth > 0; j++) scan(ls[j]);
+    if (depth !== 0) return false;
+    rhsEnd.set(idx, j - 1);
+    return true;
   }
+  let capture = null; // entry-point value: `module.exports = <expr>` RHS
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
+    if (/^\s*(?:var|let|const)\s+__cjsEntry\b/.test(line)) continue; // repair
+    const m = line.match(/^(\s*)module\.exports\s*=\s*(.+?);?\s*$/);
+    if (m && balanced(m[2], lines, idx)) {
+      // An entry point: `module.exports = <expr>`. Capture the value in a
+      // binding; the wrapper assigns it to module.exports at the end, so
+      // the tail reads the real CommonJS export (bag for IIFE builds,
+      // replaced value for entry-point builds).
+      capture = m[1] + "var __cjsEntry = ";
+      kept.push(capture + m[2]); // the RHS keeps its own syntax (literal opener, or `;` for a reference)
+      for (let j = idx + 1; j <= (rhsEnd.get(idx) ?? idx); j++) {
+        kept.push(lines[j]);
+        idx = j;
+      }
+      continue;
+    }
+    if (/^\s*module\.exports(?:\.\w+)?\s*=/.test(line)) continue;
+    if (
+      /^\/\/ @ts-expect-error/.test(line) &&
+      /^\s*module\.exports\b/.test(lines[idx + 1] ?? "")
+    ) {
+      continue; // directive for an elided line
+    }
+    kept.push(/\brequire\(/.test(line) ? line.replace(/\brequire\(/g, "__cjsRequire(") : line);
+  }
+  const implBody = kept.join("\n");
+  // Rollup (Vite's dep optimizer) rewrites a bare `require` inside an
+  // ESM file to its own `__require` shim, which throws. The runtime
+  // test and the call must therefore not contain those identifiers
+  // textually: an indirect reference through a computed key is inert to
+  // both rewrites, and the `module` test is textually absent anyway
+  // (ESM has no `module`, real Node CJS always provides it).
+  const REQ = "req" + "uire"; // inert: no literal call-site token
+  const REQ_GLOB = 'globalThis["' + REQ + '"]';
+  const PROCESS = "process"; // inert: `process.env` never appears
+  const NODE_COND =
+    "typeof globalThis[\x22" + REQ + "\x22] === \x22function\x22 &&" +
+    " typeof globalThis[\x22" + PROCESS + "\x22] !== \x22undefined\x22 &&" +
+    " !!globalThis[\x22" + PROCESS + "\x22].env &&" +
+    " globalThis[\x22" + PROCESS + "\x22].env.NODE_ENV !== \x22production\x22";
   return (
-    header +
-    "// Runtime dispatch: in a browser (Vite dev defines\n" +
-    "// process.env.NODE_ENV) the .cjs is dynamically imported — its\n" +
-    "// interop default is module.exports, and its own NODE_ENV check picks\n" +
-    "// the dev build; `module` is undefined in ESM so the CommonJS wiring\n" +
-    "// is inert there. Under Node the require() branch runs synchronously;\n" +
-    "// bundlers without a runtime process take the static dev import.\n" +
-    "let __cjsModule;\n" +
-    'if (typeof process !== "undefined" && process.env && process.env.NODE_ENV) {\n' +
-    '  __cjsModule = { exports: (await import("./' + stem + '.cjs")).default };\n' +
-    "} else if (typeof require === \"function\") {\n" +
-    '  __cjsModule = { exports: require("./' + stem + '.cjs") };\n' +
-    "} else {\n" +
-    '  __cjsModule = await import("' + devImport + '");\n' +
+    "// " + SHIM_MARK + " (stackfolio postinstall): ESM view over the\n" +
+    "// CommonJS implementation. Vite dev serves raw .js/.cjs without CJS\n" +
+    "// interop - bare `module`/`exports`/`process` throw in the browser -\n" +
+    "// so the implementation runs here inside a CommonJS wrapper (its\n" +
+    "// globals are parameters; require maps to ESM sources) and its\n" +
+    "// interface is re-exported. require() consumers (Node) take the\n" +
+    "// untouched dispatcher in ./" + stem + ".cjs instead.\n" +
+    (deps.length
+      ? deps.map(([, src]) => `import * as ${IDENT(src)} from ${JSON.stringify(src)};`).join("\n") + "\n"
+      : "") +
+    // `__cjs` is declared once; both branches assign it. A second
+    // `const __cjs` inside the else-block would shadow this binding and
+    // leave it forever undefined.
+    "let __cjs;\n" +
+    'if (' + NODE_COND + ') {\n' +
+    "  // Node CJS (require + module exist): the original dispatcher,\n" +
+    "  // dev/prod selection intact. Bundlers and ESM take the wrapper.\n" +
+    "  // Load the sibling dispatcher by absolute path; a static\n" +
+    "  // bundle-time specifier would be resolved (and fail) by bundlers,\n" +
+    "  // and a .cjs file cannot be import()ed as ESM.\n" +
+    "  __cjs = " + REQ_GLOB + ".call(null, new URL(\"./" +
+      face.file.split("/").pop() +
+      '.cjs", import.meta.url).pathname);\n' +
+"} else {\n" +
+    "  // Browser / bundlers without a CommonJS runtime.\n" +
+    "  const __cjsRequire = (id) => {\n" +
+    "    const provided = {\n" +
+    (deps.length
+      ? deps.map(([spec, src]) => `      ${JSON.stringify(spec)}: ${IDENT(src)},`).join("\n") + "\n"
+      : "") +
+    "    };\n" +
+    '    const m = provided[id];\n' +
+    '    if (!m) throw new Error("[stackfolio shim] unexpected require: " + id);\n' +
+    "    return m;\n" +
+    "  };\n" +
+    "  const __module = { exports: {} };\n" +
+    "  // A fake environment: React builds read `process.env.NODE_ENV` at\n" +
+    "  // the top level; development builds are the interop default.\n" +
+    "  const processEnvShim = { env: {} };\n" +
+    "  __cjs = ((process = {}, __cjsRequire) => {\n" +
+    "    const module = __module;\n" +
+    "    const exports = module.exports;\n" +
+    "    " + implBody.replace(/\n/g, "\n    ") + "\n" +
+    // An entry-point body assigns module.exports; capture its value back
+    // onto __module.exports so the tail reads the real module.exports.
+    // IIFE builds mutate the bag, which IS __module.exports.
+    (capture ? "    module.exports = __cjsEntry;\n" : "") +
+    "    return __module.exports;\n" +
+    "  })(processEnvShim, __cjsRequire);\n" +
     "}\n" +
+    // The exports live in `__cjs` directly (the wrapper's return value).
+    // Binding them through `__cjs.exports` from inside an if/else block
+    // hits the TDZ rule for let/const in blocks (ECMA-262 10.2.1.16):
+    // the block's const declarations defer binding instantiation to the
+    // end of the block, so reading `__cjs` mid-block throws — Node even
+    // reports `void 0 !== X` true for a dead binding. One binding, read
+    // after the branches join, sidesteps it entirely.
     face.tail
+      .replace(/export const (\w+) = exports\.\1;/g, "export const $1 = __cjs.$1;")
+      .replace(/export default exports;/g, "export default __cjs;")
+      .replace(/export const (\w+) = exports;/g, "export const $1 = __cjs;")
   );
 }
 
@@ -200,32 +353,27 @@ for (const face of FACES) {
     } catch {
       continue;
     }
+    // Mark-versioned repair: an entry carrying an older shim mark is
+    // stale (the generator moved on) — restore the saved CommonJS and
+    // re-patch from pristine, whatever else the entry looks like.
     if (cur.includes(SHIM_MARK)) continue; // current shim already installed
-    if (cur.includes("__cjsModule") && existsSync(cjs)) {
-      cur = readFileSync(cjs, "utf8"); // repair: half-applied older shim
+    if (cur.includes("stackfolio postinstall")) {
+      if (existsSync(cjs)) cur = readFileSync(cjs, "utf8");
+      else continue; // stale shim whose pristine copy is gone; leave it
     }
     if (!/\bmodule\.exports\b/.test(cur) && existsSync(cjs)) {
-      cur = readFileSync(cjs, "utf8");
+      cur = readFileSync(cjs, "utf8"); // repair: entry edited past recognition
     }
-    if (!/\bmodule\.exports\b/.test(cur)) continue; // not a CJS dispatcher
+    if (!/\bmodule\.exports\b/.test(cur)) continue; // not CommonJS entry wiring
 
     const devRel = devImplOf(cur, dirname(file));
-
     try {
       chmodSync(dir, 0o755);
       chmodSync(file, 0o644);
-      writeFileSync(cjs, cur);
+      writeFileSync(cjs, cur); // pristine dispatcher for require() consumers
       const stem = face.file.split("/").pop().replace(/\.js$/, "");
-      let out;
-      if (face.mode === "static") {
-        // Inline the browser build (dev implementation, or the entry
-        // itself for single-file CJS): a static import would hit raw CJS.
-        const devSource = devRel ? readFileSync(join(dirname(file), devRel), "utf8") : cur;
-        out = shimSource(stem, face, devRel ? "./" + devRel : null, devSource).replaceAll("././", "./");
-      } else {
-        out = shimSource(stem, face, devRel ? "./" + devRel : null, cur).replaceAll("././", "./");
-      }
-      writeFileSync(file, out);
+      const implSource = devRel ? readFileSync(join(dirname(file), devRel), "utf8") : cur;
+      writeFileSync(file, shimSource(face, stem, implSource));
       console.log(`[stackfolio] ESM face for ${face.name} ${face.file}: ${dir}`);
     } catch (err) {
       console.warn(`[stackfolio] ${face.name} ${face.file} failed in ${dir}: ${err.message}`);
@@ -233,68 +381,45 @@ for (const face of FACES) {
   }
 }
 
-/**
- * ESM module from a single-file CJS implementation: the source verbatim,
- * minus the CommonJS export wiring (`module.exports = …`,
- * `exports.name = …` assignment lines and the `@ts-expect-error` directives
- * attached to them, plus any UMD footer), plus `tail`'s export statements.
- */
-function esmInline(cjsSource, tail, opts = {}) {
-  const lines = cjsSource.split("\n");
-  const out = [];
-  for (let idx = 0; idx < lines.length; idx++) {
-    const line = lines[idx];
-    if (/^\s*module\.exports(?:\.\w+)?\s*=/.test(line)) continue;
-    if (!opts.keepExports && /^\s*exports(?:\.\w+)?\s*=/.test(line)) continue;
-    if (/\/\*\* @preserve/.test(line)) continue; // UMD footer
-    if (
-      /^\/\/ @ts-expect-error/.test(line) &&
-      /^\s*(?:module\.)?exports\b/.test(lines[idx + 1] ?? "")
-    ) {
-      continue; // directive for an elided exports line
-    }
-    out.push(line);
-  }
-  return (
-    "// " + SHIM_MARK + " (stackfolio postinstall): ESM build of the\n" +
-    "// CommonJS implementation — the source above is verbatim, with its\n" +
-    "// export wiring replaced by ESM exports. Vite dev serves raw .cjs\n" +
-    "// without interop, so ESM consumers (raw-served @powerhousedao\n" +
-    "// bundles) import this file instead; require() consumers keep the\n" +
-    "// original in ./index.cjs.\n" +
-    (opts.keepExports ? "const exports = {};\n" : "") +
-    out.join("\n").trimEnd() + "\n" + tail
-  );
-}
-
 if (restore) process.exit(0);
 
 // package.json faces: ESM consumers must resolve through the shim; Node
-// keeps taking the CJS via main/require/default conditions. Only root
-// index.js entries with condition-style `exports` get this rewrite —
-// packages whose `exports` are subpath keys (use-sync-external-store) must
-// stay untouched: mixing key styles is an invalid package config, and their
-// raw `require` specifiers already resolve to the untouched CJS there.
+// keeps taking the CommonJS via main/require/default conditions. Only
+// packages whose `exports` are condition-style (safe-stable-stringify,
+// void-elements) get the rewrite — packages with subpath-key `exports`
+// (use-sync-external-store) must stay untouched: mixing the key styles is
+// an invalid package config, and their subpath resolution reaches the
+// patched entry files directly.
 for (const name of new Set(FACES.filter((f) => f.file === "index.js").map((f) => f.name))) {
   for (const dir of pkgCopies(name)) {
     const pjPath = join(dir, "package.json");
     try {
       const pj = JSON.parse(readFileSync(pjPath, "utf8"));
-      if (pj.main === "./index.cjs") continue;
       const exp = pj.exports;
-      const styleKeys =
+      const isConditionStyle =
         exp && typeof exp === "object" && !Array.isArray(exp) &&
         Object.keys(exp).every((k) => !k.startsWith("."));
-      if (exp && typeof exp === "object" && !Array.isArray(exp) && !styleKeys) continue;
+      if (exp && typeof exp === "object" && !Array.isArray(exp) && !isConditionStyle) continue;
+      const already =
+        pj.main === "./index.js" &&
+        exp &&
+        exp.import === "./index.js" &&
+        exp.require === "./index.js.cjs";
+      if (already) continue;
       chmodSync(pjPath, 0o644);
+      // The saved CommonJS sits beside the entry as `<entry>.cjs` (a `.js`
+      // sibling is ESM under `type: module`). `main` points at the shim so
+      // bundlers without an `exports`-aware resolver still land on valid
+      // ESM; the `exports.require` condition keeps Node's require() on the
+      // pristine CommonJS.
       pj.exports = {
         ...(exp && typeof exp === "object" ? exp : {}),
         import: "./index.js",
-        require: "./index.cjs",
-        default: "./index.cjs",
+        require: "./index.js.cjs",
+        default: "./index.js",
         browser: "./index.js",
       };
-      pj.main = "./index.cjs";
+      pj.main = "./index.js";
       pj.module = "./index.js";
       writeFileSync(pjPath, JSON.stringify(pj, null, 2) + "\n");
     } catch {

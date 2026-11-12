@@ -10,6 +10,7 @@ import {
   useAssets,
   useEventsPage,
   useIssues,
+  useHoldings,
   useLatestPrices,
   useOverrides,
   usePriceHistory,
@@ -21,6 +22,7 @@ import {
   type EventsFilter,
 } from "../lib/graphql.js";
 import { Accounts } from "./Accounts.js";
+import { Balances } from "./Balances.js";
 import { Assets } from "./Assets.js";
 import { Dashboard, short } from "./Dashboard.js";
 import { Prices } from "./Prices.js";
@@ -214,6 +216,25 @@ export function DashboardSection({
       recent={recent}
       issues={issues}
       assets={assets}
+    />
+  );
+}
+
+export function BalancesSection({
+  driveId,
+  onOpenAsset,
+  onOpenAccount,
+}: {
+  driveId: string;
+  onOpenAsset: (assetId: string) => void;
+  onOpenAccount: (address: string) => void;
+}) {
+  const holdings = useHoldings(driveId);
+  return (
+    <Balances
+      holdings={holdings}
+      onOpenAsset={onOpenAsset}
+      onOpenAccount={onOpenAccount}
     />
   );
 }

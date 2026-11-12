@@ -23,6 +23,7 @@ import {
   PnlSection,
   PricesSection,
   StakingSection,
+  BalancesSection,
   TransactionsSection,
   portfolioNodeId,
 } from "./components/sections.js";
@@ -31,6 +32,7 @@ import { DriveContents } from "./components/DriveContents.js";
 import { FolderTree } from "./components/FolderTree.js";
 import { Shell } from "./components/Shell.js";
 import { planSetup } from "./lib/setup.js";
+import { slug } from "./lib/slugs.js";
 import { pageParam, type Page } from "./nav.js";
 import { editorConfig } from "./config.js";
 import { useSearchParams } from "@powerhousedao/reactor-browser";
@@ -99,7 +101,15 @@ export default function Editor({ children }: EditorProps) {
           )}
           {active === "history" && <TransactionsSection driveId={driveId} />}
           {active === "balances" && (
-            <AccountsSection driveId={driveId} adding={adding} setAdding={setAdding} />
+            <BalancesSection
+              driveId={driveId}
+              onOpenAsset={(assetId) =>
+                setSearchParams({ page: "assets", detail: slug(assetId) }, { replace: true })
+              }
+              onOpenAccount={(address) =>
+                setSearchParams({ page: "address-book", detail: slug(address) }, { replace: true })
+              }
+            />
           )}
           {active === "staking" && <StakingSection driveId={driveId} />}
           {active === "pnl" && <PnlSection driveId={driveId} list={list} />}

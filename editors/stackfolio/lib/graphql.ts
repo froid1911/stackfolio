@@ -227,6 +227,7 @@ export interface PortfolioApi {
   pnlReport: PnlBucket[];
   unpricedSummary: Unpriced[];
   hyperliquidAccounts: HyperliquidAccount[];
+  holdings: BalancesData;
 }
 
 function usePortfolioField<K extends keyof PortfolioApi>(
@@ -282,6 +283,35 @@ export function useEventsPage(
     }`,
     { driveId, ...filter },
     "events",
+  );
+}
+
+export interface HoldingRow {
+  asset: string;
+  symbol: string;
+  wallet: string;
+  quantity: string;
+  value: string | null;
+}
+
+export interface BalancesData {
+  holdings: HoldingRow[];
+  perAsset: { asset: string; symbol: string; quantity: string; value: string | null }[];
+  perAccount: { wallet: string; ensName: string | null; label: string | null; value: string }[];
+  total: string;
+}
+
+/** The balances matrix, folded server-side from the drive's ledgers. */
+export function useHoldings(driveId: string): QueryState<BalancesData | null> {
+  return usePortfolioField(
+    `query ($driveId: String!) { portfolioApi { holdings(driveId: $driveId) {
+      total
+      holdings { asset symbol wallet quantity value }
+      perAsset { asset symbol quantity value }
+      perAccount { wallet ensName label value }
+    } } }`,
+    { driveId },
+    "holdings",
   );
 }
 

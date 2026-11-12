@@ -231,6 +231,44 @@ describe("accounting-index", () => {
     });
   });
 
+  it("stages chain identifiers longer than any conventional column", async () => {
+    // Real log ids ("0x<64 hex>:log:<block>") and withdrawal ids overran
+    // the first column sizes and the staging insert died under the host's
+    // silent error handling; the books must take whatever chains emit.
+    const { db, processor } = await harness();
+    await processor.onOperations(replay(registryDocument()));
+    await processor.onOperations(replay(portfolioDocument()));
+    let document = walletReducer(
+      walletUtils.createDocument(),
+      walletActions.setAccountDetails({ address: W1, chainId: 1 }),
+    );
+    document = walletReducer(
+      document,
+      walletActions.importEvents({
+        batchId: "b1",
+        importedAt: "2026-11-11T00:00:00.000Z",
+        events: [
+          {
+            id: `withdrawal-${"9".repeat(80)}`,
+            eventIdentifier: `0x${"a".repeat(64)}:log:21000000`,
+            timestamp: "2026-01-10T10:00:00.000Z",
+            type: "RECEIVE",
+            subtype: "NONE",
+            asset: ETH,
+            amount: "2000000000000000000",
+            counterparty: "0xfeed",
+            sequenceIndex: 0,
+            valuation: price("2000"),
+          },
+        ],
+      }),
+    );
+    await processor.onOperations(replay(document));
+    const events = await db.selectFrom("acc_events").selectAll().execute();
+    expect(events).toHaveLength(1);
+    expect(events[0].event_identifier).toContain(":log:");
+  });
+
   it("refolds when a ledger row is edited", async () => {
     const { db, processor } = await harness();
     const wallet = walletDocument();

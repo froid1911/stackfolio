@@ -13,9 +13,9 @@ export async function up(db: Kysely<DB>): Promise<void> {
   await db.schema
     .createTable("acc_events")
     .addColumn("document_id", "varchar(255)", (col) => col.notNull())
-    .addColumn("wallet", "varchar(64)", (col) => col.notNull())
-    .addColumn("event_id", "varchar(64)", (col) => col.notNull())
-    .addColumn("event_identifier", stamp, (col) => col.notNull())
+    .addColumn("wallet", "varchar(128)", (col) => col.notNull())
+    .addColumn("event_id", text, (col) => col.notNull())
+    .addColumn("event_identifier", text, (col) => col.notNull())
     .addColumn("sequence_index", "integer", (col) => col.notNull())
     .addColumn("timestamp", stamp, (col) => col.notNull())
     .addColumn("type", "varchar(32)", (col) => col.notNull())
@@ -37,7 +37,7 @@ export async function up(db: Kysely<DB>): Promise<void> {
   await db.schema
     .createTable("acc_addresses")
     .addColumn("document_id", "varchar(255)", (col) => col.notNull())
-    .addColumn("address", "varchar(64)", (col) => col.notNull())
+    .addColumn("address", "varchar(128)", (col) => col.notNull())
     .addPrimaryKeyConstraint("acc_addresses_pk", [
       "document_id",
       "address",
@@ -56,9 +56,9 @@ export async function up(db: Kysely<DB>): Promise<void> {
 
   await db.schema
     .createTable("lots")
-    .addColumn("wallet", "varchar(64)", (col) => col.notNull())
+    .addColumn("wallet", "varchar(128)", (col) => col.notNull())
     .addColumn("asset", "varchar(128)", (col) => col.notNull())
-    .addColumn("source_event_id", "varchar(64)", (col) => col.notNull())
+    .addColumn("source_event_id", text, (col) => col.notNull())
     .addColumn("source_seq", "integer", (col) => col.notNull())
     .addColumn("quantity", text, (col) => col.notNull())
     .addColumn("unit_cost", text, (col) => col.notNull())
@@ -74,14 +74,14 @@ export async function up(db: Kysely<DB>): Promise<void> {
   await db.schema
     .createTable("realized")
     .addColumn("id", "varchar(255)", (col) => col.primaryKey())
-    .addColumn("wallet", "varchar(64)", (col) => col.notNull())
+    .addColumn("wallet", "varchar(128)", (col) => col.notNull())
     .addColumn("asset", "varchar(128)", (col) => col.notNull())
     .addColumn("timestamp", stamp, (col) => col.notNull())
     .addColumn("quantity", text, (col) => col.notNull())
     .addColumn("cost", text, (col) => col.notNull())
     .addColumn("proceeds", text, (col) => col.notNull())
     .addColumn("pnl", text, (col) => col.notNull())
-    .addColumn("source_event_id", "varchar(64)", (col) => col.notNull())
+    .addColumn("source_event_id", text, (col) => col.notNull())
     .addColumn("source_seq", "integer", (col) => col.notNull())
     .addColumn("consumed", text, (col) => col.notNull())
     .ifNotExists()
@@ -89,7 +89,7 @@ export async function up(db: Kysely<DB>): Promise<void> {
 
   await db.schema
     .createTable("income")
-    .addColumn("wallet", "varchar(64)", (col) => col.notNull())
+    .addColumn("wallet", "varchar(128)", (col) => col.notNull())
     .addColumn("bucket", "varchar(32)", (col) => col.notNull())
     .addColumn("month", "varchar(7)", (col) => col.notNull())
     .addColumn("amount", text, (col) => col.notNull())
@@ -99,7 +99,7 @@ export async function up(db: Kysely<DB>): Promise<void> {
 
   await db.schema
     .createTable("pnl_month")
-    .addColumn("wallet", "varchar(64)", (col) => col.notNull())
+    .addColumn("wallet", "varchar(128)", (col) => col.notNull())
     .addColumn("month", "varchar(7)", (col) => col.notNull())
     .addColumn("income", text, (col) => col.notNull())
     .addColumn("expense", text, (col) => col.notNull())
@@ -119,6 +119,36 @@ export async function up(db: Kysely<DB>): Promise<void> {
     .addColumn("state", text, (col) => col.notNull())
     .ifNotExists()
     .execute();
+
+  // Persisted namespaces keep the column types they were born with, and
+  // the first ones were guessed too small for real chain data: tx-log
+  // event identifiers ("0x<64 hex>:log:<block>") overrun varchar(64) and
+  // taproot/p2wsh addresses overrun 42. Widening on every start is a
+  // catalog no-op once applied (same type, no rewrite), so old stores
+  // catch up without losing the checkpoint.
+  for (const [table, column] of [
+    ["acc_events", "event_id"],
+    ["acc_events", "event_identifier"],
+    ["lots", "source_event_id"],
+  ] as const) {
+    await db.schema
+      .alterTable(table)
+      .alterColumn(column, (col) => col.setDataType(text))
+      .execute();
+  }
+  for (const [table, column] of [
+    ["acc_events", "wallet"],
+    ["acc_addresses", "address"],
+    ["lots", "wallet"],
+    ["realized", "wallet"],
+    ["income", "wallet"],
+    ["pnl_month", "wallet"],
+  ] as const) {
+    await db.schema
+      .alterTable(table)
+      .alterColumn(column, (col) => col.setDataType("varchar(128)"))
+      .execute();
+  }
 }
 
 export async function down(db: Kysely<DB>): Promise<void> {

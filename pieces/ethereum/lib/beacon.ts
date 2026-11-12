@@ -34,14 +34,19 @@ export async function beaconPost<T>(
   payload: unknown,
   fetchImpl: (
     url: string,
-    init: { method: string; body: string },
+    init: { method: string; headers: Record<string, string>; body: string },
   ) => Promise<BeaconResponse> = (url, init) =>
     fetch(url, init),
 ): Promise<T> {
-  const response = await fetchImpl(
-    `${baseUrl.replace(/\/$/, "")}${path}`,
-    { method: "POST", body: JSON.stringify(payload) },
-  );
+  const response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}${path}`, {
+    method: "POST",
+    // The content type is spelled here, not left to fetch's Request to
+    // infer from the body: a workflow worker that proxies piece fetches to
+    // its host copies the Request's headers, and a lazily-derived
+    // content type can be lost on the way, which Prysm answers 415.
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   if (!response.ok) {
     throw new Error(`beacon ${path} answered HTTP ${response.status}`);
   }

@@ -1,6 +1,6 @@
 # Protocols & Accounting — Design
 
-Date: 2026-11-12 · Status: DRAFT · Approach: A (manifest-driven decoding + fold accounting), chosen over B (per-protocol document models) and C (port rotki's accountant).
+Date: 2026-11-12 · Status: APPROVED (2026-11-12, owner) · Approach: A (manifest-driven decoding + fold accounting), chosen over B (per-protocol document models) and C (port rotki's accountant).
 
 ## Intent and why
 
@@ -143,7 +143,7 @@ Seed: aave-v3, sky, uniswap-v2, uniswap-v3, ens. After the log-fetch path is liv
 
 Exact manifest JSON field names beyond the sketch; fold checkpoint encoding; subgraph schema shape for the report queries; PnL page layout; `UNPRICED` thresholds in UI copy; plugin interface signature beyond name+inputs.
 
-## Open owner questions (answered at approval)
+## Owner decisions (approved 2026-11-12)
 
-1. **Historical price granularity**: v1 pins at CoinGecko **daily close** granularity. Accept daily-rounded historical valuations (with manual override per row), or should precise-timestamp pricing be a launch requirement (paid oracle key)?
-2. **Retrofit budget**: the one-shot re-decode re-walks each wallet's full history (extra indexer calls, days of budgeted work on heavy wallets) and overwrites `RETYPE_EVENT` review edits where decode disagrees. Proceed with full-history retrofit, or decode forward-only and leave old history generic?
+1. **Historical price granularity**: daily-close granularity (CoinGecko free), day-rounded visible per row, manual override per row. Paid precise oracle: later, not at launch.
+2. **Retrofit**: full-history re-decode — old Aave/Sky/Uni/ENS activity becomes semantic; indexer budget burn accepted; `RETYPE_EVENT` overwritten where decode disagrees, `ignored`/`notes` carried over.

@@ -44,6 +44,8 @@ import {
 } from "./components/DeFi.js";
 import { short } from "./components/Dashboard.js";
 import { AddAccountForm, Setup } from "./components/Setup.js";
+import { actions as stakingActions } from "document-models/eth-staking";
+import { fireWorkflow, useWorkflowByName } from "./lib/workflows.js";
 import { DriveContents } from "./components/DriveContents.js";
 import { FolderTree } from "./components/FolderTree.js";
 import { isTab, Nav, type Tab } from "./components/Nav.js";
@@ -195,17 +197,48 @@ function DeFiSection({ driveId }: { driveId: string }) {
   const assets = useAssets(driveId);
   const nodes = useNodesInSelectedDrive();
   const book = usePortfolioBook(nodes ?? []);
+  const sweepId = useWorkflowByName("positions-sweep");
+  const [sweepStatus, setSweepStatus] = useState("");
   return (
-    <DeFi
-      positions={book.positions}
-      latestSnapshot={book.latestSnapshot}
-      assets={assets.data ?? []}
-      currency={book.currency}
-      walletLabel={(address) =>
-        (accounts.data ?? []).find((a) => a.address === address)?.label ||
-        short(address)
-      }
-    />
+    <div>
+      <div className="flex items-center gap-2 py-2">
+        <button
+          type="button"
+          disabled={sweepId === undefined}
+          onClick={() => {
+            if (!sweepId) return;
+            setSweepStatus("sweeping…");
+            fireWorkflow(sweepId)
+              .then((run) =>
+                setSweepStatus(
+                  run.error ? `sweep failed: ${run.error}` : "sweep booked — positions refresh shortly.",
+                ),
+              )
+              .catch((error: unknown) =>
+                setSweepStatus(
+                  `sweep failed: ${error instanceof Error ? error.message : String(error)}`,
+                ),
+              );
+          }}
+          className="rounded border border-border px-3 py-1 text-xs hover:bg-accent disabled:opacity-50"
+        >
+          Sync DeFi positions
+        </button>
+        {sweepStatus && (
+          <span className="text-xs text-muted-foreground">{sweepStatus}</span>
+        )}
+      </div>
+      <DeFi
+        positions={book.positions}
+        latestSnapshot={book.latestSnapshot}
+        assets={assets.data ?? []}
+        currency={book.currency}
+        walletLabel={(address) =>
+          (accounts.data ?? []).find((a) => a.address === address)?.label ||
+          short(address)
+        }
+      />
+    </div>
   );
 }
 
@@ -294,6 +327,15 @@ function StakingSection({ driveId }: { driveId: string }) {
   const withdrawals = useWithdrawals(driveId, picked);
   // One clock per mount; statuses compare against it, not per-render now.
   const [now] = useState(() => Date.now());
+  const nodes = useNodesInSelectedDrive();
+  const stakingDocumentId = (nodes ?? []).find(
+    (node) =>
+      "documentType" in node &&
+      (node as { documentType?: string }).documentType === "stackfolio/eth-staking",
+  )?.id;
+  const [, dispatch] = useDocumentById(stakingDocumentId ?? driveId);
+  const stakingWorkflowId = useWorkflowByName("staking-daily");
+  const [syncStatus, setSyncStatus] = useState("");
   return (
     <Staking
       validators={validators}
@@ -302,6 +344,54 @@ function StakingSection({ driveId }: { driveId: string }) {
       picked={picked}
       setPicked={setPicked}
       now={now}
+      watchEnabled={stakingDocumentId !== undefined}
+      onWatch={(index) => {
+        if (!stakingDocumentId) return;
+        dispatch(
+          stakingActions.upsertValidators({
+            validators: [
+              {
+                index,
+                publicKey: "",
+                withdrawalAddress: null,
+                activationTimestamp: null,
+                withdrawableTimestamp: null,
+                exitedTimestamp: null,
+              },
+            ],
+          }),
+          (errors) => {
+            if (errors[0]) setSyncStatus(errors[0].message);
+            else validators.reload();
+          },
+        );
+      }}
+      onRemove={(index) => {
+        if (!stakingDocumentId) return;
+        dispatch(stakingActions.removeValidators({ indices: [index] }), (errors) => {
+          if (errors[0]) setSyncStatus(errors[0].message);
+          else validators.reload();
+        });
+      }}
+      onSync={() => {
+        if (!stakingWorkflowId) {
+          setSyncStatus("The staking workflow is not published yet.");
+          return;
+        }
+        setSyncStatus("syncing…");
+        fireWorkflow(stakingWorkflowId)
+          .then((run) =>
+            setSyncStatus(
+              run.error ? `sync failed: ${run.error}` : "sync booked — balances update in a moment.",
+            ),
+          )
+          .catch((error: unknown) =>
+            setSyncStatus(
+              `sync failed: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          );
+      }}
+      syncStatus={syncStatus}
     />
   );
 }

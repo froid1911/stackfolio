@@ -3,12 +3,13 @@ import { actions } from "document-models/wallet-account";
 import { useState } from "react";
 import type { AccountRow, Issue, QueryState } from "../lib/graphql.js";
 import { fmtAmount } from "../lib/format.js";
+import { deleteAccount } from "../lib/workflows.js";
 
 /**
  * The wallet accounts the drive tracks. Rows read from the index; the
- * ignore switch writes straight to the owning wallet document. The scan
- * itself is a scheduled workflow run — the manual "run now" trigger joins
- * it once the runner exposes the endpoint.
+ * ignore switch writes straight to the owning wallet document and delete
+ * retires it from the drive (two-step). The scan itself is a scheduled
+ * workflow run; "sync now" lives with the DeFi sweep.
  */
 export function Accounts({
   accounts,
@@ -73,6 +74,7 @@ function AccountRowView({
 }) {
   const [, dispatch] = useDocumentById(row.documentId);
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const blocking = issues.some((i) => i.severity === "BLOCKING");
   const health = issues.length === 0
     ? { text: "ok", tone: "text-success" }
@@ -115,7 +117,25 @@ function AccountRowView({
       <td className="text-right">
         <button
           type="button"
-          className="text-xs underline"
+          className={`ml-3 text-xs underline ${confirming ? "text-red-700" : ""}`}
+          onClick={() => {
+            setError(null);
+            if (!confirming) {
+              setConfirming(true);
+              return;
+            }
+            deleteAccount(row.documentId)
+              .then(onReload)
+              .catch((cause: unknown) =>
+                setError(cause instanceof Error ? cause.message : String(cause)),
+              );
+          }}
+        >
+          {confirming ? "confirm delete" : "delete"}
+        </button>
+        <button
+          type="button"
+          className="ml-3 text-xs underline"
           onClick={() => {
             setError(null);
             dispatch(

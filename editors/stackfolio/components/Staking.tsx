@@ -3,6 +3,7 @@
  * withdrawals that reached the portfolio.
  */
 import type { QueryState, StakingBalance, Validator, Withdrawal } from "../lib/graphql.js";
+import { useState } from "react";
 import { fmtAmount } from "../lib/format.js";
 import { short } from "./Dashboard.js";
 import { Bars } from "../lib/charts.js";
@@ -24,6 +25,11 @@ export function Staking({
   picked,
   setPicked,
   now,
+  watchEnabled,
+  onWatch,
+  onRemove,
+  onSync,
+  syncStatus,
 }: {
   validators: QueryState<Validator[]>;
   balances: QueryState<StakingBalance[]>;
@@ -31,7 +37,13 @@ export function Staking({
   picked: number | undefined;
   setPicked: (v: number | undefined) => void;
   now: number;
+  watchEnabled: boolean;
+  onWatch: (index: number) => void;
+  onRemove: (index: number) => void;
+  onSync: () => void;
+  syncStatus: string;
 }) {
+  const [indexDraft, setIndexDraft] = useState("");
 
   if (validators.error) return <p className="p-6 text-red-700">{validators.error}</p>;
   if (!validators.data) return <p className="p-6 text-muted-foreground">Loading validators…</p>;
@@ -39,6 +51,49 @@ export function Staking({
 
   return (
     <div className="grid gap-4 p-6">
+      <div className="flex flex-wrap items-center gap-2">
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const index = Number(indexDraft);
+            if (!Number.isInteger(index) || index < 0) return;
+            onWatch(index);
+            setIndexDraft("");
+          }}
+        >
+          <input
+            type="number"
+            min={0}
+            value={indexDraft}
+            onChange={(e) => setIndexDraft(e.target.value)}
+            placeholder="validator index"
+            className="w-36 rounded border border-border bg-background px-2 py-1 text-xs"
+          />
+          <button
+            type="submit"
+            disabled={!watchEnabled || indexDraft === ""}
+            className="rounded border border-border px-3 py-1 text-xs hover:bg-accent disabled:opacity-50"
+          >
+            Watch validator
+          </button>
+        </form>
+        <button
+          type="button"
+          onClick={onSync}
+          disabled={!watchEnabled}
+          className="rounded border border-border px-3 py-1 text-xs hover:bg-accent disabled:opacity-50"
+        >
+          Sync now
+        </button>
+        {syncStatus && <span className="text-xs text-muted-foreground">{syncStatus}</span>}
+      </div>
+      {!watchEnabled && (
+        <p className="text-xs text-muted-foreground">
+          No ETH staking document in this drive yet — the setup wizard creates one;
+          then validators can be watched and synced.
+        </p>
+      )}
       <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-left text-xs">
           <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
@@ -48,6 +103,7 @@ export function Staking({
               <th className="px-3 py-2">Activated</th>
               <th className="px-3 py-2">Exited</th>
               <th className="px-3 py-2">Withdrawal address</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -75,13 +131,29 @@ export function Staking({
                   <td className="px-3 py-2 text-muted-foreground">
                     {v.withdrawalAddress ? short(v.withdrawalAddress) : "—"}
                   </td>
+                  <td className="px-3 py-2 text-right">
+                    {watchEnabled && (
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground underline hover:text-red-700"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemove(v.validatorIndex);
+                        }}
+                      >
+                        remove
+                      </button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
             {vs.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                  No validators yet — the daily staking read fills this in.
+                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                  No validators watched — add an index above, or the daily staking
+                  read fills this in for any validator withdrawing to a tracked
+                  wallet.
                 </td>
               </tr>
             )}

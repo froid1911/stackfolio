@@ -90,7 +90,10 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
       try {
         const doc = await read.get(documentId);
         return JSON.stringify(doc.state);
-      } catch {
+      } catch (error) {
+        console.warn(
+          `[portfolio-index] state fetch failed for ${documentId}: ${error instanceof Error ? error.message : String(error)}`,
+        );
         return undefined; // deleted or unreadable
       }
     };
@@ -98,6 +101,8 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
 
   onOperations(operations: OperationWithContext[]): Promise<void> {
     const first = operations[0]?.context;
+    // One line per delivery: a gap in these lines is a wedged queue (the
+    // reactor can park one silently); lines without row movement is our bug.
     console.log(
       `[portfolio-index] onOperations ${operations.length} op(s) ordinal ${first?.ordinal ?? "?"} ${first?.documentType ?? "?"}`,
     );
@@ -105,11 +110,6 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
     // Keep the chain alive after a failure, or one bad batch stalls every
     // later one behind a rejected promise.
     this.queue = next.catch(() => undefined);
-    void next.finally(() =>
-      console.log(
-        `[portfolio-index] batch done ordinal ${first?.ordinal ?? "?"}`,
-      ),
-    );
     return next;
   }
 

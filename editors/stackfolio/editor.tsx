@@ -7,6 +7,7 @@ import {
   getDriveName,
   useNodesInSelectedDrive,
   useDocumentById,
+  useDocumentSafe,
   useSelectedDrive,
   useSetPHAppConfig,
   useSetSearchParams,
@@ -168,20 +169,25 @@ function AccountsSection({
 }
 
 /** Portfolio-document state the DeFi views read directly: positions the
- * reconciler fetched and the newest snapshot's liabilities. */
+ * reconciler fetched and the newest snapshot's liabilities.
+ * useDocumentSafe RETRIEVES the document into the cache and subscribes;
+ * useDocumentById only reads documents the app already opened, and the
+ * drive app never opens the portfolio document itself. */
 function usePortfolioBook(list: { kind: string; id: string; documentType?: string }[]) {
-  const [doc] = useDocumentById(portfolioNodeId(list) ?? "");
+  const { data: doc } = useDocumentSafe(portfolioNodeId(list));
   const global = (
     doc as
       | {
-          global?: {
-            baseCurrency?: string;
-            positions?: unknown;
-            snapshots?: { timestamp: string }[];
+          state?: {
+            global?: {
+              baseCurrency?: string;
+              positions?: unknown;
+              snapshots?: { timestamp: string }[];
+            };
           };
         }
       | undefined
-  )?.global;
+  )?.state?.global;
   const snapshots = [...(global?.snapshots ?? [])].sort((a, b) =>
     a.timestamp.localeCompare(b.timestamp),
   );
@@ -195,6 +201,7 @@ function usePortfolioBook(list: { kind: string; id: string; documentType?: strin
 function DeFiSection({ driveId }: { driveId: string }) {
   const accounts = useAccounts(driveId);
   const assets = useAssets(driveId);
+  const prices = useLatestPrices(driveId);
   const nodes = useNodesInSelectedDrive();
   const book = usePortfolioBook(nodes ?? []);
   const sweepId = useWorkflowByName("positions-sweep");
@@ -232,6 +239,7 @@ function DeFiSection({ driveId }: { driveId: string }) {
         positions={book.positions}
         latestSnapshot={book.latestSnapshot}
         assets={assets.data ?? []}
+        prices={prices.data ?? []}
         currency={book.currency}
         walletLabel={(address) =>
           (accounts.data ?? []).find((a) => a.address === address)?.label ||
@@ -406,9 +414,10 @@ function AssetsSection({
   const assets = useAssets(driveId);
   const prices = useLatestPrices(driveId);
   const snapshots = useSnapshots(driveId);
-  const [doc] = useDocumentById(portfolioNodeId(list) ?? "");
+  const { data: doc } = useDocumentSafe(portfolioNodeId(list));
   const currency =
-    (doc as { global?: { baseCurrency?: string } } | undefined)?.global?.baseCurrency ?? "EUR";
+    (doc as { state?: { global?: { baseCurrency?: string } } } | undefined)?.state?.global
+      ?.baseCurrency ?? "EUR";
   const book = usePortfolioBook(list);
   return (
     <div className="grid gap-4">
@@ -431,9 +440,10 @@ function PricesSection({ driveId, list }: { driveId: string; list: { kind: strin
   const latest = useLatestPrices(driveId);
   const overrides = useOverrides(driveId);
   const history = usePriceHistory(driveId, picked);
-  const [doc] = useDocumentById(portfolioNodeId(list) ?? "");
+  const { data: doc } = useDocumentSafe(portfolioNodeId(list));
   const currency =
-    (doc as { global?: { baseCurrency?: string } } | undefined)?.global?.baseCurrency ?? "EUR";
+    (doc as { state?: { global?: { baseCurrency?: string } } } | undefined)?.state?.global
+      ?.baseCurrency ?? "EUR";
   return (
     <Prices
       assets={assets}

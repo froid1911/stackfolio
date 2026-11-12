@@ -26,6 +26,13 @@ describe("fmtAmount", () => {
     expect(fmtAmount(null, 18)).toBe("—");
     expect(fmtAmount("", 18)).toBe("—");
   });
+
+  it("keeps the sign of borrowed position amounts", () => {
+    expect(fmtAmount("-51176182102", 6)).toBe("-51,176.182102");
+    expect(fmtAmount("-2000000000000000000", 18)).toBe("-2");
+    expect(fmtAmount("-1", 18, 4)).toBe("<0");
+    expect(fmtAmount("-0", 18)).toBe("0");
+  });
 });
 
 describe("fmtFiat", () => {

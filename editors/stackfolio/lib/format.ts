@@ -33,11 +33,17 @@ interface Scaled {
   int: string;
   frac: string;
   positive: boolean;
+  negative: boolean;
 }
 
 function scale(value: string, decimals: number): Scaled | null {
-  if (!/^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(value)) return null;
-  const [int, frac = ""] = value.split(".");
+  // Borrowed position amounts are signed by the document model's rule
+  // (negative = debt); the magnitude formats like any unsigned amount and
+  // render() re-attaches the sign.
+  const negative = value.startsWith("-");
+  const magnitude = negative ? value.slice(1) : value;
+  if (!/^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(magnitude)) return null;
+  const [int, frac = ""] = magnitude.split(".");
   const digits = int + frac;
   // The shown point sits `decimals` places left of the input's own point.
   const shift = frac.length + decimals;
@@ -46,7 +52,8 @@ function scale(value: string, decimals: number): Scaled | null {
   return {
     int: used.slice(0, cut) || "0",
     frac: used.slice(cut),
-    positive: /[1-9]/.test(digits),
+    positive: !negative && /[1-9]/.test(digits),
+    negative: negative && /[1-9]/.test(digits),
   };
 }
 
@@ -59,6 +66,7 @@ function render(
   if (value === null || value === undefined) return "—";
   const scaled = scale(value, decimals);
   if (!scaled) return "—";
+  const sign = scaled.negative ? "-" : "";
   let int = scaled.int;
   let frac: string;
   if (places === undefined) {
@@ -66,8 +74,10 @@ function render(
   } else {
     const keep = scaled.frac.slice(0, places).padEnd(places, "0");
     const rest = scaled.frac.slice(places);
-    // A positive amount under one shown unit: ">0", never an inflated 1.
+    // An amount under one shown unit keeps its sign but not a fake digit:
+    // ">0" / "<0", never an inflated 1 or -1.
     if (scaled.positive && int === "0" && /^0+$/.test(keep)) return ">0";
+    if (scaled.negative && int === "0" && /^0+$/.test(keep)) return "<0";
     if (up && /[1-9]/.test(rest)) {
       const carried = increment(keep);
       if (carried === null) {
@@ -81,9 +91,9 @@ function render(
     }
   }
   const shown = trim(`${int}${frac ? `.${frac}` : ""}`);
-  if (!shown.includes(".")) return groupThousands(shown);
+  if (!shown.includes(".")) return `${sign}${groupThousands(shown)}`;
   const [whole, part] = shown.split(".");
-  return `${groupThousands(whole)}.${part}`;
+  return `${sign}${groupThousands(whole)}.${part}`;
 }
 
 /**

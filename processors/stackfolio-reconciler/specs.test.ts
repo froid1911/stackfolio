@@ -5,6 +5,7 @@ import {
   etherscanBackfillSpec,
   liveEtherscanSpec,
   positionsSpec,
+  assetsSpec,
   pricesSpec,
   hyperliquidSpec,
   redecodeSpec,
@@ -131,6 +132,29 @@ describe("specs", () => {
       ["import", "import-prices-to-book"],
     ]);
     expect(spec.trigger).toEqual({ kind: "interval", seconds: 3600 });
+  });
+
+  it("the asset round registers what the registry lacks", () => {
+    const spec = assetsSpec({
+      ...resources,
+      protocolRegistryDocumentId: "prot-1",
+    });
+    expect(spec.key).toBe("assets-daily");
+    expect(spec.trigger).toEqual({ kind: "interval", seconds: 86_400 });
+    expect(spec.steps.map((s) => [s.name, s.action])).toEqual([
+      ["holdings", "holdings-from-ledger"],
+      ["register", "register-missing-assets"],
+    ]);
+    expect(spec.steps[1].config).toMatchObject({
+      assetRegistryDocumentId: resources.registryDocumentId,
+      holdingsJson: "{{steps.holdings.output}}",
+      addedAt: "{{trigger.payload.firedAt}}",
+      protocolRegistryDocumentId: "prot-1",
+    });
+    const bare = assetsSpec(resources);
+    expect(bare.steps[1].config).not.toHaveProperty(
+      "protocolRegistryDocumentId",
+    );
   });
 
   it("staking appends the snapshot pair only when enabled", () => {

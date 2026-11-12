@@ -1,9 +1,10 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { parseJsonish } from "../jsonish.js";
-import { parseProtocolEntry } from "../manifest.js";
+import {
+  classifyProtocolContracts,
+  type ProtocolClassification,
+} from "../registry-classify.js";
 import { globalState, toGlobalAction } from "../reactor.js";
-
-const PROTOCOL_REGISTRY_TYPE = "stackfolio/protocol-registry";
 
 export const ASSET_REGISTRY_TYPE = "stackfolio/asset-registry";
 
@@ -42,7 +43,7 @@ export { nativeIdentifier };
  * L2s (Arbitrum, Linea) settle in bridged ETH - same coin, same price.
  * Anything unlisted registers honestly unnamed and unpriced.
  */
-const NATIVE_CHAINS: Record<
+export const NATIVE_CHAINS: Record<
   number,
   { symbol: string; name: string; coingeckoId: string }
 > = {
@@ -131,34 +132,12 @@ export const ethereumImportTokensToRegistryAction = createAction({
 
     // Position and debt contracts from the active protocol manifests:
     // the token's class is protocol knowledge, not metadata.
-    const classified = new Map<
-      string,
-      { kind: string; underlying: string | null }
-    >();
+    let classified = new Map<string, ProtocolClassification>();
     if (p.protocolRegistryDocumentId) {
       const protocolDoc = await context.reactor.get(
         p.protocolRegistryDocumentId,
       );
-      if (protocolDoc.header.documentType === PROTOCOL_REGISTRY_TYPE) {
-        const protocols =
-          globalState<{ protocols?: unknown[] }>(protocolDoc).protocols ?? [];
-        for (const raw of protocols) {
-          const manifest = parseProtocolEntry(raw);
-          if (!manifest || manifest.status !== "ACTIVE") continue;
-          for (const chain of manifest.chains) {
-            for (const contract of chain.contracts) {
-              if (contract.kind === "CORE") continue;
-              classified.set(
-                `eip155:${chain.chainId}/erc20:${contract.address}`,
-                {
-                  kind: contract.kind,
-                  underlying: contract.underlying ?? null,
-                },
-              );
-            }
-          }
-        }
-      }
+      classified = classifyProtocolContracts(protocolDoc);
     }
 
     const actions = [];

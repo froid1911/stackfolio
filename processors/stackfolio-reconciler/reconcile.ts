@@ -16,6 +16,7 @@ import { workflowDrift } from "./drift.js";
 import type { WorkflowFacts } from "./facts.js";
 import type { WorkflowAction, WorkflowSpec } from "./specs.js";
 import {
+  assetsSpec,
   buildWorkflow,
   disableAction,
   etherscanBackfillSpec,
@@ -328,6 +329,22 @@ export async function reconcilePortfolio(
           .map((w) => w.id),
       }),
     );
+    // The asset round needs wallets to hold something; an empty portfolio
+    // registers nothing.
+    if (wallets.some((w) => !w.state.ignored)) {
+      specs.push(
+        assetsSpec({
+          portfolioDocumentId: doc.id,
+          registryDocumentId: registry.id,
+          priceBookDocumentId: priceBook.id,
+          stakingDocumentId: staking?.id ?? "",
+          walletDocumentIds: wallets
+            .filter((w) => !w.state.ignored)
+            .map((w) => w.id),
+          ...(protocolRegistry ? { protocolRegistryDocumentId: protocolRegistry.id } : {}),
+        }),
+      );
+    }
   }
   if (staking) {
     const watchedValidators = Array.isArray(

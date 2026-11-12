@@ -112,7 +112,9 @@ describe("holdings-from-ledger", () => {
 
     const eth = result.holdings.find((h) => h.asset === ETH);
     const usdc = result.holdings.find((h) => h.asset === USDC);
-    // 2 - 0.5 - 0.000021 + 1 (wallet B, still backfilling) = 2.499979
+    // Neither wallet carries an observed native balance, so ETH still
+    // comes from the ledger: 2 - 0.5 - 0.000021 + 1 (wallet B, still
+    // backfilling) = 2.499979
     expect(eth?.amount).toBe("2.499979");
     expect(eth?.value).toBe("4999.958");
     expect(eth?.estimated).toBe(true); // wallet B is mid-backfill
@@ -148,6 +150,76 @@ describe("holdings-from-ledger", () => {
     expect(result.holdings.find((h) => h.asset === USDC)?.value).toBeNull();
     expect(result.incomplete).toBe(true);
     expect(result.totalValue).toBe("4999.958");
+  });
+
+  it("prefers the observed native balance over the ledger sum", async () => {
+    // A wallet whose native balance was read from the chain is ground
+    // truth: the ledger cannot see internal transfers, so its ETH rows
+    // under-count inflows and the raw sum falls below the real balance.
+    get.mockImplementation((id: string) =>
+      Promise.resolve(
+        id === "p1"
+          ? portfolio
+          : id === "b1"
+            ? book
+            : id === "r1"
+              ? registry
+              : id === "w1"
+                ? doc("stackfolio/wallet-account", {
+                    ignored: false,
+                    chainId: 1,
+                    nativeBalance: {
+                      amount: "1500000000000000000",
+                      blockNumber: 21000000,
+                    },
+                    ledger: [
+                      event("RECEIVE", ETH, "2000000000000000000"),
+                      event("SPEND", ETH, "500000000000000000"),
+                      event("RECEIVE", USDC, "1000000"),
+                    ],
+                  })
+                : walletB,
+      ),
+    );
+
+    const result = (await run({ asOf: "2026-11-11T00:00:00.000Z" })) as {
+      holdings: Array<{ asset: string; amount: string; estimated: boolean }>;
+    };
+
+    // 1.5 observed for wallet A + 1 ledger-only from wallet B (it carries
+    // no observation); wallet A's ledger ETH rows are not double-counted.
+    const eth = result.holdings.find((h) => h.asset === ETH);
+    expect(eth?.amount).toBe("2.5");
+    expect(eth?.estimated).toBe(true); // wallet B is mid-backfill
+  });
+
+  it("skips the native observation for ignored assets", async () => {
+    get.mockImplementation((id: string) =>
+      Promise.resolve(
+        id === "p1"
+          ? doc("stackfolio/portfolio", {
+              ignoredAssets: [ETH],
+              priceOverrides: [],
+            })
+          : id === "b1"
+            ? book
+            : id === "r1"
+              ? registry
+              : id === "w1" || id === "w2"
+                ? doc("stackfolio/wallet-account", {
+                    ignored: false,
+                    chainId: 1,
+                    nativeBalance: { amount: "1", blockNumber: 1 },
+                    ledger: [],
+                  })
+                : walletB,
+      ),
+    );
+
+    const result = (await run()) as {
+      holdings: Array<{ asset: string }>;
+    };
+    expect(result.holdings.find((h) => h.asset === ETH)).toBeUndefined();
   });
 
   it("prefers portfolio price overrides", async () => {

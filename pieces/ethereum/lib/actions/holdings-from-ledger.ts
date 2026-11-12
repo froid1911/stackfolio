@@ -1,4 +1,5 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
+import { nativeIdentifier } from "../decode.js";
 import { formatScaled, parseScaled, scaledProduct } from "../decimal.js";
 import { parseJsonish } from "../jsonish.js";
 import { globalState } from "../reactor.js";
@@ -18,7 +19,9 @@ export interface HoldingRow {
 
 interface WalletGlobalState {
   ignored?: boolean;
+  chainId?: number;
   backfill?: { state?: string } | null;
+  nativeBalance?: { amount: string; blockNumber: number } | null;
   ledger?: Array<{
     asset: string;
     amount: string;
@@ -125,6 +128,12 @@ export const ethereumHoldingsFromLedgerAction = createAction({
     }
 
     const nets = new Map<string, { raw: bigint; estimated: boolean }>();
+    // Observed native coin balances per chain native asset: the ledger only
+    // half-see native inflows (internal transfers need traces nobody free
+    // offers), so the chain's own balance read is the truth for the coin,
+    // and the ledger keeps its role for tokens, whose transfers are fully
+    // logged.
+    const observedNative = new Map<string, bigint>();
     for (const walletId of walletIds) {
       if (typeof walletId !== "string") continue;
       const wallet = globalState<WalletGlobalState>(
@@ -132,9 +141,18 @@ export const ethereumHoldingsFromLedgerAction = createAction({
       );
       if (wallet.ignored) continue;
       const estimated = (wallet.backfill?.state ?? "DONE") !== "DONE";
+      const native = nativeIdentifier(wallet.chainId ?? 1);
+      const balance =
+        wallet.nativeBalance && /^\d+$/.test(wallet.nativeBalance.amount ?? "")
+          ? BigInt(wallet.nativeBalance.amount)
+          : null;
+      if (balance !== null && !ignoredAssets.has(native)) {
+        observedNative.set(native, (observedNative.get(native) ?? 0n) + balance);
+      }
       for (const event of wallet.ledger ?? []) {
         if (event.ignored || ignoredAssets.has(event.asset)) continue;
         if (event.timestamp > asOf) continue;
+        if (event.asset === native && balance !== null) continue;
         const sign = SIGN[event.type];
         if (!sign) continue;
         const entry = nets.get(event.asset) ?? { raw: 0n, estimated: false };
@@ -142,6 +160,13 @@ export const ethereumHoldingsFromLedgerAction = createAction({
         entry.estimated ||= estimated;
         nets.set(event.asset, entry);
       }
+    }
+    for (const [asset, raw] of observedNative) {
+      const ledger = nets.get(asset);
+      nets.set(asset, {
+        raw: raw + (ledger?.raw ?? 0n),
+        estimated: ledger?.estimated ?? false,
+      });
     }
 
     let incomplete = false;

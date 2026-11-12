@@ -380,6 +380,50 @@ export function pricesSpec(resources: PortfolioResources): WorkflowSpec {
 }
 
 /**
+ * The daily asset round: whatever the ledger holds but the asset registry
+ * has never heard of gets named and classified, so a coin that arrives on
+ * day one stops being an unnamed line by day two. Holdings runs unpriced
+ * on purpose - it lists the assets.
+ */
+export function assetsSpec(
+  resources: PortfolioResources & {
+    protocolRegistryDocumentId?: string;
+  },
+): WorkflowSpec {
+  return {
+    key: "assets-daily",
+    displayName: "Assets daily",
+    trigger: { kind: "interval", seconds: 86_400 },
+    steps: [
+      {
+        name: "holdings",
+        piece: "ethereum",
+        action: "holdings-from-ledger",
+        config: {
+          portfolioDocumentId: resources.portfolioDocumentId,
+          walletDocumentIdsJson: resources.walletDocumentIds,
+          priceBookDocumentId: resources.priceBookDocumentId,
+          assetRegistryDocumentId: resources.registryDocumentId,
+        },
+      },
+      {
+        name: "register",
+        piece: "ethereum",
+        action: "register-missing-assets",
+        config: {
+          assetRegistryDocumentId: resources.registryDocumentId,
+          holdingsJson: "{{steps.holdings.output}}",
+          addedAt: firedAt,
+          ...(resources.protocolRegistryDocumentId
+            ? { protocolRegistryDocumentId: resources.protocolRegistryDocumentId }
+            : {}),
+        },
+      },
+    ],
+  };
+}
+
+/**
  * The daily staking round: validators by index (the ones watched on the
  * staking document) and by withdrawal address (every tracked mainnet
  * wallet), filed onto the staking document; with auto-snapshot enabled,

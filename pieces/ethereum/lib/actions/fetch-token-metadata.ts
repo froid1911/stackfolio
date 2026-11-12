@@ -4,9 +4,9 @@ import { authProps, createClientBundle } from "../client.js";
 import { erc20Asset } from "../decode.js";
 import { parseBytesString } from "../ens.js";
 
-const SELECTOR_SYMBOL = "0x95d89b41"; // symbol()
-const SELECTOR_NAME = "0x06fdde03"; // name()
-const SELECTOR_DECIMALS = "0x313ce567"; // decimals()
+export const SELECTOR_SYMBOL = "0x95d89b41"; // symbol()
+export const SELECTOR_NAME = "0x06fdde03"; // name()
+export const SELECTOR_DECIMALS = "0x313ce567"; // decimals()
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
@@ -23,7 +23,7 @@ function parseBytes32String(result: string): string | null {
 }
 
 /** One string getter; any revert, empty or odd return yields null (fallback). */
-async function readString(
+export async function readString(
   ethCall: (to: string, data: string) => Promise<string>,
   token: string,
   selector: string,
@@ -40,7 +40,7 @@ async function readString(
   }
 }
 
-async function readDecimals(
+export async function readDecimals(
   ethCall: (to: string, data: string) => Promise<string>,
   token: string,
 ): Promise<number> {

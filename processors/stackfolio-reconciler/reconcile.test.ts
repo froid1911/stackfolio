@@ -13,6 +13,7 @@ import {
 import {
   connectionOf,
   liveEtherscanSpec,
+  redecodeSpec,
   type Connections,
 } from "./specs.js";
 
@@ -30,6 +31,7 @@ const wallet = (
     ensNames: [],
     ledger: [],
     backfill: { state: "DONE", startBlock: 0, nextBlock: 0 },
+    redecode: null,
     cursor: null,
     nativeBalance: null,
     bitcoinXpub: null,
@@ -124,6 +126,31 @@ class FakeIO {
 
 const emptyRecorded = (): Recorded => ({ connectionId: null, workflowIds: [] });
 
+/** Facts for a re-decode walk that matches its spec exactly (no drift). */
+const retrofitFacts = (walletId: string, registryId: string) => {
+  const spec = redecodeSpec(walletId, registryId);
+  return {
+    name: spec.key,
+    facts: {
+      status: "ENABLED",
+      publishedVersion: 3,
+      version: 3,
+      name: spec.displayName,
+      triggerKind: "interval",
+      triggerConfig: { seconds: 60, label: spec.key },
+      steps: spec.steps.map((s, i) => ({
+        id: `s${i}`,
+        name: s.name,
+        action: s.action,
+        config: s.config,
+        timeoutSeconds: s.timeoutSeconds ?? null,
+        ...connectionOf(s, CONNECTIONS),
+      })),
+      managedBy: "p1",
+    } satisfies WorkflowFacts,
+  };
+};
+
 describe("reconcilePortfolio", () => {
   it("drafts workflows and blocks when nobody is granted", async () => {
     const fake = new FakeIO();
@@ -215,6 +242,7 @@ describe("reconcilePortfolio", () => {
         issues: [
           { code: "MISSING_REGISTRY" },
           { code: "MISSING_PRICE_BOOK" },
+          { code: "MISSING_PROTOCOL_REGISTRY" },
         ],
         fixes: [],
       },
@@ -505,6 +533,104 @@ describe("reconcilePortfolio", () => {
     };
     expect(check.input.issues.find((i) => i.code === "INCOMPLETE_WALLET")).toBeTruthy();
     expect(fake.created.filter((c) => c.key.includes("w1"))).toEqual([]);
+  });
+
+  it("arms the retrofit and builds the re-decode walk for a decoded wallet", async () => {
+    const fake = new FakeIO();
+    // A hex id: the address must pass the position sweep's address check.
+    fake.wallets = [wallet("abcd")];
+    fake.connectionStatus["eth-1"] = "OK";
+    fake.singletons["stackfolio/protocol-registry"] = {
+      id: "pr-1",
+      name: "Protocol registry",
+    };
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: [] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+
+    // The cursor is armed exactly once...
+    const armed = fake.dispatched
+      .flatMap((d) => d.actions)
+      .filter((a) => (a as { type: string }).type === "SET_REDECODE_STATE");
+    expect(armed).toHaveLength(1);
+    // ...and the retrofit workflow is built with the registry on the walk.
+    const retrofit = fake.created.find((c) => c.key === "redecode-abcd");
+    expect(retrofit).toBeTruthy();
+    const wiring = JSON.stringify(retrofit?.actions);
+    expect(wiring).toContain("\"redecode\":true");
+    expect(wiring).toContain("pr-1");
+    // The live poll decodes too, once the registry exists.
+    const live = fake.created.find((c) => c.key === "live-etherscan-abcd");
+    expect(JSON.stringify(live?.actions)).toContain("registryDocumentId");
+    // The chain-1 wallet is reachable by the position sweep.
+    const sweep = fake.created.find((c) => c.key === "positions-sweep");
+    expect(JSON.stringify(sweep?.actions)).toContain("fetch-positions");
+  });
+
+  it("does not arm twice, and retires the retrofit at DONE", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [
+      wallet("w1", {
+        redecode: { state: "DONE", startBlock: 0, nextBlock: 26_394_964 },
+      }),
+    ];
+    fake.connectionStatus["eth-1"] = "OK";
+    fake.singletons["stackfolio/protocol-registry"] = {
+      id: "pr-1",
+      name: "Protocol registry",
+    };
+    fake.workflows.set(
+      "wf-redecode",
+      retrofitFacts("w1", "pr-1"),
+    );
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: ["wf-redecode"] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+
+    expect(
+      fake.dispatched
+        .flatMap((d) => d.actions)
+        .filter((a) => (a as { type: string }).type === "SET_REDECODE_STATE"),
+    ).toEqual([]);
+    // No new retrofit workflow...
+    expect(fake.created.filter((c) => c.key.startsWith("redecode-"))).toEqual([]);
+    // ...and the old one is switched off.
+    const disabled = fake.updated.find((u) =>
+      u.actions.some((a) => (a as { type: string }).type === "SET_WORKFLOW_STATUS"),
+    );
+    expect(disabled?.id).toBe("wf-redecode");
+  });
+
+  it("never re-decodes a wallet whose history is still walking", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [
+      wallet("w1", {
+        backfill: { state: "NATIVE", startBlock: 0, nextBlock: 5_000 },
+      }),
+    ];
+    fake.connectionStatus["eth-1"] = "OK";
+    fake.singletons["stackfolio/protocol-registry"] = {
+      id: "pr-1",
+      name: "Protocol registry",
+    };
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: [] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+    expect(fake.created.filter((c) => c.key.startsWith("redecode-"))).toEqual([]);
+    expect(
+      fake.dispatched
+        .flatMap((d) => d.actions)
+        .filter((a) => (a as { type: string }).type === "SET_REDECODE_STATE"),
+    ).toEqual([]);
   });
 });
 

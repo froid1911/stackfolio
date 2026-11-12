@@ -21,7 +21,9 @@ import {
   etherscanBackfillSpec,
   hyperliquidSpec,
   liveEtherscanSpec,
+  positionsSpec,
   pricesSpec,
+  redecodeSpec,
   stakingSpec,
 } from "./specs.js";
 
@@ -33,6 +35,7 @@ import {
 export const PORTFOLIO_TYPE = "stackfolio/portfolio";
 export const WALLET_TYPE = "stackfolio/wallet-account";
 export const REGISTRY_TYPE = "stackfolio/asset-registry";
+export const PROTOCOL_REGISTRY_TYPE = "stackfolio/protocol-registry";
 export const PRICE_BOOK_TYPE = "stackfolio/price-book";
 export const STAKING_TYPE = "stackfolio/eth-staking";
 export const HYPERLIQUID_TYPE = "stackfolio/hyperliquid-account";
@@ -174,6 +177,7 @@ export async function reconcilePortfolio(
   }
 
   const registry = await io.findSingleton(REGISTRY_TYPE);
+  const protocolRegistry = await io.findSingleton(PROTOCOL_REGISTRY_TYPE);
   const priceBook = await io.findSingleton(PRICE_BOOK_TYPE);
   const staking = await io.findSingleton(STAKING_TYPE);
   const hyperliquid = await io.findSingleton(HYPERLIQUID_TYPE);
@@ -192,6 +196,15 @@ export async function reconcilePortfolio(
       severity: "WARNING",
       subject: null,
       message: "No price book in this drive yet; the setup wizard creates one.",
+    });
+  }
+  if (!protocolRegistry) {
+    issues.push({
+      code: "MISSING_PROTOCOL_REGISTRY",
+      severity: "WARNING",
+      subject: null,
+      message:
+        "No protocol registry in this drive yet; chain events stay generic and DeFi positions stay unseen until one is seeded.",
     });
   }
 
@@ -230,7 +243,11 @@ export async function reconcilePortfolio(
       });
       continue;
     }
-    const live = liveEtherscanSpec(wallet.id, provider);
+    // With the protocol registry in the drive, the Etherscan walks decode
+    // what they fetch; without it they can only file generic rows.
+    const decodeRegistryId =
+      provider === "etherscan" ? protocolRegistry?.id : undefined;
+    const live = liveEtherscanSpec(wallet.id, provider, decodeRegistryId);
     specs.push(live);
     stallKeys.set(live, wallet.state.cursor?.lastRunAt ?? "never");
     let backfill = wallet.state.backfill;
@@ -258,9 +275,37 @@ export async function reconcilePortfolio(
       backfill = { state: "NATIVE", startBlock: 0, nextBlock: 0 };
     }
     if (!backfill || backfill.state !== "DONE") {
-      const walk = etherscanBackfillSpec(wallet.id, provider);
+      const walk = etherscanBackfillSpec(
+        wallet.id,
+        provider,
+        decodeRegistryId,
+      );
       specs.push(walk);
       stallKeys.set(walk, String(backfill?.nextBlock ?? 0));
+      continue;
+    }
+    // History is in. When a registry exists, the wallet's imported rows
+    // get one retrofit pass - the same windows over again, this time
+    // decoded - armed once and retired by the walk itself at the head.
+    if (provider === "etherscan" && protocolRegistry) {
+      if (!wallet.state.redecode) {
+        await io.dispatchWallet(wallet.id, [
+          walletActions.setRedecodeState({
+            state: "NATIVE",
+            startBlock: 0,
+            nextBlock: 0,
+          }),
+        ]);
+        fixes.push({
+          code: "REDECODE_ARMED",
+          message: `${wallet.id.slice(0, 8)} queues its retrofit: the history is re-walked with the protocol registry, decoded rows replacing the generic ones; review fields and pinned prices ride along.`,
+        });
+      }
+      if (wallet.state.redecode?.state !== "DONE") {
+        const retrofit = redecodeSpec(wallet.id, protocolRegistry.id);
+        specs.push(retrofit);
+        stallKeys.set(retrofit, String(wallet.state.redecode?.nextBlock ?? 0));
+      }
     }
   }
   if (registry && priceBook) {
@@ -292,6 +337,25 @@ export async function reconcilePortfolio(
   }
   if (hyperliquid) {
     specs.push(hyperliquidSpec(hyperliquid.id));
+  }
+  if (protocolRegistry) {
+    // The position sweep reads the chain through the local node, so it
+    // covers the wallets that node can answer for; the rest are silent,
+    // not missing.
+    const reachable = wallets
+      .filter(
+        (w) =>
+          !w.state.ignored &&
+          (w.state.chainId ?? 1) === 1 &&
+          /^0x[0-9a-fA-F]{40}$/.test(w.state.address ?? ""),
+      )
+      .map((w) => ({
+        address: (w.state.address).toLowerCase(),
+        chainId: 1,
+      }));
+    if (reachable.length > 0) {
+      specs.push(positionsSpec(doc.id, protocolRegistry.id, reachable));
+    }
   }
 
   // Every spec has at least one step that reads or writes documents, and

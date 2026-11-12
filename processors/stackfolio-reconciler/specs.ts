@@ -148,7 +148,15 @@ const HISTORY_ACTION: Record<ChainProvider, string> = {
 export function liveEtherscanSpec(
   walletDocumentId: string,
   provider: ChainProvider = "etherscan",
+  registryDocumentId?: string,
 ): WorkflowSpec {
+  // Only the Etherscan walks read logs; a registry on a step that cannot
+  // decode would be a lie, so blockscout/ankr wallets stay generic-only
+  // until they speak for themselves.
+  const decode =
+    provider === "etherscan" && registryDocumentId
+      ? { registryDocumentId }
+      : {};
   return {
     key: `live-${provider}-${walletDocumentId}`,
     displayName: `Live ${provider[0].toUpperCase()}${provider.slice(1)} ${walletDocumentId.slice(0, 8)}`,
@@ -159,7 +167,7 @@ export function liveEtherscanSpec(
         piece: "ethereum",
         action: LIVE_ACTION[provider],
         timeoutSeconds: 120,
-        config: { accountDocumentId: walletDocumentId },
+        config: { accountDocumentId: walletDocumentId, ...decode },
       },
       {
         name: "import",
@@ -199,7 +207,12 @@ export function liveEtherscanSpec(
 export function etherscanBackfillSpec(
   walletDocumentId: string,
   provider: ChainProvider = "etherscan",
+  registryDocumentId?: string,
 ): WorkflowSpec {
+  const decode =
+    provider === "etherscan" && registryDocumentId
+      ? { registryDocumentId }
+      : {};
   return {
     key: `${provider}-backfill-${walletDocumentId}`,
     displayName: `${provider[0].toUpperCase()}${provider.slice(1)} backfill ${walletDocumentId.slice(0, 8)}`,
@@ -210,7 +223,7 @@ export function etherscanBackfillSpec(
         piece: "ethereum",
         action: HISTORY_ACTION[provider],
         timeoutSeconds: 300,
-        config: { accountDocumentId: walletDocumentId },
+        config: { accountDocumentId: walletDocumentId, ...decode },
       },
       {
         name: "import",
@@ -230,6 +243,81 @@ export function etherscanBackfillSpec(
   };
 }
 
+/**
+ * The retrofit walk for one wallet: the same window machine as the
+ * history walk, reading the document's redecode cursor and importing in
+ * replace mode, so generic rows become decoded ones while review fields
+ * and pinned valuations ride along untouched. The import retires the
+ * cursor to DONE at the head; the reconciler then drops the workflow.
+ */
+export function redecodeSpec(
+  walletDocumentId: string,
+  registryDocumentId: string,
+): WorkflowSpec {
+  return {
+    key: `redecode-${walletDocumentId}`,
+    displayName: `Re-decode ${walletDocumentId.slice(0, 8)}`,
+    trigger: { kind: "interval", seconds: 60 },
+    steps: [
+      {
+        name: "walk",
+        piece: "ethereum",
+        action: "fetch-etherscan-history",
+        timeoutSeconds: 300,
+        config: {
+          accountDocumentId: walletDocumentId,
+          redecode: true,
+          registryDocumentId,
+        },
+      },
+      {
+        name: "import",
+        piece: "ethereum",
+        action: "import-events-to-wallet-account",
+        config: {
+          walletDocumentId,
+          batchId: firedAt,
+          importedAt: firedAt,
+          eventsJson: "{{steps.walk.output.rows}}",
+          redecode: true,
+          redecodeDone: "{{steps.walk.output.done}}",
+          redecodeNextBlock: "{{steps.walk.output.nextBlock}}",
+        },
+      },
+      pinStep(walletDocumentId),
+    ],
+  };
+}
+
+/**
+ * The hourly DeFi sweep: every wallet the local node can serve (the
+ * chain's positions are read by eth_call) asks the registry's position
+ * and debt contracts what the wallet holds, and the answer lands on the
+ * portfolio. Wallets on other chains are the node's silence, not a gap.
+ */
+export function positionsSpec(
+  portfolioDocumentId: string,
+  registryDocumentId: string,
+  wallets: Array<{ address: string; chainId: number }>,
+): WorkflowSpec {
+  return {
+    key: "positions-sweep",
+    displayName: "DeFi positions sweep",
+    trigger: { kind: "interval", seconds: 3600 },
+    steps: wallets.map((wallet, i) => ({
+      name: `sweep-${i + 1}`,
+      piece: "ethereum" as const,
+      action: "fetch-positions",
+      timeoutSeconds: 240,
+      config: {
+        documentId: portfolioDocumentId,
+        wallet: wallet.address,
+        chainId: wallet.chainId,
+        protocolRegistryDocumentId: registryDocumentId,
+      },
+    })),
+  };
+}
 /**
  * The hourly price round: which assets the portfolio holds (holdings knows,
  * price or not), the registry for coingeckoIds, CoinGecko, the book. The

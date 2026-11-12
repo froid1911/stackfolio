@@ -4,8 +4,10 @@ import {
   buildWorkflow,
   etherscanBackfillSpec,
   liveEtherscanSpec,
+  positionsSpec,
   pricesSpec,
   hyperliquidSpec,
+  redecodeSpec,
   stakingSpec,
   connectionOf,
   withPublish,
@@ -63,6 +65,57 @@ describe("specs", () => {
     expect(spec.steps[1].config).toMatchObject({
       backfillDone: "{{steps.walk.output.done}}",
       backfillNextBlock: "{{steps.walk.output.nextBlock}}",
+    });
+  });
+
+  it("wires the registry into the Etherscan walks, not the others", () => {
+    const live = liveEtherscanSpec("w1", "etherscan", "reg-1");
+    expect(live.steps[0].config).toMatchObject({ registryDocumentId: "reg-1" });
+    const backfill = etherscanBackfillSpec("w1", "etherscan", "reg-1");
+    expect(backfill.steps[0].config).toMatchObject({
+      registryDocumentId: "reg-1",
+    });
+    const blockscout = etherscanBackfillSpec("w1", "blockscout", "reg-1");
+    expect(blockscout.steps[0].config).not.toHaveProperty("registryDocumentId");
+  });
+
+  it("re-decode re-walks from the redecode cursor and imports in replace mode", () => {
+    const spec = redecodeSpec("w1", "reg-1");
+    expect(spec.key).toBe("redecode-w1");
+    expect(spec.trigger).toEqual({ kind: "interval", seconds: 60 });
+    expect(spec.steps.map((s) => s.action)).toEqual([
+      "fetch-etherscan-history",
+      "import-events-to-wallet-account",
+      "pin-prices",
+    ]);
+    expect(spec.steps[0].config).toEqual({
+      accountDocumentId: "w1",
+      redecode: true,
+      registryDocumentId: "reg-1",
+    });
+    expect(spec.steps[1].config).toMatchObject({
+      redecode: true,
+      redecodeDone: "{{steps.walk.output.done}}",
+      redecodeNextBlock: "{{steps.walk.output.nextBlock}}",
+    });
+    expect(spec.steps[1].config).not.toHaveProperty("backfillNextBlock");
+  });
+
+  it("the position sweep walks every reachable wallet once", () => {
+    const spec = positionsSpec("p1", "reg-1", [
+      { address: "0xaa", chainId: 1 },
+      { address: "0xbb", chainId: 1 },
+    ]);
+    expect(spec.trigger).toEqual({ kind: "interval", seconds: 3600 });
+    expect(spec.steps.map((s) => s.action)).toEqual([
+      "fetch-positions",
+      "fetch-positions",
+    ]);
+    expect(spec.steps[0].config).toEqual({
+      documentId: "p1",
+      wallet: "0xaa",
+      chainId: 1,
+      protocolRegistryDocumentId: "reg-1",
     });
   });
 

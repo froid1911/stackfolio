@@ -36,6 +36,22 @@ export default {
           homeBackground: config.connect?.home?.background,
         },
       },
+      // Workflows: loads Workflow Studio and attaches the Workflows drive
+      // the switchboard's workflows plugin serves (hosts/switchboard/host.js
+      // — one link, declared on both ends). A literal $output token: the
+      // compound resolves it to the switchboard member's drive URL, so no
+      // generated outputs.js is needed.
+      {
+        module: "@powerhousedao/connect/plugins/workflows",
+        config: {
+          drive: {
+            $output: {
+              host: "switchboard",
+              path: ["drives", "workflows", "url"],
+            },
+          },
+        },
+      },
     ],
   },
 

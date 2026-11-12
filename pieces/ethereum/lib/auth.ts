@@ -1,0 +1,198 @@
+import { PieceAuth, Property } from "@powerhousedao/pieces-framework";
+import {
+  DEFAULT_BEACON_URL,
+  DEFAULT_CHAIN_ID,
+  DEFAULT_RPC_URL,
+} from "./client.js";
+import {
+  DEFAULT_BITCOIN_BASE_URL,
+  DEFAULT_BITCOIN_TESTNET_BASE_URL,
+} from "./bitcoin.js";
+
+/**
+ * This piece talks to the holder's own nodes, so the "auth" is node URLs —
+ * nothing secret leaves the machine. All fields are optional: empty means
+ * localhost defaults (`geth --http`, `prysm --beacon.rpc-port`).
+ */
+export const ethereumAuth = PieceAuth.CustomAuth({
+  description:
+    "URLs of a local Ethereum execution node (JSON-RPC) and beacon API. Leave the fields empty to use the defaults on 127.0.0.1.",
+  required: true,
+  props: {
+    rpcUrl: Property.ShortText({
+      displayName: "Execution RPC URL",
+      description: `JSON-RPC endpoint, e.g. ${DEFAULT_RPC_URL}. Leave blank for the default.`,
+      required: false,
+    }),
+    beaconUrl: Property.ShortText({
+      displayName: "Beacon API URL",
+      description: `Beacon-node REST API, e.g. ${DEFAULT_BEACON_URL}. Leave blank for the default.`,
+      required: false,
+    }),
+    chainId: Property.Number({
+      displayName: "Chain ID",
+      description: `Defaults to ${DEFAULT_CHAIN_ID} (Ethereum mainnet).`,
+      required: false,
+    }),
+    etherscanApiKey: Property.ShortText({
+      displayName: "Etherscan API key",
+      description:
+        "Key for the Etherscan V2 API - Stackfolio's source of portfolio history. Kept on this connection, never in portfolio documents.",
+      required: false,
+    }),
+    etherscanBaseUrl: Property.ShortText({
+      displayName: "Etherscan base URL",
+      description: "Override for mirrors; defaults to https://api.etherscan.io/v2/api.",
+      required: false,
+    }),
+    blockscoutApiKey: Property.ShortText({
+      displayName: "Blockscout API key",
+      description:
+        "Key for the Blockscout hosted gateway (api.blockscout.com) - answers the chains Etherscan's free plan charges for (OP Mainnet, Gnosis). Kept on this connection.",
+      required: false,
+    }),
+    ankrApiKey: Property.ShortText({
+      displayName: "Ankr API key",
+      description:
+        "Key for the Ankr multichain API (rpc.ankr.com) - answers Base, BNB Smart Chain and Avalanche, the chains the other indexers' free plans refuse. Kept on this connection.",
+      required: false,
+    }),
+    hyperliquidUrl: Property.ShortText({
+      displayName: "Hyperliquid info URL",
+      description:
+        "Override for the Hyperliquid public info API; defaults to https://api.hyperliquid.xyz.",
+      required: false,
+    }),
+    bitcoinApiUrl: Property.ShortText({
+      displayName: "Bitcoin API URL",
+      description:
+        "Override for the Bitcoin indexer (mempool.space/Esplora dialect); leave blank to use the public instance for each wallet's network.",
+      required: false,
+    }),
+  },
+  validate: async ({ auth }) => {
+    if (auth.etherscanApiKey !== undefined && auth.etherscanApiKey.trim() !== "") {
+      const key = auth.etherscanApiKey.trim();
+      if (key.length < 16 || !/^[A-Za-z0-9-]+$/.test(key)) {
+        return {
+          valid: false,
+          error:
+            "The Etherscan API key looks malformed - an Etherscan V2 key is at least 16 letters/digits (dashes allowed).",
+        };
+      }
+    }
+    const rpcUrl = auth.rpcUrl?.trim() || DEFAULT_RPC_URL;
+    try {
+      const response = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "eth_chainId",
+          params: [],
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) {
+        return { valid: false, error: `${rpcUrl} answered HTTP ${response.status}.` };
+      }
+      const body = (await response.json()) as { result?: string };
+      const nodeChainId = Number(body.result);
+      if (
+        auth.chainId !== undefined &&
+        nodeChainId !== auth.chainId
+      ) {
+        return {
+          valid: false,
+          error: `${rpcUrl} serves chain ${nodeChainId}, not ${auth.chainId}.`,
+        };
+      }
+      return { valid: true };
+    } catch {
+      return {
+        valid: false,
+        error: `Could not reach an execution node at ${rpcUrl}. Start it (e.g. geth with --http) and try again.`,
+      };
+    }
+  },
+  getConnectionIdentifier: ({ auth }) =>
+    Promise.resolve(auth.rpcUrl?.trim() || DEFAULT_RPC_URL),
+});
+
+/** Default Etherscan V2 endpoint (chainid is appended per request). */
+export const DEFAULT_ETHERSCAN_BASE_URL = "https://api.etherscan.io/v2/api";
+
+/**
+ * The Etherscan endpoint settings from a connection's auth. The key lives
+ * only on the connection - the one document the operator marks private -
+ * so every message here points there and never echoes the key.
+ */
+export function etherscanConfig(auth: {
+  etherscanApiKey?: string;
+  etherscanBaseUrl?: string;
+}): { apiKey: string; baseUrl: string } {
+  const apiKey = auth.etherscanApiKey?.trim() ?? "";
+  if (apiKey === "") {
+    throw new Error(
+      "Etherscan API key is not set - set it on the ethereum connection (Stackfolio reads it from there)",
+    );
+  }
+  return {
+    apiKey,
+    baseUrl:
+      auth.etherscanBaseUrl?.trim() || DEFAULT_ETHERSCAN_BASE_URL,
+  };
+}
+
+/**
+ * The Blockscout gateway settings from a connection's auth. Same rule
+ * as Etherscan: the key lives on the connection and is never echoed.
+ */
+export function blockscoutConfig(auth: {
+  blockscoutApiKey?: string;
+}): { apiKey: string } {
+  const apiKey = auth.blockscoutApiKey?.trim() ?? "";
+  if (apiKey === "") {
+    throw new Error(
+      "Blockscout API key is not set - set blockscoutApiKey on the ethereum connection (Stackfolio reads it from there)",
+    );
+  }
+  return { apiKey };
+}
+
+/**
+ * The Ankr multichain settings from a connection's auth. Same rule as
+ * the others: the key lives on the connection and is never echoed.
+ */
+export function ankrConfig(auth: {
+  ankrApiKey?: string;
+}): { apiKey: string } {
+  const apiKey = auth.ankrApiKey?.trim() ?? "";
+  if (apiKey === "") {
+    throw new Error(
+      "The ethereum connection carries no ankrApiKey - Ankr imports need one (free key at app.ankr.com).",
+    );
+  }
+  return { apiKey };
+}
+
+/**
+ * The Bitcoin indexer settings: no key - mempool.space answers the
+ * public chain read-only. The wallet's network picks the public
+ * instance; `bitcoinApiUrl` on the connection overrides it (self-hosted
+ * Esplora, or a mirror) and then its URL answers for both networks.
+ */
+export function bitcoinConfig(
+  auth: { bitcoinApiUrl?: string },
+  network: "mainnet" | "testnet",
+): { baseUrl: string } {
+  const override = auth.bitcoinApiUrl?.trim() ?? "";
+  if (override !== "") return { baseUrl: override };
+  return {
+    baseUrl:
+      network === "testnet"
+        ? DEFAULT_BITCOIN_TESTNET_BASE_URL
+        : DEFAULT_BITCOIN_BASE_URL,
+  };
+}

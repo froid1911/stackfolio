@@ -1,15 +1,86 @@
 {
-  "name": "stackfolio",
+  "name": "@powerhousedao/stackfolio",
   "description": "",
   "category": "",
   "publisher": {
     "name": "",
     "url": ""
   },
-  "documentModels": [],
-  "apps": [],
-  "editors": [],
-  "processors": [],
-  "subgraphs": [],
+  "documentModels": [
+    {
+      "id": "stackfolio/asset-registry",
+      "name": "Asset Registry"
+    },
+    {
+      "id": "stackfolio/portfolio",
+      "name": "Portfolio"
+    },
+    {
+      "id": "stackfolio/wallet-account",
+      "name": "Wallet Account"
+    },
+    {
+      "id": "stackfolio/eth-staking",
+      "name": "ETH Staking"
+    },
+    {
+      "id": "stackfolio/price-book",
+      "name": "Price Book"
+    },
+    {
+      "id": "stackfolio/hyperliquid-account",
+      "name": "Hyperliquid Account"
+    }
+  ],
+  "apps": [
+    {
+      "id": "stackfolio",
+      "name": "Stackfolio",
+      "documentTypes": ["powerhouse/document-drive"]
+    }
+  ],
+  "editors": [
+    {
+      "id": "wallet-account-editor",
+      "name": "Wallet Account Editor",
+      "documentTypes": ["stackfolio/wallet-account"]
+    },
+    {
+      "id": "portfolio-editor",
+      "name": "Portfolio Editor",
+      "documentTypes": ["stackfolio/portfolio"]
+    },
+    {
+      "id": "asset-registry-editor",
+      "name": "Asset Registry Editor",
+      "documentTypes": ["stackfolio/asset-registry"]
+    },
+    {
+      "id": "price-book-editor",
+      "name": "Price Book Editor",
+      "documentTypes": ["stackfolio/price-book"]
+    },
+    {
+      "id": "eth-staking-editor",
+      "name": "ETH Staking Editor",
+      "documentTypes": ["stackfolio/eth-staking"]
+    }
+  ],
+  "processors": [
+    {
+      "id": "portfolio-index",
+      "name": "portfolio-index"
+    },
+    {
+      "id": "stackfolio-reconciler",
+      "name": "stackfolio-reconciler"
+    }
+  ],
+  "subgraphs": [
+    {
+      "id": "portfolio-api",
+      "name": "portfolio-api"
+    }
+  ],
   "config": []
 }

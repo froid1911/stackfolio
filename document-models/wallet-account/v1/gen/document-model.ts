@@ -1,0 +1,265 @@
+import type { DocumentModelGlobalState } from "document-model";
+
+export const documentModel: DocumentModelGlobalState = {
+  id: "stackfolio/wallet-account",
+  name: "Wallet Account",
+  author: {
+    name: "Stackfolio",
+    website: "https://github.com/froid1911/stackfolio",
+  },
+  extension: ".wallet",
+  description:
+    "One on-chain account: its event ledger, scan cursor, backfill progress and latest native balance.",
+  specifications: [
+    {
+      state: {
+        local: {
+          schema: "",
+          examples: [],
+          initialValue: "",
+        },
+        global: {
+          schema:
+            "type WalletAccountState {\n  address: String!\n  chainId: Int!\n  label: String\n  ignored: Boolean!\n  ledger: [LedgerEvent!]!\n  cursor: ScanCursor\n  backfill: BackfillState\n  nativeBalance: NativeBalance\n  bitcoinXpub: String\n}\n\ntype LedgerEvent {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  counterpartyLabel: String\n  notes: String\n  ignored: Boolean!\n  source: EventSource!\n  importBatch: String\n}\n\ntype ScanCursor {\n  lastLogsBlock: Int\n  lastNativeScanBlock: Int\n  lastEventTimestamp: DateTime\n  lastRunAt: DateTime\n}\n\ntype BackfillState {\n  state: BackfillPhase!\n  startBlock: Int\n  nextBlock: Int\n}\n\ntype NativeBalance {\n  amount: String!\n  blockNumber: Int!\n  observedAt: DateTime!\n}\n\nenum EventType {\n  SPEND\n  RECEIVE\n  TRADE\n  TRANSFER\n  STAKING\n  MIGRATE\n  INFORMATIONAL\n}\n\nenum EventSubtype {\n  NONE\n  FEE\n  APPROVE\n  WITHDRAWAL\n  BLOCK_PRODUCTION\n  SPAM\n  AIRDROP\n  DONATE\n  DEPOSIT_ASSET\n  REMOVE_ASSET\n}\n\nenum EventSource {\n  CHAIN\n  MANUAL\n}\n\nenum BackfillPhase {\n  IDLE\n  LOGS\n  NATIVE\n  DONE\n}",
+          examples: [],
+          initialValue:
+            '{"address": "", "chainId": 0, "label": null, "ignored": false, "ledger": [], "cursor": null, "backfill": null, "nativeBalance": null, "bitcoinXpub": null}',
+        },
+      },
+      modules: [
+        {
+          id: "5235253e-4b48-4a96-812f-cd5a00446ac3",
+          name: "account",
+          operations: [
+            {
+              id: "34a57cf2-41c3-4837-b0b2-c1c9fcfa7333",
+              name: "SET_ACCOUNT_DETAILS",
+              scope: "global",
+              errors: [],
+              schema:
+                "input SetAccountDetailsInput {\n  address: String\n  chainId: Int\n  label: String\n}",
+              reducer:
+                "if (action.input.address != null) state.address = action.input.address.toLowerCase();\nif (action.input.chainId != null) state.chainId = action.input.chainId;\nif (action.input.label != null) state.label = action.input.label;",
+              examples: [],
+              template: "",
+              description: "",
+            },
+            {
+              id: "44c762c1-8108-4719-8f92-e184cdeb0213",
+              name: "SET_IGNORED",
+              scope: "global",
+              errors: [],
+              schema: "input SetIgnoredInput {\n  ignored: Boolean!\n}",
+              reducer: "state.ignored = action.input.ignored;",
+              examples: [],
+              template: "",
+              description: "",
+            },
+            {
+              id: "setWalletXpub",
+              name: "SET_WALLET_XPUB",
+              description:
+                "Attach (or clear) the watch-only extended public key of a Bitcoin wallet (chainId 0).",
+              schema: "input SetWalletXpubInput {\n  xpub: String\n}",
+              template:
+                "Attach (or clear) the watch-only extended public key of a Bitcoin wallet (chainId 0).",
+              reducer:
+                'if (action.input.xpub == null) {\n  state.bitcoinXpub = null;\n} else {\n  const xpub = action.input.xpub.trim();\n  if (!/^(xpub|tpub|vpub|uppub|zpub|Zpub|Ypub)[1-9A-HJ-NP-Za-km-z]{20,}$/.test(xpub)) {\n    throw new InvalidInputError("xpub must be an extended public key: xpub/tpub/vpub/uppub/zpub/Zpub/Ypub in base58");\n  }\n  state.bitcoinXpub = xpub;\n}',
+              errors: [
+                {
+                  id: "setWalletXpubInvalid",
+                  name: "InvalidInputError",
+                  code: "INVALID_INPUT",
+                  description:
+                    "The value is not a base58 extended public key with a recognised prefix.",
+                  template: "",
+                },
+              ],
+              examples: [],
+              scope: "global",
+            },
+          ],
+          description: "Address, chain, label and the ignored switch",
+        },
+        {
+          id: "37345257-1f34-4c33-a60d-bcdf5bc8fe23",
+          name: "feed",
+          operations: [
+            {
+              id: "24115b6d-5eec-42bb-8c0f-e2b4d2d79cbd",
+              name: "IMPORT_EVENTS",
+              scope: "global",
+              errors: [
+                {
+                  id: "d08c7a42-b8ec-42fe-9ef0-ad83900b788d",
+                  name: "EmptyImportError",
+                  code: "EMPTY_IMPORT",
+                  description: "An import batch must carry at least one event",
+                  template: "",
+                },
+                {
+                  id: "edbd5ddc-77d2-477c-a5d8-5fcf4507ab72",
+                  name: "DuplicateEventError",
+                  code: "DUPLICATE_EVENT",
+                  description:
+                    "An event with the same identifier and sequence index exists",
+                  template: "",
+                },
+                {
+                  id: "0464a456-4b19-4787-bf4a-138ca28d4890",
+                  name: "InvalidAmountError",
+                  code: "INVALID_AMOUNT",
+                  description: "An event amount is not a decimal",
+                  template: "",
+                },
+              ],
+              schema:
+                "input ImportEventsInput {\n  batchId: String!\n  importedAt: DateTime!\n  events: [ImportedEventInput!]!\n}\n\ninput ImportedEventInput {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  notes: String\n}",
+              reducer:
+                'if (action.input.events.length === 0) {\n  throw new EmptyImportError("An import batch must carry at least one event");\n}\nconst isDecimal = (value: string) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nconst seen = new Set(state.ledger.map((e) => `${e.eventIdentifier}#${e.sequenceIndex}`));\nfor (const event of action.input.events) {\n  if (!isDecimal(event.amount)) {\n    throw new InvalidAmountError(`${event.amount} is not a decimal amount`);\n  }\n  const key = `${event.eventIdentifier}#${event.sequenceIndex}`;\n  if (seen.has(key)) {\n    throw new DuplicateEventError(\n      `Event ${event.eventIdentifier}#${event.sequenceIndex} already imported`,\n    );\n  }\n  seen.add(key);\n}\nfor (const event of action.input.events) {\n  state.ledger.push({\n    id: event.id,\n    eventIdentifier: event.eventIdentifier,\n    sequenceIndex: event.sequenceIndex,\n    timestamp: event.timestamp,\n    type: event.type,\n    subtype: event.subtype,\n    asset: event.asset,\n    amount: event.amount,\n    counterparty: event.counterparty ?? null,\n    counterpartyLabel: null,\n    notes: event.notes ?? null,\n    ignored: false,\n    source: "CHAIN",\n    importBatch: action.input.batchId,\n  });\n}',
+              examples: [],
+              template: "",
+              description: "",
+            },
+          ],
+          description: "Batch imports of decoded chain events",
+        },
+        {
+          id: "52d11024-3471-4cd6-aac1-fd55b0deb42e",
+          name: "review",
+          operations: [
+            {
+              id: "88b347ba-a1ff-439f-9218-6d84f03c18b8",
+              name: "SET_EVENT_IGNORED",
+              scope: "global",
+              errors: [
+                {
+                  id: "3a659ecc-c891-4375-bdda-6ab534dac6d4",
+                  name: "EventNotFoundError",
+                  code: "EVENT_NOT_FOUND",
+                  description: "No ledger event with that id",
+                  template: "",
+                },
+              ],
+              schema:
+                "input SetEventIgnoredInput {\n  id: OID!\n  ignored: Boolean!\n}",
+              reducer:
+                "const event = state.ledger.find((e) => e.id === action.input.id);\nif (!event) throw new EventNotFoundError(`Event ${action.input.id} is not in the ledger`);\nevent.ignored = action.input.ignored;",
+              examples: [],
+              template: "",
+              description: "",
+            },
+            {
+              id: "bf7a03e8-c73d-4491-b588-7c293f6c8cf0",
+              name: "SET_EVENT_NOTES",
+              scope: "global",
+              errors: [
+                {
+                  id: "ec2bfc77-72f0-4c65-a092-470096973cd9",
+                  name: "EventNotFoundError",
+                  code: "EVENT_NOT_FOUND",
+                  description: "No ledger event with that id",
+                  template: "",
+                },
+              ],
+              schema:
+                "input SetEventNotesInput {\n  id: OID!\n  notes: String\n}",
+              reducer:
+                "const event = state.ledger.find((e) => e.id === action.input.id);\nif (!event) throw new EventNotFoundError(`Event ${action.input.id} is not in the ledger`);\nevent.notes = action.input.notes ?? null;",
+              examples: [],
+              template: "",
+              description: "",
+            },
+            {
+              id: "82f76687-8e06-4aef-930e-ecf7efca0b0b",
+              name: "RETYPE_EVENT",
+              scope: "global",
+              errors: [
+                {
+                  id: "f3f38dd8-aa05-44a2-bdf2-f08282136c0d",
+                  name: "EventNotFoundError",
+                  code: "EVENT_NOT_FOUND",
+                  description: "No ledger event with that id",
+                  template: "",
+                },
+              ],
+              schema:
+                "input RetypeEventInput {\n  id: OID!\n  type: EventType!\n  subtype: EventSubtype!\n}",
+              reducer:
+                "const event = state.ledger.find((e) => e.id === action.input.id);\nif (!event) throw new EventNotFoundError(`Event ${action.input.id} is not in the ledger`);\nevent.type = action.input.type;\nevent.subtype = action.input.subtype;",
+              examples: [],
+              template: "",
+              description: "",
+            },
+          ],
+          description: "Human corrections on ledger events",
+        },
+        {
+          id: "5c037d92-472d-4dc0-aba5-dd9386a39dd4",
+          name: "cursor",
+          operations: [
+            {
+              id: "8cd147ca-4582-4b86-b10f-883ae8127c03",
+              name: "RECORD_SCAN_PROGRESS",
+              scope: "global",
+              errors: [
+                {
+                  id: "caf51411-ed1a-441a-94da-fdd4fef0f2a8",
+                  name: "CursorRegressionError",
+                  code: "CURSOR_REGRESSION",
+                  description: "A scan cursor must never move backwards",
+                  template: "",
+                },
+              ],
+              schema:
+                "input RecordScanProgressInput {\n  lastLogsBlock: Int\n  lastNativeScanBlock: Int\n  lastEventTimestamp: DateTime\n  ranAt: DateTime!\n}",
+              reducer:
+                "const cursor = state.cursor ?? {\n  lastLogsBlock: null,\n  lastNativeScanBlock: null,\n  lastEventTimestamp: null,\n  lastRunAt: null,\n};\nif (\n  action.input.lastLogsBlock != null &&\n  cursor.lastLogsBlock != null &&\n  action.input.lastLogsBlock < cursor.lastLogsBlock\n) {\n  throw new CursorRegressionError(\n    `lastLogsBlock would regress from ${cursor.lastLogsBlock} to ${action.input.lastLogsBlock}`,\n  );\n}\nif (\n  action.input.lastNativeScanBlock != null &&\n  cursor.lastNativeScanBlock != null &&\n  action.input.lastNativeScanBlock < cursor.lastNativeScanBlock\n) {\n  throw new CursorRegressionError(\n    `lastNativeScanBlock would regress from ${cursor.lastNativeScanBlock} to ${action.input.lastNativeScanBlock}`,\n  );\n}\nif (action.input.lastLogsBlock != null) cursor.lastLogsBlock = action.input.lastLogsBlock;\nif (action.input.lastNativeScanBlock != null) cursor.lastNativeScanBlock = action.input.lastNativeScanBlock;\nif (action.input.lastEventTimestamp != null) cursor.lastEventTimestamp = action.input.lastEventTimestamp;\ncursor.lastRunAt = action.input.ranAt;\nstate.cursor = cursor;",
+              examples: [],
+              template: "",
+              description: "",
+            },
+            {
+              id: "55ec35cf-6719-4c72-b61c-eba5f9a6c155",
+              name: "SET_BACKFILL_STATE",
+              scope: "global",
+              errors: [],
+              schema:
+                "input SetBackfillStateInput {\n  state: BackfillPhase!\n  startBlock: Int\n  nextBlock: Int\n}",
+              reducer:
+                "state.backfill = {\n  state: action.input.state,\n  startBlock: action.input.startBlock ?? null,\n  nextBlock: action.input.nextBlock ?? null,\n};",
+              examples: [],
+              template: "",
+              description: "",
+            },
+            {
+              id: "c485f6de-deb6-48b1-b7d0-ea30f55f7387",
+              name: "SET_NATIVE_BALANCE",
+              scope: "global",
+              errors: [
+                {
+                  id: "396bafba-ccdd-4b52-a8ac-93c12b140ca3",
+                  name: "BalanceStaleError",
+                  code: "BALANCE_STALE",
+                  description:
+                    "The observation is not newer than the stored balance",
+                  template: "",
+                },
+              ],
+              schema:
+                "input SetNativeBalanceInput {\n  amount: String!\n  blockNumber: Int!\n  observedAt: DateTime!\n}",
+              reducer:
+                "if (\n  state.nativeBalance &&\n  action.input.observedAt <= state.nativeBalance.observedAt\n) {\n  throw new BalanceStaleError(\n    `A balance observed at ${action.input.observedAt} is not newer than ${state.nativeBalance.observedAt}`,\n  );\n}\nstate.nativeBalance = {\n  amount: action.input.amount,\n  blockNumber: action.input.blockNumber,\n  observedAt: action.input.observedAt,\n};",
+              examples: [],
+              template: "",
+              description: "",
+            },
+          ],
+          description: "Scan progress, backfill phase and native balance",
+        },
+      ],
+      version: 1,
+      changeLog: [],
+    },
+  ],
+};

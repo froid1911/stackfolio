@@ -1,0 +1,349 @@
+/* eslint-disable @typescript-eslint/no-empty-object-type */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import * as z from "zod";
+import type {
+  AddAddressInput,
+  AddressEntry,
+  AssetValue,
+  AssetValueInput,
+  AutoSnapshot,
+  ClearGrantInput,
+  DeleteSnapshotInput,
+  FixInput,
+  GrantInfo,
+  IssueInput,
+  IssueSeverity,
+  LocationValue,
+  LocationValueInput,
+  ManagedResources,
+  PortfolioState,
+  PriceOverride,
+  ReconcilerCheck,
+  ReconcilerFix,
+  ReconcilerIssue,
+  RecordCheckInput,
+  RecordResourcesInput,
+  RemoveAddressInput,
+  RemovePriceOverrideInput,
+  SetAddressIgnoredInput,
+  SetAssetIgnoredInput,
+  SetGrantInput,
+  SetPortfolioDetailsInput,
+  SetPriceOverrideInput,
+  Snapshot,
+  TakeSnapshotInput,
+  UpdateAddressInput,
+} from "./types.js";
+
+type Properties<T> = Required<{
+  [K in keyof T]: z.ZodType<T[K]>;
+}>;
+
+type definedNonNullAny = {};
+
+export const isDefinedNonNullAny = (v: any): v is definedNonNullAny =>
+  v !== undefined && v !== null;
+
+export const definedNonNullAnySchema = z
+  .any()
+  .refine((v) => isDefinedNonNullAny(v));
+
+export const IssueSeveritySchema = z.enum(["BLOCKING", "WARNING"]);
+
+export function AddAddressInputSchema(): z.ZodObject<
+  Properties<AddAddressInput>
+> {
+  return z.object({
+    address: z.string(),
+    chainId: z.number(),
+    ensName: z.string().nullish(),
+    id: z.string(),
+    label: z.string().nullish(),
+    timestamp: z.iso.datetime(),
+  });
+}
+
+export function AddressEntrySchema(): z.ZodObject<Properties<AddressEntry>> {
+  return z.object({
+    __typename: z.literal("AddressEntry").optional(),
+    addedAt: z.iso.datetime(),
+    address: z.string(),
+    chainId: z.number(),
+    ensName: z.string().nullish(),
+    id: z.string(),
+    ignored: z.boolean(),
+    label: z.string().nullish(),
+    tags: z.array(z.string()),
+  });
+}
+
+export function AssetValueSchema(): z.ZodObject<Properties<AssetValue>> {
+  return z.object({
+    __typename: z.literal("AssetValue").optional(),
+    amount: z.string(),
+    asset: z.string(),
+    value: z.string(),
+  });
+}
+
+export function AssetValueInputSchema(): z.ZodObject<
+  Properties<AssetValueInput>
+> {
+  return z.object({
+    amount: z.string(),
+    asset: z.string(),
+    value: z.string(),
+  });
+}
+
+export function AutoSnapshotSchema(): z.ZodObject<Properties<AutoSnapshot>> {
+  return z.object({
+    __typename: z.literal("AutoSnapshot").optional(),
+    enabled: z.boolean(),
+    intervalHours: z.number(),
+  });
+}
+
+export function ClearGrantInputSchema(): z.ZodObject<
+  Properties<ClearGrantInput>
+> {
+  return z.object({
+    _empty: z.boolean().nullish(),
+  });
+}
+
+export function DeleteSnapshotInputSchema(): z.ZodObject<
+  Properties<DeleteSnapshotInput>
+> {
+  return z.object({
+    id: z.string(),
+  });
+}
+
+export function FixInputSchema(): z.ZodObject<Properties<FixInput>> {
+  return z.object({
+    at: z.iso.datetime(),
+    code: z.string(),
+    message: z.string(),
+  });
+}
+
+export function GrantInfoSchema(): z.ZodObject<Properties<GrantInfo>> {
+  return z.object({
+    __typename: z.literal("GrantInfo").optional(),
+    grantedAt: z.iso.datetime().nullish(),
+    id: z.string(),
+    name: z.string().nullish(),
+  });
+}
+
+export function IssueInputSchema(): z.ZodObject<Properties<IssueInput>> {
+  return z.object({
+    accountId: z.string().nullish(),
+    code: z.string(),
+    message: z.string(),
+    severity: IssueSeveritySchema,
+  });
+}
+
+export function LocationValueSchema(): z.ZodObject<Properties<LocationValue>> {
+  return z.object({
+    __typename: z.literal("LocationValue").optional(),
+    location: z.string(),
+    value: z.string(),
+  });
+}
+
+export function LocationValueInputSchema(): z.ZodObject<
+  Properties<LocationValueInput>
+> {
+  return z.object({
+    location: z.string(),
+    value: z.string(),
+  });
+}
+
+export function ManagedResourcesSchema(): z.ZodObject<
+  Properties<ManagedResources>
+> {
+  return z.object({
+    __typename: z.literal("ManagedResources").optional(),
+    connectionId: z.string(),
+    workflowIds: z.array(z.string()),
+  });
+}
+
+export function PortfolioStateSchema(): z.ZodObject<
+  Properties<PortfolioState>
+> {
+  return z.object({
+    __typename: z.literal("PortfolioState").optional(),
+    addresses: z.array(z.lazy(() => AddressEntrySchema())),
+    autoSnapshot: z.lazy(() => AutoSnapshotSchema()),
+    baseCurrency: z.string(),
+    grant: z.lazy(() => GrantInfoSchema().nullish()),
+    ignoredAssets: z.array(z.string()),
+    lastCheck: z.lazy(() => ReconcilerCheckSchema().nullish()),
+    name: z.string().nullish(),
+    priceOverrides: z.array(z.lazy(() => PriceOverrideSchema())),
+    resources: z.lazy(() => ManagedResourcesSchema().nullish()),
+    snapshots: z.array(z.lazy(() => SnapshotSchema())),
+  });
+}
+
+export function PriceOverrideSchema(): z.ZodObject<Properties<PriceOverride>> {
+  return z.object({
+    __typename: z.literal("PriceOverride").optional(),
+    asset: z.string(),
+    price: z.string(),
+    setAt: z.iso.datetime(),
+  });
+}
+
+export function ReconcilerCheckSchema(): z.ZodObject<
+  Properties<ReconcilerCheck>
+> {
+  return z.object({
+    __typename: z.literal("ReconcilerCheck").optional(),
+    at: z.iso.datetime(),
+    fixes: z.array(z.lazy(() => ReconcilerFixSchema())),
+    issues: z.array(z.lazy(() => ReconcilerIssueSchema())),
+  });
+}
+
+export function ReconcilerFixSchema(): z.ZodObject<Properties<ReconcilerFix>> {
+  return z.object({
+    __typename: z.literal("ReconcilerFix").optional(),
+    at: z.iso.datetime(),
+    code: z.string(),
+    message: z.string(),
+  });
+}
+
+export function ReconcilerIssueSchema(): z.ZodObject<
+  Properties<ReconcilerIssue>
+> {
+  return z.object({
+    __typename: z.literal("ReconcilerIssue").optional(),
+    accountId: z.string().nullish(),
+    code: z.string(),
+    message: z.string(),
+    severity: IssueSeveritySchema,
+  });
+}
+
+export function RecordCheckInputSchema(): z.ZodObject<
+  Properties<RecordCheckInput>
+> {
+  return z.object({
+    at: z.iso.datetime(),
+    fixes: z.array(z.lazy(() => FixInputSchema())),
+    issues: z.array(z.lazy(() => IssueInputSchema())),
+  });
+}
+
+export function RecordResourcesInputSchema(): z.ZodObject<
+  Properties<RecordResourcesInput>
+> {
+  return z.object({
+    connectionId: z.string(),
+    workflowIds: z.array(z.string()),
+  });
+}
+
+export function RemoveAddressInputSchema(): z.ZodObject<
+  Properties<RemoveAddressInput>
+> {
+  return z.object({
+    id: z.string(),
+  });
+}
+
+export function RemovePriceOverrideInputSchema(): z.ZodObject<
+  Properties<RemovePriceOverrideInput>
+> {
+  return z.object({
+    asset: z.string(),
+  });
+}
+
+export function SetAddressIgnoredInputSchema(): z.ZodObject<
+  Properties<SetAddressIgnoredInput>
+> {
+  return z.object({
+    id: z.string(),
+    ignored: z.boolean(),
+  });
+}
+
+export function SetAssetIgnoredInputSchema(): z.ZodObject<
+  Properties<SetAssetIgnoredInput>
+> {
+  return z.object({
+    asset: z.string(),
+    ignored: z.boolean(),
+  });
+}
+
+export function SetGrantInputSchema(): z.ZodObject<Properties<SetGrantInput>> {
+  return z.object({
+    grantedAt: z.iso.datetime().nullish(),
+    id: z.string(),
+    name: z.string().nullish(),
+  });
+}
+
+export function SetPortfolioDetailsInputSchema(): z.ZodObject<
+  Properties<SetPortfolioDetailsInput>
+> {
+  return z.object({
+    autoSnapshotEnabled: z.boolean().nullish(),
+    autoSnapshotIntervalHours: z.number().nullish(),
+    baseCurrency: z.string().nullish(),
+    name: z.string().nullish(),
+  });
+}
+
+export function SetPriceOverrideInputSchema(): z.ZodObject<
+  Properties<SetPriceOverrideInput>
+> {
+  return z.object({
+    asset: z.string(),
+    price: z.string(),
+    setAt: z.iso.datetime(),
+  });
+}
+
+export function SnapshotSchema(): z.ZodObject<Properties<Snapshot>> {
+  return z.object({
+    __typename: z.literal("Snapshot").optional(),
+    id: z.string(),
+    perAsset: z.array(z.lazy(() => AssetValueSchema())),
+    perLocation: z.array(z.lazy(() => LocationValueSchema())),
+    timestamp: z.iso.datetime(),
+    totalValue: z.string(),
+  });
+}
+
+export function TakeSnapshotInputSchema(): z.ZodObject<
+  Properties<TakeSnapshotInput>
+> {
+  return z.object({
+    id: z.string(),
+    perAsset: z.array(z.lazy(() => AssetValueInputSchema())),
+    perLocation: z.array(z.lazy(() => LocationValueInputSchema())),
+    timestamp: z.iso.datetime(),
+    totalValue: z.string(),
+  });
+}
+
+export function UpdateAddressInputSchema(): z.ZodObject<
+  Properties<UpdateAddressInput>
+> {
+  return z.object({
+    ensName: z.string().nullish(),
+    id: z.string(),
+    label: z.string().nullish(),
+    tags: z.array(z.string()).nullish(),
+  });
+}

@@ -1,0 +1,99 @@
+import type { DocumentModelGlobalState } from "document-model";
+
+export const documentModel: DocumentModelGlobalState = {
+  id: "stackfolio/hyperliquid-account",
+  name: "Hyperliquid Account",
+  author: {
+    name: "froid1911",
+    website: "https://github.com/froid1911/stackfolio",
+  },
+  extension: ".hlac",
+  description:
+    "A Hyperliquid (HyperCore) account: spot balances, perp positions and recent fills, refreshed from the public info API.",
+  specifications: [
+    {
+      state: {
+        local: {
+          schema: "",
+          examples: [],
+          initialValue: "",
+        },
+        global: {
+          schema:
+            "type HyperliquidAccountState {\n  accounts: [HlAccount!]!\n}\n\ntype HlAccount {\n  address: String!\n  label: String\n  accountValueUsd: String\n  spot: [HlSpotBalance!]!\n  perps: [HlPerpPosition!]!\n  fills: [HlFill!]!\n  updatedAt: DateTime\n}\n\ntype HlSpotBalance {\n  tokenIndex: Int!\n  coin: String!\n  total: String!\n  hold: String!\n}\n\ntype HlPerpPosition {\n  coin: String!\n  szi: String!\n  entryPx: String!\n  positionValue: String!\n  unrealizedPnl: String!\n}\n\ntype HlFill {\n  tid: Int!\n  coin: String!\n  side: String!\n  px: String!\n  sz: String!\n  time: Int!\n  dir: String\n  fee: String\n  closedPnl: String\n}",
+          examples: [],
+          initialValue: '{"accounts":[]}',
+        },
+      },
+      modules: [
+        {
+          id: "hyperliquid",
+          name: "Hyperliquid",
+          description: "HyperCore account snapshots",
+          operations: [
+            {
+              id: "upsertAccount",
+              name: "UPSERT_ACCOUNT",
+              description: "Add a Hyperliquid account to track, or relabel it.",
+              schema:
+                "input UpsertAccountInput {\n  address: String!\n  label: String\n}",
+              template: "Add a Hyperliquid account to track, or relabel it.",
+              reducer:
+                'const address = action.input.address.toLowerCase();\nif (!/^0x[0-9a-f]{40}$/.test(address)) {\n  throw new InvalidInputError("address must be a 0x-prefixed 40-hex-character address");\n}\nconst existing = state.accounts.find((account) => account.address === address);\nif (existing) {\n  existing.label = action.input.label ?? existing.label;\n} else {\n  state.accounts.push({\n    address,\n    label: action.input.label ?? null,\n    accountValueUsd: null,\n    spot: [],\n    perps: [],\n    fills: [],\n    updatedAt: null,\n  });\n}',
+              errors: [
+                {
+                  id: "upsertAccountInvalid",
+                  name: "InvalidInputError",
+                  code: "INVALID_INPUT",
+                  description:
+                    "The address is not a 0x-prefixed 40-hex-character address.",
+                  template: "",
+                },
+              ],
+              examples: [
+                {
+                  id: "upsertAccountExample1",
+                  value:
+                    '{"address":"0x8a88728340b81741c8ad70b07f601d99e9c3f7cb","label":"fr4nk.eth"}',
+                },
+              ],
+              scope: "global",
+            },
+            {
+              id: "recordSnapshot",
+              name: "RECORD_SNAPSHOT",
+              description:
+                "Replace one account's balances, positions and recent fills with a fresh snapshot.",
+              schema:
+                "input RecordSnapshotInput {\n  address: String!\n  accountValueUsd: String\n  spot: [HlSpotInput!]!\n  perps: [HlPerpInput!]!\n  fills: [HlFillInput!]!\n  updatedAt: DateTime!\n}\ninput HlSpotInput {\n  tokenIndex: Int!\n  coin: String!\n  total: String!\n  hold: String!\n}\ninput HlPerpInput {\n  coin: String!\n  szi: String!\n  entryPx: String!\n  positionValue: String!\n  unrealizedPnl: String!\n}\ninput HlFillInput {\n  tid: Int!\n  coin: String!\n  side: String!\n  px: String!\n  sz: String!\n  time: Int!\n  dir: String\n  fee: String\n  closedPnl: String\n}",
+              template:
+                "Replace one account's balances, positions and recent fills with a fresh snapshot.",
+              reducer:
+                "const address = action.input.address.toLowerCase();\nconst account = state.accounts.find((entry) => entry.address === address);\nif (!account) {\n  throw new EntityNotFoundError(`no Hyperliquid account ${address}`);\n}\naccount.accountValueUsd = action.input.accountValueUsd ?? null;\naccount.spot = action.input.spot.map((balance) => ({\n  tokenIndex: balance.tokenIndex,\n  coin: balance.coin,\n  total: balance.total,\n  hold: balance.hold,\n}));\naccount.perps = action.input.perps.map((position) => ({\n  coin: position.coin,\n  szi: position.szi,\n  entryPx: position.entryPx,\n  positionValue: position.positionValue,\n  unrealizedPnl: position.unrealizedPnl,\n}));\naccount.fills = [...action.input.fills]\n  .sort((left, right) => right.time - left.time || right.tid - left.tid)\n  .slice(0, 500)\n  .map((fill) => ({\n    tid: fill.tid,\n    coin: fill.coin,\n    side: fill.side,\n    px: fill.px,\n    sz: fill.sz,\n    time: fill.time,\n    dir: fill.dir ?? null,\n    fee: fill.fee ?? null,\n    closedPnl: fill.closedPnl ?? null,\n  }));\naccount.updatedAt = action.input.updatedAt;",
+              errors: [
+                {
+                  id: "recordSnapshotNotFound",
+                  name: "EntityNotFoundError",
+                  code: "ENTITY_NOT_FOUND",
+                  description:
+                    "No tracked account with this address exists yet.",
+                  template: "",
+                },
+              ],
+              examples: [
+                {
+                  id: "recordSnapshotExample1",
+                  value:
+                    '{"address":"0x8a88728340b81741c8ad70b07f601d99e9c3f7cb","accountValueUsd":"1234.56","spot":[{"tokenIndex":0,"coin":"USDC","total":"100.5","hold":"0"}],"perps":[{"coin":"HYPE","szi":"1.5","entryPx":"18.2","positionValue":"28.1","unrealizedPnl":"0.4"}],"fills":[{"tid":900001,"coin":"HYPE","side":"B","px":"18.0","sz":"1.5","time":1730000000,"dir":"Open Long","fee":"0.01","closedPnl":"0"}],"updatedAt":"2026-11-11T10:00:00.000Z"}',
+                },
+              ],
+              scope: "global",
+            },
+          ],
+        },
+      ],
+      version: 1,
+      changeLog: [],
+    },
+  ],
+};

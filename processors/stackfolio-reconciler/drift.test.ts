@@ -107,7 +107,7 @@ describe("workflowDrift", () => {
       steps: specFacts(spec).steps.slice(0, -1),
     };
     const drift = workflowDrift(spec, trimmed, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
-    expect(drift.differences).toEqual(["the step import was missing"]);
+    expect(drift.differences).toEqual(["the step pin was missing"]);
     expect(drift.actions.map((a) => a.type)).toEqual(["ADD_STEP"]);
   });
 

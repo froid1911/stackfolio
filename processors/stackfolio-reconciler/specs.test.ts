@@ -37,6 +37,7 @@ describe("specs", () => {
     expect(spec.steps.map((s) => s.action)).toEqual([
       "fetch-etherscan-recent",
       "import-events-to-wallet-account",
+      "pin-prices",
     ]);
     const importStep = spec.steps[1].config;
     expect(importStep).toMatchObject({
@@ -56,6 +57,7 @@ describe("specs", () => {
     expect(spec.steps.map((s) => s.action)).toEqual([
       "fetch-etherscan-history",
       "import-events-to-wallet-account",
+      "pin-prices",
     ]);
     expect(spec.steps[0].config).toEqual({ accountDocumentId: "w1" });
     expect(spec.steps[1].config).toMatchObject({
@@ -95,6 +97,8 @@ describe("specs", () => {
       "SET_TRIGGER",
       "ADD_STEP",
       "ADD_STEP",
+      "ADD_STEP",
+      "ADD_EDGE",
       "ADD_EDGE",
       "ADD_EDGE",
       "SET_POLICY",
@@ -112,7 +116,9 @@ describe("specs", () => {
       triggerName: "on-interval",
       config: { seconds: 120, label: "live-etherscan-w1" },
     });
-    const publish = actions[7] as { input: Record<string, unknown> };
+    const publish = actions.find((a) => a.type === "PUBLISH_WORKFLOW") as {
+      input: Record<string, unknown>;
+    };
     expect(publish.input).toEqual({ publishedAt: "2026-11-11T00:00:00.000Z" });
   });
 

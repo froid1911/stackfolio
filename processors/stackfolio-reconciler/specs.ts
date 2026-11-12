@@ -77,6 +77,18 @@ export type WorkflowSpec = {
   steps: StepSpec[];
 };
 
+/** The price pinning step both wallet walks run after their import;
+ * CoinGecko answers no bitcoin rows, so bitcoin wallets skip it. */
+function pinStep(walletDocumentId: string): StepSpec {
+  return {
+    name: "pin",
+    piece: "ethereum",
+    action: "pin-prices",
+    timeoutSeconds: 120,
+    config: { documentId: walletDocumentId, max: 50 },
+  };
+}
+
 /** Which documents a portfolio's workflows read and write. */
 export type PortfolioResources = {
   portfolioDocumentId: string;
@@ -170,6 +182,9 @@ export function liveEtherscanSpec(
           },
         },
       },
+      // Price what just landed; CoinGecko has no bitcoin rows, so the
+      // bitcoin wallets skip the step.
+      ...(provider === "bitcoin" ? [] : [pinStep(walletDocumentId)]),
     ],
   };
 }
@@ -210,6 +225,7 @@ export function etherscanBackfillSpec(
           backfillNextBlock: "{{steps.walk.output.nextBlock}}",
         },
       },
+      ...(provider === "bitcoin" ? [] : [pinStep(walletDocumentId)]),
     ],
   };
 }

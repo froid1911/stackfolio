@@ -9,6 +9,7 @@ import { ethereumFetchValidatorsAction } from "./lib/actions/fetch-validators.js
 import { ethereumHoldingsFromLedgerAction } from "./lib/actions/holdings-from-ledger.js";
 import { ethereumImportEventsToWalletAccountAction } from "./lib/actions/import-events-to-wallet-account.js";
 import { ethereumImportPricesToBookAction } from "./lib/actions/import-prices-to-book.js";
+import { ethereumPinPricesAction } from "./lib/actions/pin-prices.js";
 import { ethereumImportStakingToDocAction } from "./lib/actions/import-staking-to-doc.js";
 import { ethereumImportTokensToRegistryAction } from "./lib/actions/import-tokens-to-registry.js";
 import { ethereumScanAccountLogsAction } from "./lib/actions/scan-account-logs.js";
@@ -54,6 +55,7 @@ export const ethereum = createPiece({
     ethereumImportTokensToRegistryAction,
     ethereumImportStakingToDocAction,
     ethereumImportPricesToBookAction,
+    ethereumPinPricesAction,
     ethereumHoldingsFromLedgerAction,
     ethereumSnapshotPortfolioAction,
     ethereumSyncHyperliquidAction,

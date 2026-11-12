@@ -96,6 +96,19 @@ export default function Editor({ children }: EditorProps) {
   );
   const assetDetail = useDetail(active === "assets" || active === "balances" ? active : "dashboard", registryIds);
 
+  // Ctrl/Cmd+K from anywhere; the palette's own Escape closes it (the
+  // handler must not close twice through the bubbled event, so it only
+  // fires Escape when the palette is open - CommandPalette calls
+  // onClose on its own keydown; this listener covers window-level
+  // opens from the shortcut and closing when focus is outside).
+  useEffect(() => {
+    const handler = paletteKeyHandler(paletteOpen, () => setPaletteOpen(true), () =>
+      setPaletteOpen(false),
+    );
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [paletteOpen]);
+
   if (children) return <div className="h-full w-full">{children}</div>;
 
   if (activeMode === null) {
@@ -111,19 +124,6 @@ export default function Editor({ children }: EditorProps) {
 
   const go = (target: Page | "files") => setSearchParams({ page: target });
 
-
-  // Ctrl/Cmd+K from anywhere; the palette's own Escape closes it (the
-  // handler must not close twice through the bubbled event, so it only
-  // fires Escape when the palette is open - CommandPalette calls
-  // onClose on its own keydown; this listener covers window-level
-  // opens from the shortcut and closing when focus is outside).
-  useEffect(() => {
-    const handler = paletteKeyHandler(paletteOpen, () => setPaletteOpen(true), () =>
-      setPaletteOpen(false),
-    );
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [paletteOpen]);
 
   // Detail overlays address through ?detail=<kind>:<slug> (lib/detail);
   // closing removes the param, leaving the page - and history intact.

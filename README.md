@@ -100,8 +100,11 @@ Switchboard. Two pieces:
   hosts outright. The proxy rewrites `Host` to the upstream origin,
   routes `/graphql`, `/mcp`, `/attachments`, `/api/` and websocket
   fetches to the Switchboard, HTML navigations (including `/d/…` drive
-  routes) to the studio, and passes HMR upgrades through. Start it:
-  `bun scripts/host-reverse-proxy.mjs 2845 127.0.0.1 2844 7844`.
+  routes) to the studio, and relays Vite's HMR upgrade (including the
+  tokenless `vite-ping` health probe) as raw bytes. Pure Node
+  (`node:http`/`node:net`) — bun's websocket server silently drops
+  bridged frames and its long-lived servers died within minutes.
+  Start it: `node scripts/host-reverse-proxy.mjs 2845 127.0.0.1 2844 7844`.
 - `tailscale serve --bg --tls-terminated-tcp=443 tcp://127.0.0.1:2845`
   — TLS (Let's Encrypt cert, tailscale-managed) terminated by tailscaled,
   decrypted stream forwarded with a PROXYv2 header (ignored by the

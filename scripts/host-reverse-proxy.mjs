@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Host-rewriting reverse proxy for Vite's dev-server host guard.
  *
@@ -10,15 +10,24 @@
  * to the studio with `Host` rewritten to the upstream's literal
  * `127.0.0.1:<port>`, including WebSocket upgrades (Vite HMR).
  *
- * Usage: bun scripts/host-reverse-proxy.mjs <listen-port> <up-host> <up-port> [switchboard-port]
- *   e.g. bun scripts/host-reverse-proxy.mjs 2845 127.0.0.1 2844 7844
+ * Usage: node scripts/host-reverse-proxy.mjs <listen-port> <up-host> <up-port> [switchboard-port]
+ *   e.g. node scripts/host-reverse-proxy.mjs 2845 127.0.0.1 2844 7844
  *
  * With a switchboard port, paths the Switchboard owns (`/graphql`,
  * `/attachments`) go to it instead of the studio: Connect resolves its
  * remote switchboard against the browser's own origin, so a proxied host
  * must answer `/graphql` too, or every remote query dies as
  * "switchboard-remote: Failed to fetch".
+ *
+ * Engine: pure Node (node:http, node:net). Bun's runtime was tried first
+ * and failed twice over: `Bun.serve`'s websocket bridge silently drops
+ * frames in both directions (raw `Bun.connect` clients never reach an
+ * upgraded server and vice versa), and bun-compiled long-lived servers
+ * died within minutes. Vite HMR needs a relay that just forwards bytes.
  */
+
+import { createServer } from "node:http";
+import { connect } from "node:net";
 
 const [listenPortRaw, upHost = "127.0.0.1", upPortRaw, switchPortRaw] =
   process.argv.slice(2);
@@ -27,7 +36,7 @@ const upPort = Number(upPortRaw ?? 2844);
 const switchPort = Number(switchPortRaw ?? 0);
 if (!Number.isInteger(listenPort) || !Number.isInteger(upPort)) {
   console.error(
-    "usage: bun scripts/host-reverse-proxy.mjs <listen-port> <up-host> <up-port> [switchboard-port]",
+    "usage: node scripts/host-reverse-proxy.mjs <listen-port> <up-host> <up-port> [switchboard-port]",
   );
   process.exit(2);
 }
@@ -65,7 +74,9 @@ const SWITCHBOARD_ORIGINS =
 
 const UPSTREAM = `http://${upHost}:${upPort}`;
 const REWRITE_HOST = `${upHost}:${upPort}`;
-/** Hop-by-hop headers that must not cross a proxy (RFC 9110 §7.6.1). */
+/** Hop-by-hop headers that must not cross a proxy (RFC 9110 §7.6.1).
+ * `connection`/`upgrade` are excluded on the WS path below: the upgrade
+ * handshake must forward them verbatim to trigger Vite's own upgrade. */
 const HOP_BY_HOP = [
   "connection",
   "keep-alive",
@@ -75,154 +86,132 @@ const HOP_BY_HOP = [
   "te",
   "trailer",
   "transfer-encoding",
-  "upgrade",
 ];
 
-Bun.serve({
-  port: listenPort,
-  hostname: "127.0.0.1",
-  async fetch(req, srv) {
-    const url = new URL(req.url);
-    if (
-      url.searchParams.get("token") !== null &&
-      srv.upgrade(req, {
-        data: { path: url.pathname + url.search, headers: req.headers },
-      })
-    ) {
-      return undefined; // upgraded; frames relayed by the websocket handlers
-    }
-    const headers = new Headers(req.headers);
-    const route = routeFor(url.pathname, req.headers.get("accept"));
-    headers.set("host", route.host);
-    for (const h of HOP_BY_HOP) headers.delete(h);
-    const body = req.method !== "GET" && req.method !== "HEAD" ? req.body : undefined;
-    try {
-      const res = await fetch(
-        `http://${upHost}:${route.port}` + url.pathname + url.search,
-        {
+const server = createServer(async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+  const route = routeFor(url.pathname, req.headers.accept);
+  const headers = {};
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (v === undefined) continue;
+    const kl = k.toLowerCase();
+    if (HOP_BY_HOP.includes(kl) || kl === "host") continue;
+    headers[k] = v;
+  }
+  headers.host = route.host;
+  try {
+    const upstreamRes = await fetch(
+      `http://${upHost}:${route.port}${url.pathname}${url.search}`,
+      {
         method: req.method,
         headers,
-        body,
-        ...(body ? { duplex: "half" } : {}),
+        ...(req.method !== "GET" && req.method !== "HEAD"
+          ? { body: req, duplex: "half" }
+          : {}),
         redirect: "manual",
-      });
-      const out = new Headers(res.headers);
-      for (const h of HOP_BY_HOP) out.delete(h);
-      if (
-        SWITCHBOARD_ORIGINS.length > 0 &&
-        res.status === 200 &&
-        url.pathname === "/powerhouse.config.json"
-      ) {
-        // The studio names the switchboard by its literal loopback URL;
-        // hand the browser the placeholder instead so its queries aim at
-        // this page's origin (here), which this proxy then answers.
-        let text = await res.text();
-        for (const origin of SWITCHBOARD_ORIGINS) {
-          text = text.split(origin).join("${origin}");
-        }
-        out.delete("content-length");
-        out.delete("content-encoding");
-        return new Response(text, { status: res.status, headers: out });
+      },
+    );
+    const outHeaders = {};
+    upstreamRes.headers.forEach((v, k) => {
+      if (!HOP_BY_HOP.includes(k.toLowerCase())) outHeaders[k] = v;
+    });
+    const body = Buffer.from(await upstreamRes.arrayBuffer());
+    if (
+      SWITCHBOARD_ORIGINS.length > 0 &&
+      upstreamRes.status === 200 &&
+      url.pathname === "/powerhouse.config.json"
+    ) {
+      // The studio names the switchboard by its literal loopback URL;
+      // hand the browser the placeholder instead so its queries aim at
+      // this page's origin (here), which this proxy then answers.
+      let text = body.toString("utf8");
+      for (const origin of SWITCHBOARD_ORIGINS) {
+        text = text.split(origin).join("${origin}");
       }
-      return new Response(res.body, { status: res.status, headers: out });
-    } catch {
-      return new Response("upstream unavailable", { status: 502 });
+      const replaced = Buffer.from(text, "utf8");
+      delete outHeaders["content-length"];
+      delete outHeaders["content-encoding"];
+      res.writeHead(upstreamRes.status, outHeaders);
+      res.end(replaced);
+      return;
     }
-  },
-  websocket: {
-    /** @param {WebSocket & { data: { path: string; headers: Headers } }} client */
-    open(client) {
-      const { path, headers } = client.data;
-      const route = routeFor(path.split("?")[0], headers.get("accept"));
-      /** @type {string[]} */
-      const lines = [`GET ${path} HTTP/1.1`, `Host: ${route.host}`];
-      headers.forEach((value, key) => {
-        if (!HOP_BY_HOP.includes(key.toLowerCase()) && key.toLowerCase() !== "host") {
-          lines.push(`${key}: ${value}`);
-        }
-      });
-      const handshake = Buffer.from(`${lines.join("\r\n")}\r\n\r\n`, "latin1");
-      /** @type {{ head: Buffer, conn: ReturnType<typeof Bun.connect> | null, pending: Buffer | null }} */
-      const state = { head: Buffer.alloc(0), conn: null, pending: null };
-      const conn = Bun.connect({
-        hostname: upHost,
-        port: route.port,
-        socket: {
-          open(socket) {
-            socket.write(handshake);
-          },
-          data(_socket, bytes) {
-            if (!state.conn) {
-              state.head = Buffer.concat([state.head, Buffer.from(bytes)]);
-              const head = state.head.toString("latin1");
-              if (!head.includes("\r\n\r\n")) return;
-              if (!/^HTTP\/1\.1 101/.test(head)) {
-                client.close(1002, "upstream refused upgrade");
-                _socket.data = undefined; // no-op field init
-                _socket.end();
-                return;
-              }
-              state.conn = _socket;
-              _socket.data = state;
-              if (state.pending) {
-                _socket.write(state.pending);
-                state.pending = null;
-              }
-              const rest = state.head.subarray(
-                head.indexOf("\r\n\r\n") + 4,
-              );
-              if (rest.length > 0) client.send(rest);
-            } else {
-              client.send(Buffer.from(bytes));
-            }
-          },
-          close() {
-            try {
-              client.close();
-            } catch {
-              /* already closed */
-            }
-          },
-          error() {
-            try {
-              client.close(1011, "upstream error");
-            } catch {
-              /* already closed */
-            }
-          },
-        },
-      });
-      // Attach the state immediately: `message` may run before the first
-      // upstream read assigns it, and reading `conn.data` as undefined
-      // crashed the whole proxy (uncaught TypeError in the ws handler).
-      conn.data = state;
-      client.data = { ...client.data, conn };
-    },
-    /** @param {WebSocket & { data: { conn?: ReturnType<typeof Bun.connect> | null } }} client */
-    message(client, message) {
-      const conn = client.data.conn;
-      const state = conn?.data;
-      if (conn && state && state.conn) {
-        conn.write(typeof message === "string" ? Buffer.from(message) : message);
-      } else if (conn) {
-        const chunk = typeof message === "string" ? Buffer.from(message) : Buffer.from(message);
-        conn.data = { ...state, pending: state.pending ? Buffer.concat([state.pending, chunk]) : chunk };
-      }
-    },
-    /** @param {WebSocket & { data: { conn?: { end(): void } } }} client */
-    close(client) {
-      try {
-        client.data.conn?.end();
-      } catch {
-        /* already gone */
-      }
-    },
-  },
+    res.writeHead(upstreamRes.status, outHeaders);
+    res.end(body);
+  } catch {
+    res.writeHead(502, { "content-type": "text/plain" });
+    res.end("upstream unavailable");
+  }
 });
 
-console.log(
-  `host-reverse-proxy listening on http://127.0.0.1:${listenPort} -> ${UPSTREAM} (Host rewritten to ${REWRITE_HOST})` +
-    (switchPort > 0
-      ? `, ${SWITCHBOARD_PATHS.join(", ")} -> http://${upHost}:${switchPort}`
-      : ""),
-);
+/**
+ * WebSocket bridge: raw bytes between the browser socket and a plain TCP
+ * connection to the routed upstream. Node's http server hands the
+ * upgrade request over before writing any response, so the upstream's
+ * real 101 (Vite's own, token check included) flows back verbatim. The
+ * re-issued handshake carries the Host Vite allows. Bytes the client
+ * sends before the 101 is parsed are held and flushed on 101.
+ */
+server.on("upgrade", (req, client, head) => {
+  const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+  const route = routeFor(url.pathname, req.headers.accept);
+  const lines = [
+    `GET ${url.pathname}${url.search} HTTP/1.1`,
+    `Host: ${route.host}`,
+  ];
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (v === undefined) continue;
+    const kl = k.toLowerCase();
+    if (HOP_BY_HOP.includes(kl) && kl !== "connection" && kl !== "upgrade")
+      continue;
+    if (kl === "host") continue;
+    lines.push(`${k}: ${v}`);
+  }
+  const handshake = Buffer.from(`${lines.join("\r\n")}\r\n\r\n`, "latin1");
+
+  const up = connect(route.port, upHost);
+  let ready = false;
+  const held = [];
+  let headBuf = Buffer.alloc(0);
+
+  up.on("connect", () => up.write(handshake));
+  up.on("data", (b) => {
+    if (!ready) {
+      headBuf = Buffer.concat([headBuf, b]);
+      const text = headBuf.toString("latin1");
+      const sep = text.indexOf("\r\n\r\n");
+      if (sep < 0) return;
+      if (!/^HTTP\/1\.1 101/.test(text)) {
+        // The upstream rejected the upgrade: pass its verdict through.
+        client.write(headBuf.subarray(0, sep + 4));
+        client.destroy();
+        up.destroy();
+        return;
+      }
+      ready = true;
+      client.write(headBuf.subarray(0, sep + 4));
+      const rest = headBuf.subarray(sep + 4);
+      if (rest.length) client.write(rest);
+      while (held.length) up.write(held.shift());
+      return;
+    }
+    client.write(b);
+  });
+  client.on("data", (c) => {
+    if (ready) up.write(Buffer.from(c));
+    else held.push(Buffer.from(c));
+  });
+  client.on("close", () => up.destroy());
+  client.on("error", () => up.destroy());
+  up.on("close", () => client.destroy());
+  up.on("error", () => client.destroy());
+  if (head && head.length) held.push(Buffer.from(head));
+});
+
+server.listen(listenPort, "127.0.0.1", () => {
+  console.log(
+    `host-reverse-proxy listening on http://127.0.0.1:${listenPort} -> ${UPSTREAM} (Host rewritten to ${REWRITE_HOST})` +
+      (switchPort > 0
+        ? `, ${SWITCHBOARD_PATHS.join(", ")} -> http://${upHost}:${switchPort}`
+        : ""),
+  );
+});

@@ -127,19 +127,6 @@ export default function Editor({ children }: EditorProps) {
 
   // Detail overlays address through ?detail=<kind>:<slug> (lib/detail);
   // closing removes the param, leaving the page - and history intact.
-  // Ctrl/Cmd+K from anywhere; the palette's own Escape closes it (the
-  // handler must not close twice through the bubbled event, so it only
-  // fires Escape when the palette is open - CommandPalette calls
-  // onClose on its own keydown; this listener covers window-level
-  // opens from the shortcut and closing when focus is outside).
-  useEffect(() => {
-    const handler = paletteKeyHandler(paletteOpen, () => setPaletteOpen(true), () =>
-      setPaletteOpen(false),
-    );
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [paletteOpen]);
-
   const closeDetail = () =>
     setSearchParams({ detail: undefined }, { replace: false });
 

@@ -51,3 +51,30 @@ export function navSections(): { section: NavSection; entries: NavEntry[] }[] {
   }
   return out;
 }
+
+/** Legacy `?tab=` values from the drive app's old tab strip, mapped onto
+ * the page model: bookmarks and external links keep landing right. */
+const LEGACY_TABS: Record<string, Page> = {
+  dashboard: "dashboard",
+  transactions: "history",
+  accounts: "balances",
+  staking: "staking",
+  pnl: "pnl",
+  assets: "assets",
+  prices: "prices",
+  defi: "defi",
+};
+
+export function legacyPage(tab: string | undefined): Page | undefined {
+  return tab ? LEGACY_TABS[tab] : undefined;
+}
+
+/** The page a drive's search params address: ?page= wins, legacy ?tab=
+ * follows; an unknown ?page= falls through to the legacy param. */
+export function pageParam(search: {
+  page?: string;
+  tab?: string;
+}): Page | undefined {
+  if (isPage(search.page)) return search.page;
+  return legacyPage(search.tab);
+}

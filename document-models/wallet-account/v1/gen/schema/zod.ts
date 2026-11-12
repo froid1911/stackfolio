@@ -27,6 +27,7 @@ import type {
   SetEventNotesInput,
   SetIgnoredInput,
   SetNativeBalanceInput,
+  SetRedecodeStateInput,
   SetWalletXpubInput,
   Valuation,
   ValuationGranularity,
@@ -305,6 +306,16 @@ export function SetNativeBalanceInputSchema(): z.ZodObject<
   });
 }
 
+export function SetRedecodeStateInputSchema(): z.ZodObject<
+  Properties<SetRedecodeStateInput>
+> {
+  return z.object({
+    nextBlock: z.number().nullish(),
+    startBlock: z.number().nullish(),
+    state: BackfillPhaseSchema,
+  });
+}
+
 export function SetWalletXpubInputSchema(): z.ZodObject<
   Properties<SetWalletXpubInput>
 > {
@@ -351,5 +362,6 @@ export function WalletAccountStateSchema(): z.ZodObject<
     label: z.string().nullish(),
     ledger: z.array(z.lazy(() => LedgerEventSchema())),
     nativeBalance: z.lazy(() => NativeBalanceSchema().nullish()),
+    redecode: z.lazy(() => BackfillStateSchema().nullish()),
   });
 }

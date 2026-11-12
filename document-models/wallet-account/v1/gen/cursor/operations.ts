@@ -8,6 +8,7 @@ import type {
   RecordScanProgressAction,
   SetBackfillStateAction,
   SetNativeBalanceAction,
+  SetRedecodeStateAction,
 } from "./actions.js";
 
 export interface WalletAccountCursorOperations {
@@ -24,6 +25,11 @@ export interface WalletAccountCursorOperations {
   setNativeBalanceOperation: (
     state: WalletAccountGlobalState,
     action: SetNativeBalanceAction,
+    dispatch?: SignalDispatch,
+  ) => void;
+  setRedecodeStateOperation: (
+    state: WalletAccountGlobalState,
+    action: SetRedecodeStateAction,
     dispatch?: SignalDispatch,
   ) => void;
 }

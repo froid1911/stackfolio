@@ -22,6 +22,7 @@ export function defaultGlobalState(): WalletAccountGlobalState {
     ledger: [],
     cursor: null,
     backfill: null,
+    redecode: null,
     nativeBalance: null,
     bitcoinXpub: null,
     ensNames: [],

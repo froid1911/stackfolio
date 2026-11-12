@@ -16,9 +16,9 @@
           "initialValue": ""
         },
         "global": {
-          "schema": "type WalletAccountState {\n  address: String!\n  chainId: Int!\n  label: String\n  ignored: Boolean!\n  ledger: [LedgerEvent!]!\n  cursor: ScanCursor\n  backfill: BackfillState\n  nativeBalance: NativeBalance\n  bitcoinXpub: String\n  ensNames: [EnsName!]!\n}\n\ntype LedgerEvent {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  counterpartyLabel: String\n  notes: String\n  ignored: Boolean!\n  source: EventSource!\n  importBatch: String\n  valuation: Valuation\n}\n\ntype Valuation {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}\n\ntype EnsName {\n  name: String!\n  owned: Boolean!\n}\n\ntype ScanCursor {\n  lastLogsBlock: Int\n  lastNativeScanBlock: Int\n  lastEventTimestamp: DateTime\n  lastRunAt: DateTime\n}\n\ntype BackfillState {\n  state: BackfillPhase!\n  startBlock: Int\n  nextBlock: Int\n}\n\ntype NativeBalance {\n  amount: String!\n  blockNumber: Int!\n  observedAt: DateTime!\n}\n\nenum EventType {\n  SPEND\n  RECEIVE\n  TRADE\n  TRANSFER\n  STAKING\n  MIGRATE\n  INFORMATIONAL\n}\n\nenum EventSubtype {\n  NONE\n  FEE\n  APPROVE\n  WITHDRAWAL\n  BLOCK_PRODUCTION\n  SPAM\n  AIRDROP\n  DONATE\n  DEPOSIT_ASSET\n  REMOVE_ASSET\n  BORROW\n  REPAY\n  LIQUIDATION\n  YIELD\n  LP_MINT\n  LP_BURN\n  NAME_REGISTRATION\n  BRIDGE\n}\n\nenum EventSource {\n  CHAIN\n  MANUAL\n}\n\nenum ValuationSource {\n  COINGECKO\n  MANUAL\n  UNPRICED\n}\n\nenum ValuationGranularity {\n  DAY\n  NONE\n}\n\nenum BackfillPhase {\n  IDLE\n  LOGS\n  NATIVE\n  DONE\n}",
+          "schema": "type WalletAccountState {\n  address: String!\n  chainId: Int!\n  label: String\n  ignored: Boolean!\n  ledger: [LedgerEvent!]!\n  cursor: ScanCursor\n  backfill: BackfillState\n  redecode: BackfillState\n  nativeBalance: NativeBalance\n  bitcoinXpub: String\n  ensNames: [EnsName!]!\n}\n\ntype LedgerEvent {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  counterpartyLabel: String\n  notes: String\n  ignored: Boolean!\n  source: EventSource!\n  importBatch: String\n  valuation: Valuation\n}\n\ntype Valuation {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}\n\ntype EnsName {\n  name: String!\n  owned: Boolean!\n}\n\ntype ScanCursor {\n  lastLogsBlock: Int\n  lastNativeScanBlock: Int\n  lastEventTimestamp: DateTime\n  lastRunAt: DateTime\n}\n\ntype BackfillState {\n  state: BackfillPhase!\n  startBlock: Int\n  nextBlock: Int\n}\n\ntype NativeBalance {\n  amount: String!\n  blockNumber: Int!\n  observedAt: DateTime!\n}\n\nenum EventType {\n  SPEND\n  RECEIVE\n  TRADE\n  TRANSFER\n  STAKING\n  MIGRATE\n  INFORMATIONAL\n}\n\nenum EventSubtype {\n  NONE\n  FEE\n  APPROVE\n  WITHDRAWAL\n  BLOCK_PRODUCTION\n  SPAM\n  AIRDROP\n  DONATE\n  DEPOSIT_ASSET\n  REMOVE_ASSET\n  BORROW\n  REPAY\n  LIQUIDATION\n  YIELD\n  LP_MINT\n  LP_BURN\n  NAME_REGISTRATION\n  BRIDGE\n}\n\nenum EventSource {\n  CHAIN\n  MANUAL\n}\n\nenum ValuationSource {\n  COINGECKO\n  MANUAL\n  UNPRICED\n}\n\nenum ValuationGranularity {\n  DAY\n  NONE\n}\n\nenum BackfillPhase {\n  IDLE\n  LOGS\n  NATIVE\n  DONE\n}",
           "examples": [],
-          "initialValue": "{\"address\":\"\",\"chainId\":0,\"label\":null,\"ignored\":false,\"ledger\":[],\"cursor\":null,\"backfill\":null,\"nativeBalance\":null,\"bitcoinXpub\":null,\"ensNames\":[]}"
+          "initialValue": "{\"address\":\"\",\"chainId\":0,\"label\":null,\"ignored\":false,\"ledger\":[],\"cursor\":null,\"backfill\":null,\"redecode\":null,\"nativeBalance\":null,\"bitcoinXpub\":null,\"ensNames\":[]}"
         }
       },
       "modules": [
@@ -51,37 +51,37 @@
             {
               "id": "setWalletXpub",
               "name": "SET_WALLET_XPUB",
-              "description": "Attach (or clear) the watch-only extended public key of a Bitcoin wallet (chainId 0).",
-              "schema": "input SetWalletXpubInput {\n  xpub: String\n}",
-              "template": "Attach (or clear) the watch-only extended public key of a Bitcoin wallet (chainId 0).",
-              "reducer": "if (action.input.xpub == null) {\n  state.bitcoinXpub = null;\n} else {\n  const xpub = action.input.xpub.trim();\n  if (!/^(xpub|tpub|vpub|uppub|zpub|Zpub|Ypub)[1-9A-HJ-NP-Za-km-z]{20,}$/.test(xpub)) {\n    throw new InvalidInputError(\"xpub must be an extended public key: xpub/tpub/vpub/uppub/zpub/Zpub/Ypub in base58\");\n  }\n  state.bitcoinXpub = xpub;\n}",
+              "scope": "global",
               "errors": [
                 {
                   "id": "setWalletXpubInvalid",
-                  "name": "InvalidInputError",
                   "code": "INVALID_INPUT",
-                  "description": "The value is not a base58 extended public key with a recognised prefix.",
-                  "template": ""
+                  "name": "InvalidInputError",
+                  "template": "",
+                  "description": "The value is not a base58 extended public key with a recognised prefix."
                 }
               ],
+              "schema": "input SetWalletXpubInput {\n  xpub: String\n}",
+              "reducer": "if (action.input.xpub == null) {\n  state.bitcoinXpub = null;\n} else {\n  const xpub = action.input.xpub.trim();\n  if (!/^(xpub|tpub|vpub|uppub|zpub|Zpub|Ypub)[1-9A-HJ-NP-Za-km-z]{20,}$/.test(xpub)) {\n    throw new InvalidInputError(\"xpub must be an extended public key: xpub/tpub/vpub/uppub/zpub/Zpub/Ypub in base58\");\n  }\n  state.bitcoinXpub = xpub;\n}",
               "examples": [],
-              "scope": "global"
+              "template": "Attach (or clear) the watch-only extended public key of a Bitcoin wallet (chainId 0).",
+              "description": "Attach (or clear) the watch-only extended public key of a Bitcoin wallet (chainId 0)."
             },
             {
               "id": "setEnsNames",
               "name": "SET_ENS_NAMES",
-              "description": "Full replace of the ENS names associated with this wallet, each marked owned when forward resolution points back to the address.",
-              "schema": "input SetEnsNamesInput {\n  names: [EnsNameInput!]!\n}\n\ninput EnsNameInput {\n  name: String!\n  owned: Boolean!\n}",
-              "template": "Record the ENS names for this wallet.",
-              "reducer": "state.ensNames = action.input.names.map((entry) => ({\n  name: entry.name.toLowerCase(),\n  owned: entry.owned,\n}));",
+              "scope": "global",
               "errors": [],
+              "schema": "input SetEnsNamesInput {\n  names: [EnsNameInput!]!\n}\n\ninput EnsNameInput {\n  name: String!\n  owned: Boolean!\n}",
+              "reducer": "state.ensNames = action.input.names.map((entry) => ({\n  name: entry.name.toLowerCase(),\n  owned: entry.owned,\n}));",
               "examples": [
                 {
                   "id": "ensExample1",
                   "value": "{\"names\":[{\"name\":\"frankp.eth\",\"owned\":true}]}"
                 }
               ],
-              "scope": "global"
+              "template": "Record the ENS names for this wallet.",
+              "description": "Full replace of the ENS names associated with this wallet, each marked owned when forward resolution points back to the address."
             }
           ],
           "description": "Address, chain, label and the ignored switch"
@@ -126,10 +126,7 @@
             {
               "id": "replaceEvents",
               "name": "REPLACE_EVENTS",
-              "description": "Atomically remove ledger rows and import their semantic replacements, carrying review overrides (ignored, notes, counterparty labels) onto rows with the same id.",
-              "schema": "input ReplaceEventsInput {\n  batchId: String!\n  remove: [EventLocatorInput!]!\n  add: [ImportedEventInput!]!\n}\n\ninput EventLocatorInput {\n  id: OID!\n  sequenceIndex: Int!\n}\n\ninput ImportedEventInput {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  notes: String\n  valuation: ValuationInput\n}\n\ninput ValuationInput {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}",
-              "template": "Replace decoded generic rows with semantic rows.",
-              "reducer": "if (action.input.remove.length === 0 && action.input.add.length === 0) {\n  throw new EmptyReplacementError(\"A replacement must remove or add at least one event\");\n}\nconst isDecimal = (value) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nfor (const event of action.input.add) {\n  if (!isDecimal(event.amount)) {\n    throw new InvalidAmountError(event.amount + \" is not a decimal amount\");\n  }\n}\nconst removeKeys = {};\nfor (const entry of action.input.remove) {\n  removeKeys[entry.id + \"-\" + entry.sequenceIndex] = true;\n}\nconst carried = {};\nconst kept = [];\nfor (const event of state.ledger) {\n  const key = event.id + \"-\" + event.sequenceIndex;\n  if (removeKeys[key]) {\n    carried[key] = {\n      ignored: event.ignored,\n      notes: event.notes,\n      counterpartyLabel: event.counterpartyLabel,\n    };\n    continue;\n  }\n  kept.push(event);\n}\nconst surviving = {};\nfor (const event of kept) {\n  surviving[event.eventIdentifier + \"#\" + event.sequenceIndex] = true;\n}\nstate.ledger.length = 0;\nfor (const event of kept) state.ledger.push(event);\nfor (const input of action.input.add) {\n  const dedupKey = input.eventIdentifier + \"#\" + input.sequenceIndex;\n  if (surviving[dedupKey]) continue;\n  surviving[dedupKey] = true;\n  const carry = carried[input.id + \"-\" + input.sequenceIndex] || {};\n  state.ledger.push({\n    id: input.id,\n    eventIdentifier: input.eventIdentifier,\n    sequenceIndex: input.sequenceIndex,\n    timestamp: input.timestamp,\n    type: input.type,\n    subtype: input.subtype,\n    asset: input.asset,\n    amount: input.amount,\n    counterparty: input.counterparty ?? null,\n    counterpartyLabel: carry.counterpartyLabel ?? null,\n    notes: carry.notes ?? input.notes ?? null,\n    ignored: carry.ignored ?? false,\n    valuation: input.valuation ?? null,\n    source: \"CHAIN\",\n    importBatch: action.input.batchId,\n  });\n}",
+              "scope": "global",
               "errors": [
                 {
                   "id": "replaceEmpty",
@@ -146,8 +143,11 @@
                   "template": ""
                 }
               ],
+              "schema": "input ReplaceEventsInput {\n  batchId: String!\n  remove: [EventLocatorInput!]!\n  add: [ImportedEventInput!]!\n}\n\ninput EventLocatorInput {\n  id: OID!\n  sequenceIndex: Int!\n}\n\ninput ImportedEventInput {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  notes: String\n  valuation: ValuationInput\n}\n\ninput ValuationInput {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}",
+              "reducer": "if (action.input.remove.length === 0 && action.input.add.length === 0) {\n  throw new EmptyReplacementError(\"A replacement must remove or add at least one event\");\n}\nconst isDecimal = (value) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nfor (const event of action.input.add) {\n  if (!isDecimal(event.amount)) {\n    throw new InvalidAmountError(event.amount + \" is not a decimal amount\");\n  }\n}\nconst removeKeys = {};\nfor (const entry of action.input.remove) {\n  removeKeys[entry.id + \"-\" + entry.sequenceIndex] = true;\n}\nconst carried = {};\nconst kept = [];\nfor (const event of state.ledger) {\n  const key = event.id + \"-\" + event.sequenceIndex;\n  if (removeKeys[key]) {\n    carried[key] = {\n      ignored: event.ignored,\n      notes: event.notes,\n      counterpartyLabel: event.counterpartyLabel,\n    };\n    continue;\n  }\n  kept.push(event);\n}\nconst surviving = {};\nfor (const event of kept) {\n  surviving[event.eventIdentifier + \"#\" + event.sequenceIndex] = true;\n}\nstate.ledger.length = 0;\nfor (const event of kept) state.ledger.push(event);\nfor (const input of action.input.add) {\n  const dedupKey = input.eventIdentifier + \"#\" + input.sequenceIndex;\n  if (surviving[dedupKey]) continue;\n  surviving[dedupKey] = true;\n  const carry = carried[input.id + \"-\" + input.sequenceIndex] || {};\n  state.ledger.push({\n    id: input.id,\n    eventIdentifier: input.eventIdentifier,\n    sequenceIndex: input.sequenceIndex,\n    timestamp: input.timestamp,\n    type: input.type,\n    subtype: input.subtype,\n    asset: input.asset,\n    amount: input.amount,\n    counterparty: input.counterparty ?? null,\n    counterpartyLabel: carry.counterpartyLabel ?? null,\n    notes: carry.notes ?? input.notes ?? null,\n    ignored: carry.ignored ?? false,\n    valuation: input.valuation ?? null,\n    source: \"CHAIN\",\n    importBatch: action.input.batchId,\n  });\n}",
               "examples": [],
-              "scope": "global"
+              "template": "Replace decoded generic rows with semantic rows.",
+              "description": "Atomically remove ledger rows and import their semantic replacements, carrying review overrides (ignored, notes, counterparty labels) onto rows with the same id."
             }
           ],
           "description": "Batch imports of decoded chain events"
@@ -216,10 +216,7 @@
             {
               "id": "pinValuations",
               "name": "PIN_VALUATIONS",
-              "description": "Attach daily-close valuations to ledger events by id and sequence index; manual valuations are never overwritten by oracles.",
-              "schema": "input PinValuationsInput {\n  events: [PinValuationInput!]!\n}\n\ninput PinValuationInput {\n  id: OID!\n  sequenceIndex: Int!\n  valuation: ValuationInput!\n}\n\ninput ValuationInput {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}",
-              "template": "Pin oracle or manual prices onto ledger events.",
-              "reducer": "const isDecimal = (value) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nconst wanted = {};\nfor (const pin of action.input.events) {\n  if (!isDecimal(pin.valuation.price) || !pin.valuation.unit) {\n    throw new InvalidValuationError(\"valuation needs a decimal price and a unit\");\n  }\n  const key = pin.id + \"-\" + pin.sequenceIndex;\n  if (!wanted[key]) wanted[key] = pin.valuation;\n}\nfor (const event of state.ledger) {\n  const valuation = wanted[event.id + \"-\" + event.sequenceIndex];\n  if (!valuation) continue;\n  if (event.valuation && event.valuation.source === \"MANUAL\" && valuation.source !== \"MANUAL\") {\n    continue;\n  }\n  event.valuation = {\n    unit: valuation.unit,\n    price: valuation.price,\n    source: valuation.source,\n    granularity: valuation.granularity,\n    pinnedAt: valuation.pinnedAt,\n  };\n}",
+              "scope": "global",
               "errors": [
                 {
                   "id": "pinValuationsInvalid",
@@ -229,13 +226,16 @@
                   "template": ""
                 }
               ],
+              "schema": "input PinValuationsInput {\n  events: [PinValuationInput!]!\n}\n\ninput PinValuationInput {\n  id: OID!\n  sequenceIndex: Int!\n  valuation: ValuationInput!\n}\n\ninput ValuationInput {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}",
+              "reducer": "const isDecimal = (value) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nconst wanted = {};\nfor (const pin of action.input.events) {\n  if (!isDecimal(pin.valuation.price) || !pin.valuation.unit) {\n    throw new InvalidValuationError(\"valuation needs a decimal price and a unit\");\n  }\n  const key = pin.id + \"-\" + pin.sequenceIndex;\n  if (!wanted[key]) wanted[key] = pin.valuation;\n}\nfor (const event of state.ledger) {\n  const valuation = wanted[event.id + \"-\" + event.sequenceIndex];\n  if (!valuation) continue;\n  if (event.valuation && event.valuation.source === \"MANUAL\" && valuation.source !== \"MANUAL\") {\n    continue;\n  }\n  event.valuation = {\n    unit: valuation.unit,\n    price: valuation.price,\n    source: valuation.source,\n    granularity: valuation.granularity,\n    pinnedAt: valuation.pinnedAt,\n  };\n}",
               "examples": [
                 {
                   "id": "pinExample1",
                   "value": "{\"events\":[{\"id\":\"4f4e06f2-8b5a-4d7e-9b52-c2f1d2e7a101\",\"sequenceIndex\":0,\"valuation\":{\"unit\":\"EUR\",\"price\":\"3000.00\",\"source\":\"COINGECKO\",\"granularity\":\"DAY\",\"pinnedAt\":\"2026-11-12T00:00:00.000Z\"}}]}"
                 }
               ],
-              "scope": "global"
+              "template": "Pin oracle or manual prices onto ledger events.",
+              "description": "Attach daily-close valuations to ledger events by id and sequence index; manual valuations are never overwritten by oracles."
             }
           ],
           "description": "Human corrections on ledger events"
@@ -292,6 +292,17 @@
               "examples": [],
               "template": "",
               "description": ""
+            },
+            {
+              "id": "setRedecodeState",
+              "name": "SET_REDECODE_STATE",
+              "description": "The re-walk cursor that re-decodes an imported history against the protocol registry; DONE retires the retrofit.",
+              "schema": "input SetRedecodeStateInput {\n  state: BackfillPhase!\n  startBlock: Int\n  nextBlock: Int\n}",
+              "template": "Set the re-decode walk cursor.",
+              "reducer": "state.redecode = {\n  state: action.input.state,\n  startBlock: action.input.startBlock ?? null,\n  nextBlock: action.input.nextBlock ?? null,\n};",
+              "errors": [],
+              "examples": [],
+              "scope": "global"
             }
           ],
           "description": "Scan progress, backfill phase and native balance"

@@ -1,5 +1,7 @@
 import {
   importEvents,
+  isWalletAccountDocument,
+  pinValuations,
   reducer,
   retypeEvent,
   setEventIgnored,
@@ -77,4 +79,39 @@ describe("ReviewOperations", () => {
     }
   });
 
+  it("should handle pinValuations operation", () => {
+    const document = utils.createDocument();
+    // A concrete valuation, not a random mock: the operation validates
+    // that the price is decimal, and a faker string would fail it at
+    // random.
+    const input = {
+      events: [
+        {
+          id: "evt-1",
+          sequenceIndex: 0,
+          valuation: {
+            unit: "EUR",
+            price: "3000.00",
+            source: "COINGECKO" as const,
+            granularity: "DAY" as const,
+            pinnedAt: "2026-11-12T00:00:00.000Z",
+          },
+        },
+      ],
+    };
+
+    const updatedDocument = reducer(document, pinValuations(input));
+
+    expect(isWalletAccountDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    // A rejected operation records its error; give it the state it needs.
+    expect(updatedDocument.operations.global[0].error).toBeUndefined();
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "PIN_VALUATIONS",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
+  });
 });

@@ -7,6 +7,7 @@ import type {
   RecordScanProgressInput,
   SetBackfillStateInput,
   SetNativeBalanceInput,
+  SetRedecodeStateInput,
 } from "../types.js";
 
 export type RecordScanProgressAction = Action & {
@@ -21,8 +22,13 @@ export type SetNativeBalanceAction = Action & {
   type: "SET_NATIVE_BALANCE";
   input: SetNativeBalanceInput;
 };
+export type SetRedecodeStateAction = Action & {
+  type: "SET_REDECODE_STATE";
+  input: SetRedecodeStateInput;
+};
 
 export type WalletAccountCursorAction =
   | RecordScanProgressAction
   | SetBackfillStateAction
-  | SetNativeBalanceAction;
+  | SetNativeBalanceAction
+  | SetRedecodeStateAction;

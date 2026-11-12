@@ -34,7 +34,10 @@ export const walletAccountReviewOperations: WalletAccountReviewOperations = {
     event.subtype = action.input.subtype;
   },
   pinValuationsOperation(state, action) {
-    const wanted = new Map<string, (typeof action.input.events)[number]["valuation"]>();
+    const wanted = new Map<
+      string,
+      (typeof action.input.events)[number]["valuation"]
+    >();
     for (const pin of action.input.events) {
       if (!isDecimal(pin.valuation.price) || !pin.valuation.unit) {
         throw new InvalidValuationError(

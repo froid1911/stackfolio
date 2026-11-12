@@ -7,16 +7,19 @@ import {
   RecordScanProgressInputSchema,
   SetBackfillStateInputSchema,
   SetNativeBalanceInputSchema,
+  SetRedecodeStateInputSchema,
 } from "../schema/zod.js";
 import type {
   RecordScanProgressInput,
   SetBackfillStateInput,
   SetNativeBalanceInput,
+  SetRedecodeStateInput,
 } from "../types.js";
 import type {
   RecordScanProgressAction,
   SetBackfillStateAction,
   SetNativeBalanceAction,
+  SetRedecodeStateAction,
 } from "./actions.js";
 
 export const recordScanProgress = (input: RecordScanProgressInput) =>
@@ -43,5 +46,14 @@ export const setNativeBalance = (input: SetNativeBalanceInput) =>
     { ...input },
     undefined,
     SetNativeBalanceInputSchema,
+    "global",
+  );
+
+export const setRedecodeState = (input: SetRedecodeStateInput) =>
+  createAction<SetRedecodeStateAction>(
+    "SET_REDECODE_STATE",
+    { ...input },
+    undefined,
+    SetRedecodeStateInputSchema,
     "global",
   );

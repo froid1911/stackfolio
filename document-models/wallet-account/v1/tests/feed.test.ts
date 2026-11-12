@@ -2,11 +2,11 @@ import {
   importEvents,
   reducer,
   replaceEvents,
+  retypeEvent,
   setEventIgnored,
   setEventNotes,
   utils,
 } from "document-models/wallet-account/v1";
-import { retypeEvent } from "document-models/wallet-account/v1";
 import { describe, expect, it } from "vitest";
 
 interface EventInput {
@@ -188,7 +188,10 @@ describe("FeedOperations", () => {
       imported(),
       setEventIgnored({ id: "evt-1", ignored: true }),
     );
-    document = reducer(document, setEventNotes({ id: "evt-1", notes: "reviewed" }));
+    document = reducer(
+      document,
+      setEventNotes({ id: "evt-1", notes: "reviewed" }),
+    );
     document = reducer(
       document,
       replaceEvents({

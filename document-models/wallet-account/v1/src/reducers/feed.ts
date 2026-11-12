@@ -59,9 +59,7 @@ export const walletAccountFeedOperations: WalletAccountFeedOperations = {
     }
     for (const event of action.input.add) {
       if (!isDecimal(event.amount)) {
-        throw new InvalidAmountError(
-          `${event.amount} is not a decimal amount`,
-        );
+        throw new InvalidAmountError(`${event.amount} is not a decimal amount`);
       }
     }
     const removeKeys = new Set(

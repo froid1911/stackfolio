@@ -32,6 +32,7 @@ export const initialGlobalState: WalletAccountGlobalState = {
   ledger: [],
   cursor: null,
   backfill: null,
+  redecode: null,
   nativeBalance: null,
   bitcoinXpub: null,
   ensNames: [],

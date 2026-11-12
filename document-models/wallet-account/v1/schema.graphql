@@ -27,6 +27,7 @@ type WalletAccountState {
   ledger: [LedgerEvent!]!
   cursor: ScanCursor
   backfill: BackfillState
+  redecode: BackfillState
   nativeBalance: NativeBalance
   bitcoinXpub: String
   ensNames: [EnsName!]!
@@ -279,4 +280,10 @@ input SetNativeBalanceInput {
   amount: String!
   blockNumber: Int!
   observedAt: DateTime!
+}
+
+input SetRedecodeStateInput {
+  state: BackfillPhase!
+  startBlock: Int
+  nextBlock: Int
 }

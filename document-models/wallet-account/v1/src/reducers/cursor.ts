@@ -46,6 +46,13 @@ export const walletAccountCursorOperations: WalletAccountCursorOperations = {
       nextBlock: action.input.nextBlock ?? null,
     };
   },
+  setRedecodeStateOperation(state, action) {
+    state.redecode = {
+      state: action.input.state,
+      startBlock: action.input.startBlock ?? null,
+      nextBlock: action.input.nextBlock ?? null,
+    };
+  },
   setNativeBalanceOperation(state, action) {
     if (
       state.nativeBalance &&

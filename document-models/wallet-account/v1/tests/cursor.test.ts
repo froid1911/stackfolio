@@ -1,8 +1,12 @@
+import { generateMock } from "document-model/mock";
 import {
+  isWalletAccountDocument,
   recordScanProgress,
   reducer,
   setBackfillState,
   setNativeBalance,
+  setRedecodeState,
+  SetRedecodeStateInputSchema,
   utils,
 } from "document-models/wallet-account/v1";
 import { describe, expect, it } from "vitest";
@@ -172,5 +176,24 @@ describe("CursorOperations", () => {
     );
     expect(document.operations.global[2].error).toContain("is not newer than");
     expect(document.state.global.nativeBalance?.amount).toBe("2.5");
+  });
+
+  it("should handle setRedecodeState operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(SetRedecodeStateInputSchema());
+
+    const updatedDocument = reducer(document, setRedecodeState(input));
+
+    expect(isWalletAccountDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    // A rejected operation records its error; give it the state it needs.
+    expect(updatedDocument.operations.global[0].error).toBeUndefined();
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "SET_REDECODE_STATE",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 });

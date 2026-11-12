@@ -232,6 +232,12 @@ export type SetNativeBalanceInput = {
   observedAt: Scalars["DateTime"]["input"];
 };
 
+export type SetRedecodeStateInput = {
+  nextBlock?: InputMaybe<Scalars["Int"]["input"]>;
+  startBlock?: InputMaybe<Scalars["Int"]["input"]>;
+  state: BackfillPhase;
+};
+
 export type SetWalletXpubInput = {
   xpub?: InputMaybe<Scalars["String"]["input"]>;
 };
@@ -267,4 +273,5 @@ export type WalletAccountState = {
   label: Maybe<Scalars["String"]["output"]>;
   ledger: Array<LedgerEvent>;
   nativeBalance: Maybe<NativeBalance>;
+  redecode: Maybe<BackfillState>;
 };

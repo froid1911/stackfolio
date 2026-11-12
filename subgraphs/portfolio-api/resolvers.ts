@@ -1,6 +1,11 @@
 import type { BaseSubgraph, Context } from "@powerhousedao/reactor-api";
+import { AccountingIndex } from "processors/accounting-index";
 import { PortfolioIndex } from "processors/portfolio-index";
-import { driveFileIds, forwardEnsAddress } from "./lib.js";
+import {
+  driveFileIds,
+  forwardEnsAddress,
+  unitCostPerWhole,
+} from "./lib.js";
 
 /**
  * Queries over the portfolio index. Every resolver: assert the caller can
@@ -13,6 +18,8 @@ export const getResolvers = (
 ): Record<string, unknown> => {
   const query = (driveId: string) =>
     PortfolioIndex.query(driveId, subgraph.relationalDb);
+  const accountingQuery = (driveId: string) =>
+    AccountingIndex.query(driveId, subgraph.relationalDb);
 
   return {
     Query: {
@@ -463,6 +470,237 @@ export const getResolvers = (
           totalValue: latest?.totalValue ?? null,
           snapshotAt: latest?.timestamp ?? null,
         };
+      },
+
+      // ---- accounting: lots, realized, income, monthly P&L, unpriced ----
+      //
+      // The accounting tables key by wallet address, not document id, so
+      // "rows of this drive" means "wallets whose events came from this
+      // drive's documents" - the acc_events distinct wallet set scopes it.
+
+      openLots: async (
+        _parent: unknown,
+        args: { driveId: string; wallet?: string },
+        ctx: Context,
+      ) => {
+        const ids = await driveFileIds(subgraph, args.driveId, ctx);
+        if (!ids || ids.length === 0) return [];
+        const acc = accountingQuery(args.driveId);
+        const rows = await acc
+          .selectFrom("lots")
+          .where(
+            "wallet",
+            "in",
+            acc
+              .selectFrom("acc_events")
+              .select("wallet")
+              .distinct()
+              .where("document_id", "in", ids),
+          )
+          .$if(Boolean(args.wallet), (qb) =>
+            qb.where("wallet", "=", args.wallet as string),
+          )
+          .select([
+            "wallet",
+            "asset",
+            "source_event_id as sourceEventId",
+            "source_seq as sourceSeq",
+            "quantity",
+            "unit_cost as unitCost",
+          ])
+          .orderBy("wallet")
+          .orderBy("asset")
+          .orderBy("source_seq")
+          .orderBy("source_event_id")
+          .execute();
+        const decimals = await acc
+          .selectFrom("acc_assets")
+          .select(["asset", "decimals"])
+          .execute();
+        const byAsset = new Map(decimals.map((r) => [r.asset, r.decimals]));
+        return rows.map((row) => ({
+          ...row,
+          unitCost: unitCostPerWhole(row.unitCost, byAsset.get(row.asset)),
+        }));
+      },
+
+      realizedEvents: async (
+        _parent: unknown,
+        args: {
+          driveId: string;
+          wallet?: string;
+          from?: string;
+          to?: string;
+        },
+        ctx: Context,
+      ) => {
+        const ids = await driveFileIds(subgraph, args.driveId, ctx);
+        if (!ids || ids.length === 0) return [];
+        const acc = accountingQuery(args.driveId);
+        const rows = await acc
+          .selectFrom("realized")
+          .where(
+            "wallet",
+            "in",
+            acc
+              .selectFrom("acc_events")
+              .select("wallet")
+              .distinct()
+              .where("document_id", "in", ids),
+          )
+          .$if(Boolean(args.wallet), (qb) =>
+            qb.where("wallet", "=", args.wallet as string),
+          )
+          .$if(Boolean(args.from), (qb) =>
+            qb.where("timestamp", ">=", args.from as string),
+          )
+          .$if(Boolean(args.to), (qb) =>
+            qb.where("timestamp", "<=", args.to as string),
+          )
+          .select([
+            "id",
+            "wallet",
+            "asset",
+            "timestamp",
+            "quantity",
+            "cost",
+            "proceeds",
+            "pnl",
+            "source_event_id as sourceEventId",
+            "source_seq as sourceSeq",
+            "consumed",
+          ])
+          .orderBy("timestamp", "desc")
+          .orderBy("source_seq", "desc")
+          .execute();
+        return rows.map((row) => ({
+          ...row,
+          consumed: parseJson<
+            { sourceEventId: string; quantity: string; cost: string }[]
+          >(row.consumed, []),
+        }));
+      },
+
+      incomeByMonth: async (
+        _parent: unknown,
+        args: { driveId: string; wallet?: string },
+        ctx: Context,
+      ) => {
+        const ids = await driveFileIds(subgraph, args.driveId, ctx);
+        if (!ids || ids.length === 0) return [];
+        const acc = accountingQuery(args.driveId);
+        return acc
+          .selectFrom("income")
+          .where(
+            "wallet",
+            "in",
+            acc
+              .selectFrom("acc_events")
+              .select("wallet")
+              .distinct()
+              .where("document_id", "in", ids),
+          )
+          .$if(Boolean(args.wallet), (qb) =>
+            qb.where("wallet", "=", args.wallet as string),
+          )
+          .select([
+            "wallet",
+            "bucket",
+            "month",
+            "amount",
+          ])
+          .orderBy("month", "desc")
+          .orderBy("wallet")
+          .orderBy("bucket")
+          .execute();
+      },
+
+      pnlReport: async (
+        _parent: unknown,
+        args: {
+          driveId: string;
+          from: string;
+          to: string;
+          grouping?: string;
+          wallet?: string;
+        },
+        ctx: Context,
+      ) => {
+        const grouping = args.grouping ?? "MONTH";
+        if (grouping !== "MONTH") {
+          throw new Error(`Unsupported P&L grouping "${grouping}"`);
+        }
+        const ids = await driveFileIds(subgraph, args.driveId, ctx);
+        if (!ids || ids.length === 0) return [];
+        const acc = accountingQuery(args.driveId);
+        return acc
+          .selectFrom("pnl_month")
+          .where(
+            "wallet",
+            "in",
+            acc
+              .selectFrom("acc_events")
+              .select("wallet")
+              .distinct()
+              .where("document_id", "in", ids),
+          )
+          .$if(Boolean(args.wallet), (qb) =>
+            qb.where("wallet", "=", args.wallet as string),
+          )
+          .where("month", ">=", args.from.slice(0, 7))
+          .where("month", "<=", args.to.slice(0, 7))
+          .select([
+            "wallet",
+            "month",
+            "income",
+            "expense",
+            "realized_pnl as realizedPnl",
+            "unpriced_in_count as unpricedIn",
+            "unpriced_out_count as unpricedOut",
+          ])
+          .orderBy("wallet")
+          .orderBy("month")
+          .execute();
+      },
+
+      unpricedSummary: async (
+        _parent: unknown,
+        args: { driveId: string; wallet?: string },
+        ctx: Context,
+      ) => {
+        const ids = await driveFileIds(subgraph, args.driveId, ctx);
+        if (!ids || ids.length === 0) return [];
+        const acc = accountingQuery(args.driveId);
+        const rows = await acc
+          .selectFrom("pnl_month")
+          .where(
+            "wallet",
+            "in",
+            acc
+              .selectFrom("acc_events")
+              .select("wallet")
+              .distinct()
+              .where("document_id", "in", ids),
+          )
+          .$if(Boolean(args.wallet), (qb) =>
+            qb.where("wallet", "=", args.wallet as string),
+          )
+          .select([
+            "wallet",
+            "month",
+            "unpriced_in_count as inCount",
+            "unpriced_out_count as outCount",
+          ])
+          .where((eb) =>
+            eb.or([
+              eb("unpriced_in_count", ">", 0),
+              eb("unpriced_out_count", ">", 0),
+            ]),
+          )
+          .orderBy("wallet")
+          .orderBy("month")
+          .execute();
+        return rows;
       },
     },
   };

@@ -115,3 +115,39 @@ export async function forwardEnsAddress(
   if (body.length >= 64) return `0x${body.slice(24, 64)}`;
   return null;
 }
+
+/** Parse a plain decimal string (the formatScaled column format) into an
+ * integer scaled by `scale` digits. `"0.0000002"` at scale 8 -> 20n. */
+function parseScaled(value: string, scale: number): bigint | null {
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value);
+  if (!match) return null;
+  const [, sign, whole, fraction = ""] = match;
+  if (fraction.length > scale) return null;
+  const digits = whole + fraction.padEnd(scale, "0");
+  const scaled = BigInt(digits);
+  return sign === "-" ? -scaled : scaled;
+}
+
+/**
+ * A lot's stored unit cost is the per-RAW-unit price as a decimal scaled
+ * by 1e8 (e.g. "0.0000002"); clients want the price of one WHOLE unit
+ * (registry decimals), so scale by 10^decimals and present 8 decimals. An
+ * unparseable cost or an asset with no registered decimals crosses as the
+ * stored string rather than a guess.
+ */
+export function unitCostPerWhole(
+  unitCost: string,
+  decimals: number | undefined,
+): string {
+  if (decimals === undefined) return unitCost;
+  const scaled = parseScaled(unitCost, 8);
+  if (scaled === null) return unitCost;
+  const shift = BigInt(decimals) - 8n;
+  const whole =
+    shift >= 0n ? scaled * 10n ** shift : scaled / 10n ** -shift;
+  const sign = whole < 0n ? "-" : "";
+  const digits = (whole < 0n ? -whole : whole)
+    .toString()
+    .padStart(9, "0");
+  return `${sign}${digits.slice(0, -8)}.${digits.slice(-8)}`;
+}

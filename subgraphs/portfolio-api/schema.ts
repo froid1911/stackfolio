@@ -38,6 +38,27 @@ export const schema: DocumentNode = gql`
       to: String
     ): [PortfolioApiStakingBalance!]!
     withdrawals(driveId: String!, validatorIndex: Int): [PortfolioApiWithdrawal!]!
+    "Open cost-basis lots, oldest source event first. \`wallet\` filters to one address as stored (lower-case)."
+    openLots(driveId: String!, wallet: String): [PortfolioApiLot!]!
+    "Realized disposals, newest first; \`consumed\` names the lots each one drew from."
+    realizedEvents(
+      driveId: String!
+      wallet: String
+      from: String
+      to: String
+    ): [PortfolioApiRealizedEvent!]!
+    "Income bucketed per month, newest month first."
+    incomeByMonth(driveId: String!, wallet: String): [PortfolioApiIncome!]!
+    "Monthly P&L buckets inside [from, to]; months compare by YYYY-MM prefix. Only grouping: MONTH (default)."
+    pnlReport(
+      driveId: String!
+      from: String!
+      to: String!
+      grouping: String
+      wallet: String
+    ): [PortfolioApiPnlBucket!]!
+    "Months carrying unpriced disposals: in = without enough cost basis, out = without a value."
+    unpricedSummary(driveId: String!, wallet: String): [PortfolioApiUnpriced!]!
     "Hyperliquid accounts tracked by the portfolio, with spot balances and open positions."
     hyperliquidAccounts(driveId: String!): [PortfolioApiHlAccount!]!
     "Open reconciler findings."
@@ -217,6 +238,62 @@ export const schema: DocumentNode = gql`
     "Total value of the newest snapshot, or null before the first one."
     totalValue: String
     snapshotAt: String
+  }
+
+  type PortfolioApiLot {
+    wallet: String!
+    asset: String!
+    "Ledger event id that created the lot."
+    sourceEventId: String!
+    sourceSeq: Int!
+    "Remaining quantity in raw units."
+    quantity: String!
+    "Cost per whole unit (registry decimals), 8 decimals."
+    unitCost: String!
+  }
+
+  type PortfolioApiConsumedLot {
+    sourceEventId: String!
+    quantity: String!
+    cost: String!
+  }
+
+  type PortfolioApiRealizedEvent {
+    id: String!
+    wallet: String!
+    asset: String!
+    timestamp: String!
+    quantity: String!
+    cost: String!
+    proceeds: String!
+    pnl: String!
+    sourceEventId: String!
+    sourceSeq: Int!
+    consumed: [PortfolioApiConsumedLot!]!
+  }
+
+  type PortfolioApiIncome {
+    wallet: String!
+    bucket: String!
+    month: String!
+    amount: String!
+  }
+
+  type PortfolioApiPnlBucket {
+    wallet: String!
+    month: String!
+    income: String!
+    expense: String!
+    realizedPnl: String!
+    unpricedIn: Int!
+    unpricedOut: Int!
+  }
+
+  type PortfolioApiUnpriced {
+    wallet: String!
+    month: String!
+    inCount: Int!
+    outCount: Int!
   }
 
   type Query {

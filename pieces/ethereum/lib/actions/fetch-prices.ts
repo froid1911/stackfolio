@@ -118,8 +118,18 @@ export const ethereumFetchPricesAction = createAction({
     const addresses: Array<{ asset: string; address: string; platform: string }> = [];
     const unmapped: string[] = [];
 
-    for (const identifier of identifiers) {
-      if (typeof identifier !== "string") continue;
+    for (const entry of identifiers) {
+      // The holdings step feeds rows; hand-written payloads may carry bare
+      // identifiers. Both name the asset, so both are honoured.
+      const identifier =
+        typeof entry === "string"
+          ? entry
+          : entry &&
+            typeof entry === "object" &&
+            typeof (entry as { asset?: unknown }).asset === "string"
+            ? (entry as { asset: string }).asset
+            : null;
+      if (identifier === null) continue;
       const known = registry.get(identifier);
       if (known) {
         ids.set(identifier, known);

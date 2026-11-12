@@ -68,6 +68,40 @@ describe("fetch-prices", () => {
     ]);
   });
 
+  it("reads holdings rows, not only bare identifier strings", async () => {
+    // The workflow feeds {{steps.holdings.output.holdings}} - objects with
+    // an asset field - and a silently-ignored row is how a whole price
+    // round ends up empty.
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes("ids=ethereum")) {
+        return { ok: true, json: () => ({ ethereum: { eur: 2950.1 } }) };
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    const result = (await ethereumFetchPricesAction.run({
+      propsValue: {
+        assetIdentifiersJson: JSON.stringify([
+          { asset: ETH, symbol: "ETH", amount: "1.5", value: null },
+          { asset: 42 },
+        ]),
+        hour: HOUR,
+        registryJson,
+        coingeckoBaseUrl: "https://api.coingecko.com/api/v3",
+        vsCurrency: "EUR",
+      },
+      auth: { props: {} },
+    } as unknown as Parameters<
+      typeof ethereumFetchPricesAction.run
+    >[0])) as {
+      prices: Array<{ asset: string }>;
+      error: string | null;
+    };
+
+    expect(result.prices.map((p) => p.asset)).toEqual([ETH]);
+    expect(result.error).toBeNull();
+  });
+
   it("maps a registry-less token through its contract address", async () => {
     fetchMock.mockImplementation((url: string) => {
       if (

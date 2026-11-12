@@ -237,6 +237,13 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
         "Optional stackfolio/protocol-registry document; with it, registry contract logs are scanned and decoded txs replace their generic rows. Without it (or if unreadable) the import stays generic-only.",
       required: false,
     }),
+    redecode: Property.Checkbox({
+      displayName: "Re-decode walk",
+      description:
+        "Walk the document's redecode cursor instead of the backfill cursor: a second pass over the imported history, this time with the registry, so its rows can be replaced by decoded ones.",
+      required: false,
+      defaultValue: false,
+    }),
   },
   async run(context) {
     const runStartedAt = Date.now();
@@ -253,6 +260,7 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
       address: string;
       chainId: number | null;
       backfill: { nextBlock: number | null } | null;
+      redecode: { nextBlock: number | null } | null;
     }>(document);
     const client = createEtherscanClient({
       apiKey: auth.apiKey,
@@ -280,7 +288,12 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
         // import: enrichment can improve a page, not gate it.
       }
     }
-    const cursor = global.backfill?.nextBlock;
+    // The re-decode walk reads the other cursor: same window machine,
+    // different ledger of progress, so a retrofit never disturbs the
+    // backfill that already finished.
+    const cursor = props.redecode
+      ? global.redecode?.nextBlock
+      : global.backfill?.nextBlock;
     let block =
       props.startBlock ?? (cursor === null || cursor === undefined ? 0 : cursor);
     const walk = {

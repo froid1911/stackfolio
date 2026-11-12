@@ -198,3 +198,123 @@ describe("import-events-to-wallet-account", () => {
     );
   });
 });
+
+describe("import re-decode mode", () => {
+  const held = (
+    eventIdentifier: string,
+    sequenceIndex: number,
+    overrides: Record<string, unknown> = {},
+  ) => ({
+    id: `${eventIdentifier}-${sequenceIndex}`,
+    eventIdentifier,
+    sequenceIndex,
+    ignored: false,
+    notes: null,
+    counterpartyLabel: null,
+    valuation: null,
+    ...overrides,
+  });
+
+  const redecodeProps = {
+    ...baseProps,
+    redecode: true,
+    redecodeNextBlock: 200_000,
+  };
+
+  it("replaces held rows and carries the pinned valuation", async () => {
+    get.mockResolvedValue(
+      walletDoc([
+        held("0xa", 0, {
+          ignored: true,
+          notes: "mine",
+          counterpartyLabel: "label",
+          valuation: {
+            unit: "EUR",
+            price: "3700",
+            source: "MANUAL",
+            granularity: "NONE",
+            pinnedAt: "2026-11-12T00:00:00.000Z",
+          },
+        }),
+        held("0xkeep", 0),
+      ]),
+    );
+
+    const result = (await run({
+      ...redecodeProps,
+      eventsJson: JSON.stringify([{ ...event("0xa", 0), counterparty: "aave-v3" }]),
+    })) as { replaced: number };
+
+    expect(result.replaced).toBe(1);
+    const [, , actions] = execute.mock.calls[0] as [
+      string,
+      string,
+      Array<{ type: string; input: Record<string, unknown> }>,
+    ];
+    expect(actions.map((a) => a.type)).toEqual([
+      "REPLACE_EVENTS",
+      "SET_REDECODE_STATE",
+    ]);
+    const replace = actions[0].input as {
+      remove: Array<{ id: string; sequenceIndex: number }>;
+      add: Array<Record<string, unknown>>;
+    };
+    expect(replace.remove).toEqual([{ id: "0xa-0", sequenceIndex: 0 }]);
+    expect(replace.add[0].counterparty).toBe("aave-v3");
+    // The review fields ride in the reducer; the valuation is carried here.
+    expect(replace.add[0].valuation).toMatchObject({ price: "3700", source: "MANUAL" });
+    expect((actions[1].input).nextBlock).toBe(200_000);
+    expect((actions[1].input).state).toBe("NATIVE");
+  });
+
+  it("retires the retrofit to DONE at the head", async () => {
+    get.mockResolvedValue(
+      walletDoc([held("0xa", 0)]),
+    );
+    await run({
+      ...redecodeProps,
+      redecodeDone: true,
+      eventsJson: JSON.stringify([event("0xa", 0)]),
+    });
+    const [, , actions] = execute.mock.calls[0] as [
+      string,
+      string,
+      Array<{ type: string; input: Record<string, unknown> }>,
+    ];
+    expect(actions[1]).toMatchObject({
+      type: "SET_REDECODE_STATE",
+      input: { state: "DONE", startBlock: 0, nextBlock: 200_000 },
+    });
+  });
+
+  it("advances the cursor even when the window holds nothing", async () => {
+    get.mockResolvedValue(walletDoc([]));
+    await run({ ...redecodeProps, eventsJson: "[]" });
+    const [, , actions] = execute.mock.calls[0] as [
+      string,
+      string,
+      Array<{ type: string }>,
+    ];
+    expect(actions.map((a) => a.type)).toEqual(["SET_REDECODE_STATE"]);
+  });
+
+  it("leaves the backfill and scan cursors alone", async () => {
+    get.mockResolvedValue(
+      walletDoc([held("0xa", 0)]),
+    );
+    await run({
+      ...redecodeProps,
+      backfillDone: true,
+      backfillNextBlock: 999,
+      scanProgressJson: JSON.stringify({ lastLogsBlock: 1, ranAt: "x" }),
+      eventsJson: JSON.stringify([event("0xa", 0)]),
+    });
+    const [, , actions] = execute.mock.calls[0] as [
+      string,
+      string,
+      Array<{ type: string }>,
+    ];
+    expect(actions.map((a) => a.type)).not.toContain("SET_BACKFILL_STATE");
+    expect(actions.map((a) => a.type)).not.toContain("RECORD_SCAN_PROGRESS");
+  });
+});

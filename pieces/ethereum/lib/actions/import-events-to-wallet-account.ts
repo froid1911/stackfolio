@@ -21,8 +21,71 @@ export function eventId(row: EventRow): string {
   return `${row.eventIdentifier}-${row.sequenceIndex}`;
 }
 
+interface WalletLedgerRow {
+  id: string;
+  eventIdentifier: string;
+  sequenceIndex: number;
+  ignored: boolean;
+  notes: string | null;
+  counterpartyLabel: string | null;
+  valuation: {
+    unit: string;
+    price: string;
+    source: string;
+    granularity: string;
+    pinnedAt: string;
+  } | null;
+}
+
 interface WalletGlobalState {
-  ledger?: Array<{ eventIdentifier: string; sequenceIndex: number }>;
+  ledger?: WalletLedgerRow[];
+  backfill?: {
+    state: string;
+    startBlock: number | null;
+    nextBlock: number | null;
+  } | null;
+  redecode?: {
+    state: string;
+    startBlock: number | null;
+    nextBlock: number | null;
+  } | null;
+}
+
+/** What a re-decode window replaces: every held row the window re-fetched,
+ * with its review fields carried onto the replacement by the reducer, and
+ * its valuation carried here (the reducer takes the valuation from the
+ * replacement row, and the walk never knows the pinned price). */
+export function planReplace(
+  held: WalletLedgerRow[],
+  incoming: EventRow[],
+): {
+  remove: Array<{ id: string; sequenceIndex: number }>;
+  add: Array<Record<string, unknown>>;
+} {
+  const byKey = new Map(
+    held.map((row) => [`${row.eventIdentifier}#${row.sequenceIndex}`, row]),
+  );
+  const remove: Array<{ id: string; sequenceIndex: number }> = [];
+  const add: Array<Record<string, unknown>> = [];
+  for (const row of incoming) {
+    const prior = byKey.get(`${row.eventIdentifier}#${row.sequenceIndex}`);
+    if (prior) remove.push({ id: prior.id, sequenceIndex: prior.sequenceIndex });
+    const valuation = prior?.valuation ?? null;
+    add.push({
+      id: eventId(row),
+      eventIdentifier: row.eventIdentifier,
+      sequenceIndex: row.sequenceIndex,
+      timestamp: row.timestamp,
+      type: row.type,
+      subtype: row.subtype,
+      asset: row.asset,
+      amount: row.amount,
+      counterparty: row.counterparty || null,
+      notes: row.notes ?? null,
+      ...(valuation ? { valuation } : {}),
+    });
+  }
+  return { remove, add };
 }
 
 /**
@@ -84,6 +147,26 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
         "The walk step's nextBlock: advances backfill.nextBlock so the next run continues instead of repeating the window.",
       required: false,
     }),
+    redecode: Property.Checkbox({
+      displayName: "Re-decode import",
+      description:
+        "Replace instead of skip: every held row the window re-fetched is removed and re-imported from the decoded rows, carrying its review fields and pinned valuation. Advances the redecode cursor, not the backfill one.",
+      required: false,
+      defaultValue: false,
+    }),
+    redecodeDone: Property.Checkbox({
+      displayName: "Re-decode finished",
+      description:
+        "Set from {{steps.walk.output.done}}: retires the redecode walk to DONE.",
+      required: false,
+      defaultValue: false,
+    }),
+    redecodeNextBlock: Property.Number({
+      displayName: "Re-decode cursor (next block)",
+      description:
+        "The walk step's nextBlock: advances redecode.nextBlock so the next run continues instead of repeating the window.",
+      required: false,
+    }),
   },
   async run(context) {
     const p = context.propsValue;
@@ -102,9 +185,38 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
         sequenceIndex,
       }),
     );
-    const planned = planImport(held, events);
 
     const actions = [];
+    if (p.redecode) {
+      // The retrofit path: the window's decoded rows replace the held
+      // generic ones - review fields carry in the reducer, valuations
+      // here - and the redecode cursor, not the backfill one, advances.
+      const { remove, add } = planReplace(global.ledger ?? [], events);
+      if (remove.length > 0 || add.length > 0) {
+        actions.push(
+          toGlobalAction("REPLACE_EVENTS", {
+            batchId: p.batchId,
+            remove,
+            add,
+          }),
+        );
+      }
+      actions.push(
+        toGlobalAction("SET_REDECODE_STATE", {
+          state: p.redecodeDone ? "DONE" : "NATIVE",
+          startBlock: global.redecode?.startBlock ?? 0,
+          nextBlock: p.redecodeNextBlock ?? global.redecode?.nextBlock ?? null,
+        }),
+      );
+      await context.reactor.execute(p.walletDocumentId, "main", actions);
+      return {
+        replaced: add.length,
+        walletDocumentId: p.walletDocumentId,
+      };
+    }
+
+    const planned = planImport(held, events);
+
     if (planned.length > 0) {
       actions.push(
         toGlobalAction("IMPORT_EVENTS", {

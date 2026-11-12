@@ -36,4 +36,18 @@ describe("decimal helpers", () => {
       "-2000",
     );
   });
+
+  it("values a price finer than the scale instead of throwing", () => {
+    // A dead token's CoinGecko price carries 12 fraction digits; the
+    // product keeps the scale's 8 and the remainder falls away.
+    expect(
+      formatScaled(scaledProduct("0.000000001084", 10n ** 24n, 18, 8), 8),
+    ).toBe("0.001084");
+    expect(formatScaled(scaledProduct("0.000000001084", 1n, 0, 8), 8)).toBe(
+      "0",
+    );
+    expect(
+      formatScaled(scaledProduct("0.000000001084", 5n * 10n ** 21n, 18, 8), 8),
+    ).toBe("0.00000542");
+  });
 });

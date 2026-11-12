@@ -36,12 +36,22 @@ export function formatScaled(scaled: bigint, scale: number): string {
   return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
-/** value * amount / 10^decimals, exactly, at `scale` fraction digits. */
+/** value * amount / 10^decimals, exactly, at `scale` fraction digits.
+ * `value` may carry more fraction digits than `scale` (a dust token's
+ * CoinGecko price has 12 and more); the product keeps `scale` digits and
+ * the remainder falls away, so a value too small to render at `scale` is
+ * honestly zero rather than a thrown parse. */
 export function scaledProduct(
   value: string,
   amountRaw: bigint,
   decimals: number,
   scale: number,
 ): bigint {
-  return (parseScaled(value, scale) * amountRaw) / 10n ** BigInt(decimals);
+  const fraction = (value.split(".")[1] ?? "").length;
+  const priceRaw = parseScaled(value, fraction);
+  const num =
+    priceRaw * amountRaw * 10n ** BigInt(Math.max(scale - fraction, 0));
+  const den =
+    10n ** BigInt(Math.max(fraction - scale, 0) + decimals);
+  return num / den;
 }

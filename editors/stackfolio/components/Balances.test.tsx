@@ -134,6 +134,16 @@ describe("Balances view", () => {
     expect(onOpenAccount).toHaveBeenCalledWith("0xw2");
   });
 
+  it("expanding an asset closes the open account overlay", () => {
+    const onCloseAccount = vi.fn();
+    render(ok(DATA), { onCloseAccount });
+    const ethRow = [...host.querySelectorAll<HTMLTableRowElement>("tbody tr")].find((r) =>
+      r.textContent?.includes("ETH"),
+    )!;
+    act(() => ethRow.click());
+    expect(onCloseAccount).toHaveBeenCalledTimes(1);
+  });
+
   it("query error surfaces the message", () => {
     render({ data: null, error: "switchboard down", loading: false, reload: () => {} });
     expect(host.textContent).toContain("switchboard down");

@@ -38,6 +38,7 @@ export function Balances({
   holdings,
   onOpenAsset,
   onOpenAccount,
+  onCloseAccount,
 }: {
   holdings: QueryState<{
     holdings: HoldingsRow[];
@@ -47,6 +48,8 @@ export function Balances({
   } | null>;
   onOpenAsset: (assetId: string) => void;
   onOpenAccount: (address: string) => void;
+  /** Closes an open account overlay (the expanded view closes it too). */
+  onCloseAccount?: () => void;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const data = holdings.data;
@@ -117,14 +120,15 @@ export function Balances({
                     symbol={symbol}
                     share={share}
                     open={open}
-                    onToggle={() =>
+                    onToggle={() => {
+                      onCloseAccount?.();
                       setExpanded((prev) => {
                         const next = new Set(prev);
                         if (next.has(asset.asset)) next.delete(asset.asset);
                         else next.add(asset.asset);
                         return next;
-                      })
-                    }
+                      });
+                    }}
                     onOpenAsset={() => onOpenAsset(asset.asset)}
                     assetRows={assetRows}
                     walletName={walletName}

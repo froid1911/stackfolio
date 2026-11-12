@@ -30,6 +30,13 @@ export function slugMatches(id: string, candidate: string): boolean {
     const c = needle[i];
     const t = target[i];
     if (c === t) continue;
+    // A URL segment may not carry "/" cleanly; slugs of ids write "/" as
+    // "-". So a hyphen in EITHER side stands for any separator the other
+    // carries. Any other punctuation still matches only punctuation.
+    if (c === "-" || t === "-") {
+      if (/[-_.:/]/.test(c) && /[-_.:/]/.test(t)) continue;
+      return false;
+    }
     if (/[-_.:]/.test(c) && /[-_.:]/.test(t)) continue;
     return false;
   }

@@ -8,6 +8,7 @@ import { ethStakingUpgradeManifest } from "document-models/eth-staking/upgrades"
 import { hyperliquidAccountUpgradeManifest } from "document-models/hyperliquid-account/upgrades";
 import { portfolioUpgradeManifest } from "document-models/portfolio/upgrades";
 import { priceBookUpgradeManifest } from "document-models/price-book/upgrades";
+import { protocolRegistryUpgradeManifest } from "document-models/protocol-registry/upgrades";
 import { walletAccountUpgradeManifest } from "document-models/wallet-account/upgrades";
 
 export const upgradeManifests: UpgradeManifest<readonly number[]>[] = [
@@ -16,5 +17,6 @@ export const upgradeManifests: UpgradeManifest<readonly number[]>[] = [
   hyperliquidAccountUpgradeManifest,
   portfolioUpgradeManifest,
   priceBookUpgradeManifest,
+  protocolRegistryUpgradeManifest,
   walletAccountUpgradeManifest,
 ];

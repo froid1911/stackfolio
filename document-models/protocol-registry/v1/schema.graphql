@@ -1,0 +1,137 @@
+scalar Unknown
+scalar DateTime
+scalar Address
+scalar AttachmentRef
+scalar Amount_Tokens
+scalar EthereumAddress
+scalar EmailAddress
+scalar Amount_Percentage
+scalar Date
+scalar URL
+scalar Amount_Money
+scalar OLabel
+scalar Currency
+scalar PHID
+scalar OID
+scalar Amount_Fiat
+scalar Amount_Currency
+scalar Amount_Crypto
+scalar Amount
+scalar Upload
+
+type ProtocolRegistryState {
+  protocols: [ProtocolEntry!]!
+}
+
+type ProtocolEntry {
+  id: String!
+  status: ProtocolStatus!
+  chains: [ChainManifest!]!
+  plugins: [String!]!
+  notes: String
+  updatedAt: DateTime
+}
+
+enum ProtocolStatus {
+  ACTIVE
+  RETIRED
+}
+
+type ChainManifest {
+  chainId: Int!
+  contracts: [ContractRef!]!
+  events: [EventRule!]!
+}
+
+type ContractRef {
+  name: String!
+  address: String!
+  kind: ContractKind!
+  underlying: String
+}
+
+enum ContractKind {
+  CORE
+  POSITION
+  DEBT
+}
+
+type EventRule {
+  topic: String!
+  name: String!
+  semantic: EventSemantic!
+}
+
+type EventSemantic {
+  type: String!
+  subtype: String!
+}
+
+# Registry
+
+input ProtocolEntryInput {
+  id: String!
+  chains: [ChainManifestInput!]!
+  plugins: [String!]
+  notes: String
+}
+input ChainManifestInput {
+  chainId: Int!
+  contracts: [ContractRefInput!]!
+  events: [EventRuleInput!]!
+}
+input ContractRefInput {
+  name: String!
+  address: String!
+  kind: ContractKind!
+  underlying: String
+}
+input EventRuleInput {
+  topic: String!
+  name: String!
+  semantic: EventSemanticInput!
+}
+input EventSemanticInput {
+  type: String!
+  subtype: String!
+}
+input RegisterProtocolInput {
+  entry: ProtocolEntryInput!
+  updatedAt: DateTime!
+}
+
+input ProtocolEntryInput {
+  id: String!
+  chains: [ChainManifestInput!]!
+  plugins: [String!]
+  notes: String
+}
+input ChainManifestInput {
+  chainId: Int!
+  contracts: [ContractRefInput!]!
+  events: [EventRuleInput!]!
+}
+input ContractRefInput {
+  name: String!
+  address: String!
+  kind: ContractKind!
+  underlying: String
+}
+input EventRuleInput {
+  topic: String!
+  name: String!
+  semantic: EventSemanticInput!
+}
+input EventSemanticInput {
+  type: String!
+  subtype: String!
+}
+input UpdateProtocolInput {
+  entry: ProtocolEntryInput!
+  updatedAt: DateTime!
+}
+
+input RetireProtocolInput {
+  id: String!
+  updatedAt: DateTime!
+}

@@ -30,6 +30,10 @@
     {
       "id": "stackfolio/hyperliquid-account",
       "name": "Hyperliquid Account"
+    },
+    {
+      "id": "stackfolio/protocol-registry",
+      "name": "Protocol Registry"
     }
   ],
   "apps": [

@@ -3,6 +3,7 @@ import { EthStaking as EthStakingV1 } from "document-models/eth-staking/v1";
 import { HyperliquidAccount as HyperliquidAccountV1 } from "document-models/hyperliquid-account/v1";
 import { Portfolio as PortfolioV1 } from "document-models/portfolio/v1";
 import { PriceBook as PriceBookV1 } from "document-models/price-book/v1";
+import { ProtocolRegistry as ProtocolRegistryV1 } from "document-models/protocol-registry/v1";
 import { WalletAccount as WalletAccountV1 } from "document-models/wallet-account/v1";
 
 /**
@@ -16,5 +17,6 @@ export const documentModels = [
   HyperliquidAccountV1,
   PortfolioV1,
   PriceBookV1,
+  ProtocolRegistryV1,
   WalletAccountV1,
 ] as const;

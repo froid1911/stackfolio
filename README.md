@@ -104,9 +104,13 @@ Switchboard. Two pieces:
   tokenless `vite-ping` health probe) as raw bytes. Pure Node
   (`node:http`/`node:net`) — bun's websocket server silently drops
   bridged frames and its long-lived servers died within minutes.
-  Start it: `node scripts/host-reverse-proxy.mjs 2845 127.0.0.1 2844 7844`.
+  Runs as the systemd user service `stackfolio-host-proxy.service`
+  (enabled, restart-always; log at `~/.local/state/stackfolio/host-proxy.log`):
+  `systemctl --user restart stackfolio-host-proxy.service`.
 - `tailscale serve --bg --tls-terminated-tcp=443 tcp://127.0.0.1:2845`
   — TLS (Let's Encrypt cert, tailscale-managed) terminated by tailscaled,
   decrypted stream forwarded with a PROXYv2 header (ignored by the
   proxy). Both the serve config and `tailscaled` persist across reboots;
-  the proxy must be restarted with the dev environment.
+  the proxy unit starts at login/boot (linger is on) and restarts
+  itself, so the tailnet URL recovers on its own when the dev
+  environment comes back.

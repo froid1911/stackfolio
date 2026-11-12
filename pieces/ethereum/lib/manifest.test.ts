@@ -174,7 +174,17 @@ describe("seed manifests", () => {
 
   it("covers the launch protocols on their known chains", () => {
     const ids = SEED_MANIFESTS.map((m) => m.id).sort();
-    expect(ids).toEqual(["aave-v3", "ens", "sky", "uniswap-v2", "uniswap-v3"]);
+    expect(ids).toEqual([
+      "aave-v3",
+      "balancer-v1",
+      "convex",
+      "curve",
+      "ens",
+      "sky",
+      "sushiswap-chef",
+      "uniswap-v2",
+      "uniswap-v3",
+    ]);
     const aave = SEED_MANIFESTS.find((m) => m.id === "aave-v3") as ProtocolManifest;
     expect(new Set(aave.chains.map((c) => c.chainId))).toEqual(
       new Set([1, 10, 56, 137, 42161, 8453, 43114]),

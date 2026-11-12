@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { gql } from "./gql.js";
 
 /**
@@ -313,6 +313,15 @@ export function useHoldings(driveId: string): QueryState<BalancesData | null> {
     { driveId },
     "holdings",
   );
+}
+
+/** Just the registry's identifiers: the candidate set for `asset:` slugs. */
+export function useAssetIds(driveId: string): string[] {
+  const assets = useAssets(driveId);
+  const ids = (assets.data ?? []).map((a) => a.identifier);
+  // Stable identity for useDetail's join-key memo.
+  const key = ids.join("\u0000");
+  return useMemo(() => (key ? key.split("\u0000") : []), [key]);
 }
 
 export function useAddressLabels(driveId: string): QueryState<AddressLabel[]> {

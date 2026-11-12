@@ -228,7 +228,12 @@ function FragmentRows({
               <button
                 type="button"
                 className="text-accent underline-offset-2 hover:underline"
-                onClick={() => onOpenAccount(row.wallet)}
+                onClick={(e) => {
+                  // A wallet row belongs to its asset's detail; the
+                  // account drill goes through the account lists.
+                  e.stopPropagation();
+                  onOpenAsset();
+                }}
               >
                 {walletName.get(row.wallet) ?? short(row.wallet)}
               </button>

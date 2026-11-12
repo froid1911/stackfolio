@@ -10,11 +10,13 @@ export function Assets({
   prices,
   snapshots,
   currency,
+  onOpenAsset,
 }: {
   assets: QueryState<Asset[]>;
   prices: QueryState<Price[]>;
   snapshots: QueryState<Snapshot[]>;
   currency: string;
+  onOpenAsset: (identifier: string) => void;
 }) {
   if (assets.error) return <p className="p-6 text-red-700">{assets.error}</p>;
   if (!assets.data) return <p className="p-6 text-muted-foreground">Loading assets…</p>;
@@ -42,7 +44,11 @@ export function Assets({
               const h = held.get(a.identifier);
               const p = priceOf.get(a.identifier);
               return (
-                <tr key={a.identifier} className="border-t border-border">
+                <tr
+                  key={a.identifier}
+                  className="cursor-pointer border-t border-border hover:bg-muted/30"
+                  onClick={() => onOpenAsset(a.identifier)}
+                >
                   <td className="px-3 py-2">
                     <span className="font-medium">{a.symbol}</span>{" "}
                     <span className="text-muted-foreground">{a.name}</span>

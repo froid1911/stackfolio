@@ -224,10 +224,12 @@ export function BalancesSection({
   driveId,
   onOpenAsset,
   onOpenAccount,
+  onCloseAccount,
 }: {
   driveId: string;
   onOpenAsset: (assetId: string) => void;
   onOpenAccount: (address: string) => void;
+  onCloseAccount?: () => void;
 }) {
   const holdings = useHoldings(driveId);
   return (
@@ -235,6 +237,7 @@ export function BalancesSection({
       holdings={holdings}
       onOpenAsset={onOpenAsset}
       onOpenAccount={onOpenAccount}
+      onCloseAccount={onCloseAccount}
     />
   );
 }
@@ -354,9 +357,11 @@ export function StakingSection({ driveId }: { driveId: string }) {
 export function AssetsSection({
   driveId,
   list,
+  onOpenAsset,
 }: {
   driveId: string;
   list: { kind: string; id: string; documentType?: string }[];
+  onOpenAsset: (identifier: string) => void;
 }) {
   const assets = useAssets(driveId);
   const prices = useLatestPrices(driveId);
@@ -368,7 +373,8 @@ export function AssetsSection({
   const book = usePortfolioBook(list);
   return (
     <div className="grid gap-4">
-      <Assets assets={assets} prices={prices} snapshots={snapshots} currency={currency} />
+      <Assets assets={assets} prices={prices} snapshots={snapshots} currency={currency}
+      onOpenAsset={onOpenAsset} />
       {book.positions.length > 0 && (
         <div className="px-6 pb-6">
           <p className="mb-2 text-xs uppercase text-muted-foreground">

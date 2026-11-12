@@ -27,7 +27,11 @@ import {
   TransactionsSection,
   portfolioNodeId,
 } from "./components/sections.js";
+import { AssetDetail } from "./components/AssetDetail.js";
 import { CommandPalette, paletteKeyHandler } from "./components/CommandPalette.js";
+import { DetailNotFound } from "./components/DetailNotFound.js";
+import { useDetail } from "./lib/detail.js";
+import { useAssetIds } from "./lib/graphql.js";
 import type { SearchHit } from "./lib/search.js";
 import { Setup } from "./components/Setup.js";
 import { DriveContents } from "./components/DriveContents.js";
@@ -80,6 +84,11 @@ export default function Editor({ children }: EditorProps) {
   }
 
   const go = (target: Page | "files") => setSearchParams({ page: target });
+  // The asset detail names a registered asset; match the URL slug
+  // against the drive's registry ids (the only candidate set that can
+  // resolve it - balances rows are a subset).
+  const registryIds = useAssetIds(driveId);
+  const assetDetail = useDetail(active === "assets" || active === "balances" ? active : "dashboard", registryIds);
 
   // Ctrl/Cmd+K from anywhere; the palette's own Escape closes it (the
   // handler must not close twice through the bubbled event, so it only
@@ -93,6 +102,11 @@ export default function Editor({ children }: EditorProps) {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [paletteOpen]);
+
+  // Detail overlays address through ?detail=<kind>:<slug> (lib/detail);
+  // closing removes the param, leaving the page - and history intact.
+  const closeDetail = () =>
+    setSearchParams({ detail: undefined }, { replace: false });
 
   const goToHit = (hit: SearchHit) => {
     setSearchParams(
@@ -132,16 +146,48 @@ export default function Editor({ children }: EditorProps) {
             <BalancesSection
               driveId={driveId}
               onOpenAsset={(assetId) =>
-                setSearchParams({ page: "assets", detail: slug(assetId) }, { replace: true })
+                setSearchParams(
+                  { page: "balances", detail: `asset:${slug(assetId)}` },
+                  { replace: false },
+                )
               }
               onOpenAccount={(address) =>
-                setSearchParams({ page: "address-book", detail: slug(address) }, { replace: true })
+                setSearchParams(
+                  { page: "address-book", detail: `account:${slug(address)}` },
+                  { replace: false },
+                )
               }
+              onCloseAccount={closeDetail}
             />
           )}
           {active === "staking" && <StakingSection driveId={driveId} />}
           {active === "pnl" && <PnlSection driveId={driveId} list={list} />}
-          {active === "assets" && <AssetsSection driveId={driveId} list={list} />}
+          {active === "assets" && (
+            <AssetsSection
+              driveId={driveId}
+              list={list}
+              onOpenAsset={(identifier) =>
+                setSearchParams(
+                  { page: "assets", detail: `asset:${slug(identifier)}` },
+                  { replace: false },
+                )
+              }
+            />
+          )}
+          {(active === "assets" || active === "balances") &&
+            assetDetail &&
+            (assetDetail.id ? (
+              <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-h-[70vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-border bg-background p-2 shadow-2xl">
+                <AssetDetail
+                  driveId={driveId}
+                  assetId={assetDetail.id}
+                  portfolioId={portfolioNodeId(list)}
+                  onClose={closeDetail}
+                />
+              </div>
+            ) : (
+              <DetailNotFound label={assetDetail.slug} onClose={closeDetail} />
+            ))}
           {active === "prices" && <PricesSection driveId={driveId} list={list} />}
           {active === "defi" && (
             <div className="px-6 pb-6">

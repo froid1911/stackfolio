@@ -123,7 +123,10 @@ describe("Balances view", () => {
       b.textContent?.includes("fr4nk.eth"),
     )!;
     act(() => w1.click());
-    expect(onOpenAccount).toHaveBeenCalledWith("0xw1");
+    // A wallet row of an asset opens the ASSET's detail (Task 11's
+    // overlay lists holdings per wallet itself); account drill goes
+    // through the account lists beside the donut.
+    expect(onOpenAccount).not.toHaveBeenCalled();
   });
 
   it("account list under the donut reports the wallet address", () => {

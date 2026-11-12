@@ -420,4 +420,46 @@ describe("portfolio-index", () => {
       .execute();
     expect(rows).toEqual([]);
   });
+
+  it("indexes a state that holds two snapshots of one id", async () => {
+    // An older reducer appended where it should replace, so a document can
+    // carry two snapshots with the same timestamp id. Two rows of one
+    // target in an upsert batch make Postgres reject the whole insert
+    // ("cannot affect row a second time") and the index stops behind it;
+    // the last row must win and the batch must land.
+    const { db, processor } = await harness();
+    const snapshot = (totalValue: string) => ({
+      id: "2026-11-12T14:10:00.000Z",
+      timestamp: "2026-11-12T14:10:00.000Z",
+      totalValue,
+      netWorth: null,
+      liabilities: [],
+      perLocation: [{ location: "ETHEREUM", value: totalValue }],
+      perAsset: [],
+    });
+    const doc = {
+      header: {
+        id: "pf-1",
+        documentType: "stackfolio/portfolio",
+        name: "Portfolio",
+      },
+      state: {
+        global: {
+          snapshots: [snapshot("100"), snapshot("200")],
+          priceOverrides: [],
+          addresses: [],
+          lastCheck: null,
+        },
+      },
+    };
+    await processor.onOperations(replayEnvelope(doc));
+
+    const rows = await db
+      .selectFrom("snapshots")
+      .selectAll()
+      .where("document_id", "=", "pf-1")
+      .execute();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].total_value).toBe("200");
+  });
 });

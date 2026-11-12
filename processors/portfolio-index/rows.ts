@@ -299,14 +299,21 @@ export function planDiff<T extends object, K>(
   key: (row: T) => K,
 ): { deletes: K[]; writes: T[] } {
   const storedByKey = new Map(stored.map((row) => [key(row), row]));
-  const incomingKeys = new Set(incoming.map(key));
+  // Last row wins a duplicate key, and each key is written at most once:
+  // a batch that names the upsert target twice fails the whole insert
+  // ("ON CONFLICT DO UPDATE cannot affect row a second time"), which would
+  // stall every later write behind it. A document state holding two rows of
+  // one id (a reducer that appended where it should replace) must slow the
+  // index down, never stop it.
+  const byKey = new Map<K, T>();
+  for (const row of incoming) byKey.set(key(row), row);
   const deletes: K[] = [];
   for (const k of storedByKey.keys()) {
-    if (!incomingKeys.has(k)) deletes.push(k);
+    if (!byKey.has(k)) deletes.push(k);
   }
   const writes: T[] = [];
-  for (const row of incoming) {
-    const previous = storedByKey.get(key(row));
+  for (const [k, row] of byKey) {
+    const previous = storedByKey.get(k);
     if (previous === undefined || !sameJson(previous, row)) writes.push(row);
   }
   return { deletes, writes };

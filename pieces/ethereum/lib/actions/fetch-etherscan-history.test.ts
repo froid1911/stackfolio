@@ -259,3 +259,111 @@ describe("fetchEtherscanHistory", () => {
     expect(out.rows.length).toBeGreaterThan(0);
   });
 });
+// --- registry-aware decoding ------------------------------------------------
+
+const POOL = "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2";
+const WSTETH = "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0";
+const SUPPLY_TOPIC =
+  "0x2b627736bca15cd5381dcf80b0bf11fd197d01a037c52b927a881a10fb73ba61";
+const TRANSFER =
+  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const pad = (address: string) =>
+  `0x${"0".repeat(24)}${address.toLowerCase().slice(2)}`;
+const AMT = "23680295108162211874";
+
+function decodingClient(opts: { logs?: unknown[] } = {}) {
+  const seen: string[] = [];
+  const client: HistoryClient = {
+    async call(params) {
+      const action = String(params.action);
+      seen.push(`${String(params.module)}.${action}`);
+      if (action === "eth_blockNumber") return "0x" + (200_000).toString(16);
+      if (action === "getLogs") return opts.logs ?? [];
+      if (action === "eth_getTransactionReceipt") {
+        return {
+          transactionHash: "0xaa",
+          to: POOL,
+          blockNumber: "0x1",
+          logs: [
+            {
+              address: WSTETH,
+              topics: [TRANSFER, pad(ADDR), pad(POOL)],
+              data: `0x${BigInt(AMT).toString(16).padStart(64, "0")}`,
+              logIndex: "0x0",
+            },
+            {
+              address: POOL,
+              topics: [SUPPLY_TOPIC],
+              data: `0x${BigInt(AMT).toString(16).padStart(64, "0")}`,
+              logIndex: "0x1",
+            },
+          ],
+        };
+      }
+      if (action === "eth_getTransactionByHash") return { value: "0x0" };
+      if (action === "eth_getBlockByNumber") return { timestamp: "0x65f00000" };
+      const pages: Record<string, EtherscanRow[][]> = {};
+      if (action === "txlist" && !("0" in pages)) return [TX];
+      return [];
+    },
+  };
+  return { client, seen };
+}
+
+const { manifestForChain } = await import("../manifest.js");
+const { SEED_MANIFESTS } = await import("../manifests/index.js");
+const REGISTRY_INDEX = manifestForChain(SEED_MANIFESTS, 1);
+
+describe("fetchEtherscanHistory with a registry", () => {
+  it("replaces the generic rows of decoded txs with semantic ones", async () => {
+    const { client, seen } = decodingClient({
+      logs: [
+        {
+          address: POOL,
+          topics: [SUPPLY_TOPIC],
+          data: "0x",
+          logIndex: "0x1",
+          transactionHash: "0xaa",
+        },
+      ],
+    });
+    const out = await fetchEtherscanHistory(client, {
+      address: ADDR,
+      chainId: 1,
+      startBlock: 0,
+      confirmations: 9,
+      windowBlocks: 100_000,
+      pageSize: 10_000,
+      budgetMs: 0,
+      decode: { index: REGISTRY_INDEX },
+    });
+    expect(seen).toContain("logs.getLogs");
+    expect(out.rows.find((r) => r.eventIdentifier === "0xaa")).toBeUndefined();
+    const supply = out.rows.find((r) => r.subtype === "DEPOSIT_ASSET");
+    expect(supply).toMatchObject({
+      type: "SPEND",
+      asset: `eip155:1/erc20:${WSTETH}`,
+      amount: AMT,
+      counterparty: "aave-v3",
+      eventIdentifier: "0xaa-0",
+    });
+  });
+
+  it("never calls the logs endpoint without a registry (regression pin)", async () => {
+    const { client, seen } = decodingClient();
+    const out = await fetchEtherscanHistory(client, {
+      address: ADDR,
+      chainId: 1,
+      startBlock: 0,
+      confirmations: 9,
+      windowBlocks: 100_000,
+      pageSize: 10_000,
+      budgetMs: 0,
+    });
+    expect(out.rows.some((r) => r.eventIdentifier === "0xaa")).toBe(true);
+    expect(seen.filter((s) => s.endsWith("getLogs"))).toEqual([]);
+    expect(seen.filter((s) => s.startsWith("proxy."))).toEqual([
+      "proxy.eth_blockNumber",
+    ]);
+  });
+});

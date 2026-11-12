@@ -10,10 +10,11 @@ import {
   fetchWindowCapped,
   type EtherscanRow,
 } from "../etherscan.js";
-import {
-  mapEtherscanRows,
-  type LedgerEventRow,
-} from "../etherscan-rows.js";
+import { mapEtherscanRows } from "../etherscan-rows.js";
+import { fetchDecodedRows, mergeDecoded } from "../decoded-import.js";
+import { type ChainIndex } from "../manifest.js";
+import { registryIndexFor } from "../registry.js";
+import type { EventRow } from "../types.js";
 
 /** The client surface the history walker needs - tests fake exactly this. */
 export type HistoryClient = {
@@ -54,11 +55,14 @@ export async function fetchEtherscanHistory(
     /** Floor for the window split - below it a truncated window is
      * imported as-is and named in skippedCategories. Default 1000. */
     minWindowBlocks?: number;
+    /** Registry contracts to scan per window; rows of decoded transactions
+     * replace the generic ones. Absent = generic-only import. */
+    decode?: { index: ChainIndex };
     /** Clock seam for tests. */
     now?: () => number;
   },
 ): Promise<{
-  rows: LedgerEventRow[];
+  rows: EventRow[];
   nextBlock: number;
   done: boolean;
   skippedCategories: string[];
@@ -76,7 +80,7 @@ export async function fetchEtherscanHistory(
   const now = opts.now ?? Date.now;
   const startedAt = now();
   const skipped = new Set<string>();
-  const rows: LedgerEventRow[] = [];
+  const rows: EventRow[] = [];
   let block = opts.startBlock;
   let span = opts.windowBlocks;
   const minWindow = opts.minWindowBlocks ?? 1000;
@@ -133,7 +137,29 @@ export async function fetchEtherscanHistory(
       tokentxs,
       approvals: approvalsR.rows,
     });
-    rows.push(...events);
+    const generic: EventRow[] = events.map((event) => ({
+      ...event,
+      notes: event.notes ?? null,
+    }));
+    if (opts.decode) {
+      const stamps = new Map(
+        generic.map((row) => [row.eventIdentifier, row.timestamp]),
+      );
+      const decoded = await fetchDecodedRows(client, {
+        index: opts.decode.index,
+        chainId: opts.chainId,
+        account: opts.address,
+        startBlock: block,
+        endBlock: end,
+        timestampOf: (hash) => stamps.get(hash),
+      });
+      if (decoded.overflow || decoded.logsTruncated) {
+        skipped.add("decoded-overflow");
+      }
+      rows.push(...mergeDecoded(generic, decoded));
+    } else {
+      rows.push(...generic);
+    }
     block = end + 1;
     if (
       block > safeHead ||
@@ -205,6 +231,12 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
       required: false,
       defaultValue: 240_000,
     }),
+    registryDocumentId: Property.ShortText({
+      displayName: "Protocol registry document",
+      description:
+        "Optional stackfolio/protocol-registry document; with it, registry contract logs are scanned and decoded txs replace their generic rows. Without it (or if unreadable) the import stays generic-only.",
+      required: false,
+    }),
   },
   async run(context) {
     const runStartedAt = Date.now();
@@ -233,6 +265,21 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
         `Document ${documentId} has no address yet - set the account details before importing.`,
       );
     }
+    const registryId = props.registryDocumentId?.trim();
+    let decode: { index: ChainIndex } | undefined;
+    if (registryId) {
+      try {
+        const registryDoc = (await context.reactor.get(registryId)) as {
+          header: { documentType: string };
+          state: unknown;
+        };
+        const index = registryIndexFor(registryDoc, global.chainId ?? 1);
+        if (index) decode = { index };
+      } catch {
+        // An unreadable registry means generic-only rows, never a failed
+        // import: enrichment can improve a page, not gate it.
+      }
+    }
     const cursor = global.backfill?.nextBlock;
     let block =
       props.startBlock ?? (cursor === null || cursor === undefined ? 0 : cursor);
@@ -244,10 +291,11 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
       pageSize: props.pageSize ?? 10_000,
       budgetMs: props.budgetMs ?? 240_000,
       maxRows: props.maxRows ?? 5_000,
+      ...(decode ? { decode } : {}),
     };
     // Walk window after window inside one run - empty stretches of an
     // address's life should cost seconds, not trigger intervals.
-    const rows: LedgerEventRow[] = [];
+    const rows: EventRow[] = [];
     const skipped = new Set<string>();
     let done = false;
     for (;;) {

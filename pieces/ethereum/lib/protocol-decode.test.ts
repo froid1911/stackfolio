@@ -54,15 +54,17 @@ describe("decodeReceipts - aave v3 supply", () => {
       asset: "eip155:1/erc20:0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
       amount: "23680295108162211874",
       counterparty: "aave-v3",
-      eventIdentifier: expect.stringContaining("-232"),
       timestamp: "2023-04-27T10:17:11.000Z",
     });
+    expect(spend?.eventIdentifier).toBe(
+      "0x970a923dd8f0e566940f494f96ba733ac90dd58bfadcb04a1f7223662a1cd555-232",
+    );
     const mint = rows.find((r) => r.subtype === "NONE");
     expect(mint).toMatchObject({
       type: "RECEIVE",
       asset: "eip155:1/erc20:0x0b925ed163218f6662a35e0f0371ac234f9e9371",
-      counterparty: expect.stringMatching(/^0x/),
     });
+    expect(mint?.counterparty.startsWith("0x")).toBe(true);
   });
 });
 

@@ -257,3 +257,159 @@ export async function fetchWindowCapped(
   }
   return { rows, truncated: true };
 }
+
+/** Parse an Etherscan counter: the standard endpoints answer decimal, the
+ * proxy module hex. */
+export function parseCount(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    return value.toLowerCase().startsWith("0x")
+      ? Number.parseInt(value, 16)
+      : Number.parseInt(value, 10);
+  }
+  return 0;
+}
+
+/** A log as the `logs` module answers it, narrowed for decoding. */
+export interface EtherscanLog {
+  address: string;
+  topics: string[];
+  data: string;
+  logIndex: number;
+  transactionHash: string;
+}
+
+type RawLog = Record<string, unknown>;
+
+/** String fields from a raw Etherscan object; anything else falls back. */
+function asText(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+/**
+ * Logs of any of `addresses` in one block window. The endpoint takes at
+ * most 20 comma-joined addresses per call and caps a page at 1000 entries;
+ * `truncated` says a chunk hit the page ceiling, so the caller can shrink
+ * the window rather than silently import a partial hit list.
+ *
+ * Ruling: the proxy module has no eth_getLogs - only `module=logs` answers.
+ */
+export async function getLogs(
+  client: {
+    call(params: Record<string, string | number>): Promise<unknown>;
+  },
+  params: {
+    addresses: string[];
+    startBlock: number;
+    endBlock: number;
+    maxPages?: number;
+  },
+): Promise<{ logs: EtherscanLog[]; truncated: boolean }> {
+  const maxPages = params.maxPages ?? 10;
+  const logs: EtherscanLog[] = [];
+  let truncated = false;
+  for (let start = 0; start < params.addresses.length; start += 20) {
+    const csv = params.addresses.slice(start, start + 20).join(",");
+    for (let page = 1; page <= maxPages; page += 1) {
+      const batch = (await client.call({
+        module: "logs",
+        action: "getLogs",
+        address: csv,
+        startblock: params.startBlock,
+        endblock: params.endBlock,
+        page,
+        offset: 1000,
+        sort: "asc",
+      })) as RawLog[] | null;
+      const list = Array.isArray(batch) ? batch : [];
+      for (const raw of list) {
+        logs.push({
+          address: asText(raw.address, ""),
+          topics: Array.isArray(raw.topics) ? (raw.topics as string[]) : [],
+          data: asText(raw.data, "0x"),
+          logIndex: parseCount(raw.logIndex),
+          transactionHash: asText(raw.transactionHash, ""),
+        });
+      }
+      if (list.length < 1000) break;
+      if (page === maxPages) truncated = true;
+    }
+  }
+  return { logs, truncated };
+}
+
+/** A mined receipt narrowed to what the decode engine reads. */
+export interface EtherscanReceipt {
+  hash: string;
+  to: string | null;
+  value: string;
+  blockNumber: number;
+  logs: {
+    address: string;
+    topics: string[];
+    data: string;
+    logIndex: number;
+  }[];
+}
+
+/** The receipt of one transaction; null when the hash mined nothing (a
+ * replaced tx) - the caller drops it from the hit list. */
+export async function getTransactionReceipt(
+  client: {
+    call(params: Record<string, string | number>): Promise<unknown>;
+  },
+  hash: string,
+): Promise<EtherscanReceipt | null> {
+  const raw = (await client.call({
+    module: "proxy",
+    action: "eth_getTransactionReceipt",
+    txhash: hash,
+  })) as RawLog | null;
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    hash,
+    to: typeof raw.to === "string" ? raw.to : null,
+    value: typeof raw.value === "string" ? raw.value : "0x0",
+    blockNumber: parseCount(raw.blockNumber),
+    logs: Array.isArray(raw.logs)
+      ? (raw.logs as RawLog[]).map((log) => ({
+          address: asText(log.address, ""),
+          topics: Array.isArray(log.topics) ? (log.topics as string[]) : [],
+          data: asText(log.data, "0x"),
+          logIndex: parseCount(log.logIndex),
+        }))
+      : [],
+  };
+}
+
+/** The native value a transaction carried; receipts do not report it and
+ * ENS-style fees ride on it. */
+export async function getTransactionValue(
+  client: {
+    call(params: Record<string, string | number>): Promise<unknown>;
+  },
+  hash: string,
+): Promise<string> {
+  const raw = (await client.call({
+    module: "proxy",
+    action: "eth_getTransactionByHash",
+    txhash: hash,
+  })) as RawLog | null;
+  return typeof raw?.value === "string" ? raw.value : "0x0";
+}
+
+/** An ISO timestamp for a block number, via the proxy. */
+export async function getBlockTimestamp(
+  client: {
+    call(params: Record<string, string | number>): Promise<unknown>;
+  },
+  blockNumber: number,
+): Promise<string> {
+  const raw = (await client.call({
+    module: "proxy",
+    action: "eth_getBlockByNumber",
+    tag: `0x${blockNumber.toString(16)}`,
+    boolean: "false",
+  })) as RawLog | null;
+  return new Date(parseCount(raw?.timestamp) * 1000).toISOString();
+}

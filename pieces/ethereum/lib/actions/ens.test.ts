@@ -141,4 +141,72 @@ describe("fetch-ens-names", () => {
       } as unknown as Parameters<typeof ethereumFetchEnsNamesAction.run>[0]),
     ).rejects.toThrow(/addressesJson/);
   });
+
+  it("dispatches SET_ENS_NAMES with ownership when a document is given", async () => {
+    const execute = vi.fn().mockResolvedValue({});
+    const get = vi.fn().mockResolvedValue({
+      header: { documentType: "stackfolio/wallet-account" },
+      state: { global: { address: ACCOUNT } },
+    });
+    ethCall.mockImplementation((to: string, data: string) => {
+      if (to === ENS_REGISTRY && data.startsWith(selectorForResolver(namehash(`${ACCOUNT.slice(2)}.addr.reverse`)))) {
+        return `0x${addressWord(REVERSE_RESOLVER)}`;
+      }
+      if (to === REVERSE_RESOLVER && data.startsWith(selectorForName())) {
+        return bytesResult(NAME);
+      }
+      if (to === ENS_REGISTRY && data.startsWith(selectorForResolver(namehash(NAME)))) {
+        return `0x${addressWord(FORWARD_RESOLVER)}`;
+      }
+      if (to === FORWARD_RESOLVER && data.startsWith(selectorForAddr(namehash(NAME)))) {
+        return `0x${addressWord(ACCOUNT)}`;
+      }
+      throw new Error(`unexpected call ${to}`);
+    });
+
+    await ethereumFetchEnsNamesAction.run({
+      propsValue: {
+        addressesJson: JSON.stringify([ACCOUNT]),
+        documentId: "w1",
+      },
+      auth: { props: {} },
+      reactor: { get, execute },
+    } as unknown as Parameters<typeof ethereumFetchEnsNamesAction.run>[0]);
+
+    expect(execute).toHaveBeenCalledWith(
+      "w1",
+      "main",
+      [
+        expect.objectContaining({
+          type: "SET_ENS_NAMES",
+          input: { names: [{ name: NAME, owned: true }] },
+        }),
+      ],
+    );
+  });
+
+  it("skips the dispatch without a document id", async () => {
+    const execute = vi.fn().mockResolvedValue({});
+    ethCall.mockImplementation((to: string, data: string) => {
+      if (to === ENS_REGISTRY && data.startsWith(selectorForResolver(namehash(`${ACCOUNT.slice(2)}.addr.reverse`)))) {
+        return `0x${addressWord(REVERSE_RESOLVER)}`;
+      }
+      if (to === REVERSE_RESOLVER && data.startsWith(selectorForName())) {
+        return bytesResult(NAME);
+      }
+      if (to === ENS_REGISTRY && data.startsWith(selectorForResolver(namehash(NAME)))) {
+        return `0x${addressWord(FORWARD_RESOLVER)}`;
+      }
+      if (to === FORWARD_RESOLVER && data.startsWith(selectorForAddr(namehash(NAME)))) {
+        return `0x${addressWord(ACCOUNT)}`;
+      }
+      throw new Error(`unexpected call ${to}`);
+    });
+    await ethereumFetchEnsNamesAction.run({
+      propsValue: { addressesJson: JSON.stringify([ACCOUNT]) },
+      auth: { props: {} },
+      reactor: { get: vi.fn(), execute },
+    } as unknown as Parameters<typeof ethereumFetchEnsNamesAction.run>[0]);
+    expect(execute).not.toHaveBeenCalled();
+  });
 });

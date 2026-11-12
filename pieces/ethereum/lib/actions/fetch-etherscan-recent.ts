@@ -10,10 +10,11 @@ import {
   fetchWindow,
   type EtherscanRow,
 } from "../etherscan.js";
-import {
-  mapEtherscanRows,
-  type LedgerEventRow,
-} from "../etherscan-rows.js";
+import { mapEtherscanRows } from "../etherscan-rows.js";
+import { fetchDecodedRows, mergeDecoded } from "../decoded-import.js";
+import { registryIndexFor } from "../registry.js";
+import type { ChainIndex } from "../manifest.js";
+import type { EventRow } from "../types.js";
 
 export type RecentClient = {
   call(params: Record<string, string | number>): Promise<unknown>;
@@ -37,9 +38,11 @@ export async function fetchEtherscanRecent(
      * bounded steps instead of paging a chain-span window into memory.
      * Default 100000. */
     maxBlocks?: number;
+    /** Registry contracts to scan; decoded txs replace their generic rows. */
+    decode?: { index: ChainIndex };
   },
 ): Promise<{
-  rows: LedgerEventRow[];
+  rows: EventRow[];
   balanceWei: string;
   lastBlock: number;
   skippedCategories: string[];
@@ -86,8 +89,28 @@ export async function fetchEtherscanRecent(
     internal,
     tokentxs,
   });
+  const generic: EventRow[] = events.map((event) => ({
+    ...event,
+    notes: event.notes ?? null,
+  }));
+  let rows = generic;
+  if (opts.decode) {
+    const stamps = new Map(generic.map((r) => [r.eventIdentifier, r.timestamp]));
+    const decoded = await fetchDecodedRows(client, {
+      index: opts.decode.index,
+      chainId: opts.chainId,
+      account: opts.address,
+      startBlock: opts.fromBlock,
+      endBlock: toBlock,
+      timestampOf: (hash) => stamps.get(hash),
+    });
+    if (decoded.overflow || decoded.logsTruncated) {
+      skippedCategories.push("decoded-overflow");
+    }
+    rows = mergeDecoded(generic, decoded);
+  }
   return {
-    rows: events,
+    rows,
     balanceWei: (BigInt(balanceRaw)).toString(),
     lastBlock: Math.max(opts.fromBlock - 1, safeHead),
     skippedCategories,
@@ -125,6 +148,12 @@ export const ethereumFetchEtherscanRecentAction = createAction({
       required: false,
       defaultValue: 10_000,
     }),
+    registryDocumentId: Property.ShortText({
+      displayName: "Protocol registry document",
+      description:
+        "Optional stackfolio/protocol-registry document enabling log-aware polling for this window.",
+      required: false,
+    }),
   },
   async run(context) {
     const auth = etherscanConfig(authProps(context.auth));
@@ -152,6 +181,20 @@ export const ethereumFetchEtherscanRecentAction = createAction({
         `Document ${documentId} has no address yet - set the account details before polling.`,
       );
     }
+    const registryId = props.registryDocumentId?.trim();
+    let decode: { index: ChainIndex } | undefined;
+    if (registryId) {
+      try {
+        const registryDoc = (await context.reactor.get(registryId)) as {
+          header: { documentType: string };
+          state: unknown;
+        };
+        const index = registryIndexFor(registryDoc, global.chainId ?? 1);
+        if (index) decode = { index };
+      } catch {
+        // generic-only poll; enrichment never gates the import
+      }
+    }
     const cursorBlock = global.cursor?.lastNativeScanBlock;
     const fromBlock =
       props.fromBlock ??
@@ -162,6 +205,7 @@ export const ethereumFetchEtherscanRecentAction = createAction({
       fromBlock,
       confirmations: props.confirmations ?? 9,
       pageSize: props.pageSize ?? 10_000,
+      ...(decode ? { decode } : {}),
     });
   },
 });

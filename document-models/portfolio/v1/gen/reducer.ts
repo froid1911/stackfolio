@@ -8,6 +8,7 @@ import type {
   UpdateAddressAction,
 } from "./address-book/actions.js";
 import type { SetPortfolioDetailsAction } from "./identity/actions.js";
+import type { SetPositionsAction } from "./positions/actions.js";
 import type {
   RemovePriceOverrideAction,
   SetAssetIgnoredAction,
@@ -26,6 +27,7 @@ import type {
 
 import { portfolioAddressBookOperations } from "../src/reducers/address-book.js";
 import { portfolioIdentityOperations } from "../src/reducers/identity.js";
+import { portfolioPositionsOperations } from "../src/reducers/positions.js";
 import { portfolioPricingOperations } from "../src/reducers/pricing.js";
 import { portfolioReconcilerOperations } from "../src/reducers/reconciler.js";
 import { portfolioSnapshotsOperations } from "../src/reducers/snapshots.js";
@@ -42,6 +44,7 @@ import {
   SetAssetIgnoredInputSchema,
   SetGrantInputSchema,
   SetPortfolioDetailsInputSchema,
+  SetPositionsInputSchema,
   SetPriceOverrideInputSchema,
   TakeSnapshotInputSchema,
   UpdateAddressInputSchema,
@@ -229,6 +232,18 @@ const stateReducer: StateReducer<PortfolioPHState> = (
       portfolioReconcilerOperations.clearGrantOperation(
         state.global,
         action as ClearGrantAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "SET_POSITIONS": {
+      memoizedSchema(SetPositionsInputSchema).parse(action.input);
+
+      portfolioPositionsOperations.setPositionsOperation(
+        state.global,
+        action as SetPositionsAction,
         dispatch,
       );
 

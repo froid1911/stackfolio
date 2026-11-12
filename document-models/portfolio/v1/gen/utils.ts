@@ -32,6 +32,7 @@ export const initialGlobalState: PortfolioGlobalState = {
   ignoredAssets: [],
   autoSnapshot: { enabled: false, intervalHours: 24 },
   snapshots: [],
+  positions: [],
   resources: null,
   lastCheck: null,
   grant: null,

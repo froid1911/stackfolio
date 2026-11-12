@@ -1,7 +1,13 @@
-import { actions, reducer, utils } from "document-models/portfolio/v1";
+import {
+  actions,
+  reducer,
+  removePriceOverride,
+  setAssetIgnored,
+  setPriceOverride,
+  utils,
+} from "document-models/portfolio/v1";
 import { describe, expect, it } from "vitest";
 
-const { setPriceOverride, removePriceOverride, setAssetIgnored } = actions;
 
 const ASSET = "eip155:1/slip44:60";
 

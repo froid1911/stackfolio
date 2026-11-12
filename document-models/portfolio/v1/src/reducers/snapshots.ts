@@ -21,15 +21,26 @@ export const portfolioSnapshotsOperations: PortfolioSnapshotsOperations = {
       action.input.totalValue,
       ...action.input.perLocation.map((l) => l.value),
       ...action.input.perAsset.flatMap((a) => [a.amount, a.value]),
+      ...(action.input.liabilities ?? []).map((l) => l.amount),
     ];
     for (const amount of amounts) {
       if (!isDecimal(amount))
         throw new InvalidAmountError(`${amount} is not a decimal amount`);
     }
+    if (
+      action.input.netWorth != null &&
+      !/^-?(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(action.input.netWorth)
+    ) {
+      throw new InvalidAmountError(
+        `${action.input.netWorth} is not a decimal amount`,
+      );
+    }
     state.snapshots.push({
       id: action.input.id,
       timestamp: action.input.timestamp,
       totalValue: action.input.totalValue,
+      netWorth: action.input.netWorth ?? null,
+      liabilities: action.input.liabilities ?? [],
       perLocation: action.input.perLocation,
       perAsset: action.input.perAsset,
     });

@@ -1,7 +1,14 @@
-import { actions, reducer, utils } from "document-models/portfolio/v1";
+import {
+  actions,
+  addAddress,
+  reducer,
+  removeAddress,
+  setAddressIgnored,
+  updateAddress,
+  utils,
+} from "document-models/portfolio/v1";
 import { describe, expect, it } from "vitest";
 
-const { addAddress, updateAddress, removeAddress, setAddressIgnored } = actions;
 
 const ADDRESS = "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984";
 const MIXED_CASE = "0x1F9840a85d5Af5bf1D1762F925BDADdC4201F984";
@@ -16,7 +23,8 @@ const addInput = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const withAddress = () => reducer(utils.createDocument(), addAddress(addInput()));
+const withAddress = () =>
+  reducer(utils.createDocument(), addAddress(addInput()));
 
 describe("AddressBookOperations", () => {
   it("should handle addAddress operation", () => {

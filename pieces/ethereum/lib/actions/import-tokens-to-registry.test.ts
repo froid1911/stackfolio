@@ -21,12 +21,17 @@ const token = (identifier: string, chainId = 1) => ({
   chainId,
 });
 
-const run = (tokens: unknown, addedAt = "2026-11-11T10:00:00.000Z") =>
+const run = (
+  tokens: unknown,
+  addedAt = "2026-11-11T10:00:00.000Z",
+  protocolRegistryDocumentId?: string,
+) =>
   ethereumImportTokensToRegistryAction.run({
     propsValue: {
       registryDocumentId: "r1",
       tokensJson: JSON.stringify(tokens),
       addedAt,
+      ...(protocolRegistryDocumentId ? { protocolRegistryDocumentId } : {}),
     },
     auth: undefined,
     reactor: { get, execute },
@@ -108,5 +113,97 @@ describe("import-tokens-to-registry", () => {
     const taiko = actions.find((a) => a.input.chainId === 167000)!;
     expect(taiko.input.symbol).toBe("NATIVE");
     expect(taiko.input.coingeckoId).toBeNull();
+  });
+});
+
+const ATOKEN = "eip155:1/erc20:0x98c23e9d8f16403f6149531e46307d610c671a21";
+const USDC = "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+const protocolDoc = {
+  header: { documentId: "pr1", documentType: "stackfolio/protocol-registry" },
+  state: {
+    global: {
+      protocols: [
+        {
+          id: "aave-v3",
+          status: "ACTIVE",
+          plugins: [],
+          chains: [
+            {
+              chainId: 1,
+              contracts: [
+                {
+                  name: "aUSDC",
+                  address: "0x98c23e9d8f16403f6149531e46307d610c671a21",
+                  kind: "DEBT",
+                  underlying: USDC,
+                },
+              ],
+              events: [],
+            },
+          ],
+        },
+      ],
+    },
+  },
+};
+
+describe("import-tokens-to-registry classification", () => {
+  it("registers manifest contracts with their protocol kind", async () => {
+    get.mockImplementation(async (id: string) =>
+      id === "pr1"
+        ? protocolDoc
+        : {
+            header: { documentId: "r1", documentType: "stackfolio/asset-registry" },
+            state: { global: { assets: [] } },
+          },
+    );
+
+    await run([token(ATOKEN)], "2026-11-11T10:00:00.000Z", "pr1");
+    const [, , actions] = execute.mock.calls[0] as [
+      string,
+      string,
+      Array<{ type: string; input: Record<string, unknown> }>,
+    ];
+    const atoken = actions.find(
+      (a) => a.input.identifier === ATOKEN,
+    );
+    expect(atoken).toMatchObject({
+      type: "REGISTER_ASSET",
+      input: { kind: "DEBT", underlying: USDC },
+    });
+  });
+
+  it("corrects a plain ERC20 that the manifest says is DEBT", async () => {
+    get.mockImplementation(async (id: string) =>
+      id === "pr1"
+        ? protocolDoc
+        : {
+            header: { documentId: "r1", documentType: "stackfolio/asset-registry" },
+            state: {
+              global: {
+                assets: [
+                  { identifier: ATOKEN, kind: "ERC20", underlying: null },
+                ],
+              },
+            },
+          },
+    );
+
+    const result = (await run(
+      [token(ATOKEN)],
+      "2026-11-11T10:00:00.000Z",
+      "pr1",
+    )) as { registered: number };
+
+    const [, , actions] = execute.mock.calls[0] as [
+      string,
+      string,
+      Array<{ type: string; input: Record<string, unknown> }>,
+    ];
+    const update = actions.find((a) => a.type === "UPDATE_ASSET");
+    expect(update).toMatchObject({
+      input: { identifier: ATOKEN, kind: "DEBT", underlying: USDC },
+    });
+    expect(result.registered).toBe(2);
   });
 });

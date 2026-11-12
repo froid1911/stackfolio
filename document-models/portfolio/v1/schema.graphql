@@ -27,6 +27,7 @@ type PortfolioState {
   ignoredAssets: [String!]!
   autoSnapshot: AutoSnapshot!
   snapshots: [Snapshot!]!
+  positions: [WalletPositions!]!
   resources: ManagedResources
   lastCheck: ReconcilerCheck
   grant: GrantInfo
@@ -58,8 +59,15 @@ type Snapshot {
   id: OID!
   timestamp: DateTime!
   totalValue: String!
+  netWorth: String
+  liabilities: [SnapshotLiability!]
   perLocation: [LocationValue!]!
   perAsset: [AssetValue!]!
+}
+
+type SnapshotLiability {
+  asset: String!
+  amount: String!
 }
 
 type LocationValue {
@@ -71,6 +79,30 @@ type AssetValue {
   asset: String!
   amount: String!
   value: String!
+}
+
+type WalletPositions {
+  wallet: String!
+  chainId: Int!
+  fetchedAt: DateTime!
+  positions: [PositionEntry!]!
+}
+
+type PositionEntry {
+  protocol: String!
+  kind: PositionKind!
+  assets: [PositionAsset!]!
+  note: String
+}
+
+type PositionAsset {
+  asset: String!
+  amount: String!
+}
+
+enum PositionKind {
+  SPOT
+  LP
 }
 
 type ManagedResources {
@@ -167,8 +199,15 @@ input TakeSnapshotInput {
   id: OID!
   timestamp: DateTime!
   totalValue: String!
+  netWorth: String
+  liabilities: [SnapshotLiabilityInput!]
   perLocation: [LocationValueInput!]!
   perAsset: [AssetValueInput!]!
+}
+
+input SnapshotLiabilityInput {
+  asset: String!
+  amount: String!
 }
 
 input LocationValueInput {
@@ -220,4 +259,25 @@ input SetGrantInput {
 
 input ClearGrantInput {
   _empty: Boolean
+}
+
+# positions
+
+input SetPositionsInput {
+  wallet: String!
+  chainId: Int!
+  fetchedAt: DateTime!
+  positions: [PositionInput!]!
+}
+
+input PositionInput {
+  protocol: String!
+  kind: PositionKind!
+  assets: [PositionAssetInput!]!
+  note: String
+}
+
+input PositionAssetInput {
+  asset: String!
+  amount: String!
 }

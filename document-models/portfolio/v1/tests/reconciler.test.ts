@@ -1,7 +1,14 @@
-import { actions, reducer, utils } from "document-models/portfolio/v1";
+import {
+  actions,
+  clearGrant,
+  recordCheck,
+  recordResources,
+  reducer,
+  setGrant,
+  utils,
+} from "document-models/portfolio/v1";
 import { describe, expect, it } from "vitest";
 
-const { recordResources, recordCheck, setGrant, clearGrant } = actions;
 
 describe("ReconcilerOperations", () => {
   it("should handle recordResources operation", () => {

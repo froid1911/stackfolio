@@ -1,7 +1,12 @@
-import { actions, reducer, utils } from "document-models/portfolio/v1";
+import {
+  actions,
+  deleteSnapshot,
+  reducer,
+  takeSnapshot,
+  utils,
+} from "document-models/portfolio/v1";
 import { describe, expect, it } from "vitest";
 
-const { takeSnapshot, deleteSnapshot } = actions;
 
 const validInput = (overrides: Record<string, unknown> = {}) => ({
   id: "snap-1",
@@ -14,7 +19,10 @@ const validInput = (overrides: Record<string, unknown> = {}) => ({
 
 describe("SnapshotOperations", () => {
   it("should handle takeSnapshot operation", () => {
-    const document = reducer(utils.createDocument(), takeSnapshot(validInput()));
+    const document = reducer(
+      utils.createDocument(),
+      takeSnapshot(validInput()),
+    );
 
     expect(document.operations.global[0].error).toBeUndefined();
     expect(document.state.global.snapshots).toHaveLength(1);
@@ -59,6 +67,69 @@ describe("SnapshotOperations", () => {
         "is not a decimal amount",
       );
     }
+  });
+
+  it("should store liabilities and net worth", () => {
+    const document = reducer(
+      utils.createDocument(),
+      takeSnapshot(
+        validInput({
+          liabilities: [
+            { asset: "eip155:1/erc20:0xa0b866", amount: "1500.25" },
+          ],
+          netWorth: "949.75",
+        }),
+      ),
+    );
+
+    expect(document.operations.global[0].error).toBeUndefined();
+    const snapshot = document.state.global.snapshots[0];
+    expect(snapshot.liabilities).toEqual([
+      { asset: "eip155:1/erc20:0xa0b866", amount: "1500.25" },
+    ]);
+    expect(snapshot.netWorth).toBe("949.75");
+  });
+
+  it("should default liabilities and net worth when absent", () => {
+    const document = reducer(
+      utils.createDocument(),
+      takeSnapshot(validInput()),
+    );
+
+    const snapshot = document.state.global.snapshots[0];
+    expect(snapshot.liabilities).toEqual([]);
+    expect(snapshot.netWorth).toBeNull();
+  });
+
+  it("should reject non-decimal liability and net worth amounts", () => {
+    const cases: Array<Record<string, unknown>> = [
+      { liabilities: [{ asset: "a", amount: "-3" }] },
+      { netWorth: "1.2.3" },
+    ];
+    for (const override of cases) {
+      const document = reducer(
+        utils.createDocument(),
+        takeSnapshot(validInput(override)),
+      );
+      expect(document.operations.global[0].error).toContain(
+        "is not a decimal amount",
+      );
+    }
+  });
+
+  it("should allow a negative net worth (more debt than assets)", () => {
+    const document = reducer(
+      utils.createDocument(),
+      takeSnapshot(
+        validInput({
+          liabilities: [{ asset: "a", amount: "2000" }],
+          netWorth: "-1000",
+        }),
+      ),
+    );
+
+    expect(document.operations.global[0].error).toBeUndefined();
+    expect(document.state.global.snapshots[0].netWorth).toBe("-1000");
   });
 
   it("should reject deleting an unknown snapshot", () => {

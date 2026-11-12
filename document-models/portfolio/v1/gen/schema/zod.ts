@@ -17,6 +17,11 @@ import type {
   LocationValueInput,
   ManagedResources,
   PortfolioState,
+  PositionAsset,
+  PositionAssetInput,
+  PositionEntry,
+  PositionInput,
+  PositionKind,
   PriceOverride,
   ReconcilerCheck,
   ReconcilerFix,
@@ -29,10 +34,14 @@ import type {
   SetAssetIgnoredInput,
   SetGrantInput,
   SetPortfolioDetailsInput,
+  SetPositionsInput,
   SetPriceOverrideInput,
   Snapshot,
+  SnapshotLiability,
+  SnapshotLiabilityInput,
   TakeSnapshotInput,
   UpdateAddressInput,
+  WalletPositions,
 } from "./types.js";
 
 type Properties<T> = Required<{
@@ -49,6 +58,8 @@ export const definedNonNullAnySchema = z
   .refine((v) => isDefinedNonNullAny(v));
 
 export const IssueSeveritySchema = z.enum(["BLOCKING", "WARNING"]);
+
+export const PositionKindSchema = z.enum(["LP", "SPOT"]);
 
 export function AddAddressInputSchema(): z.ZodObject<
   Properties<AddAddressInput>
@@ -185,9 +196,46 @@ export function PortfolioStateSchema(): z.ZodObject<
     ignoredAssets: z.array(z.string()),
     lastCheck: z.lazy(() => ReconcilerCheckSchema().nullish()),
     name: z.string().nullish(),
+    positions: z.array(z.lazy(() => WalletPositionsSchema())),
     priceOverrides: z.array(z.lazy(() => PriceOverrideSchema())),
     resources: z.lazy(() => ManagedResourcesSchema().nullish()),
     snapshots: z.array(z.lazy(() => SnapshotSchema())),
+  });
+}
+
+export function PositionAssetSchema(): z.ZodObject<Properties<PositionAsset>> {
+  return z.object({
+    __typename: z.literal("PositionAsset").optional(),
+    amount: z.string(),
+    asset: z.string(),
+  });
+}
+
+export function PositionAssetInputSchema(): z.ZodObject<
+  Properties<PositionAssetInput>
+> {
+  return z.object({
+    amount: z.string(),
+    asset: z.string(),
+  });
+}
+
+export function PositionEntrySchema(): z.ZodObject<Properties<PositionEntry>> {
+  return z.object({
+    __typename: z.literal("PositionEntry").optional(),
+    assets: z.array(z.lazy(() => PositionAssetSchema())),
+    kind: PositionKindSchema,
+    note: z.string().nullish(),
+    protocol: z.string(),
+  });
+}
+
+export function PositionInputSchema(): z.ZodObject<Properties<PositionInput>> {
+  return z.object({
+    assets: z.array(z.lazy(() => PositionAssetInputSchema())),
+    kind: PositionKindSchema,
+    note: z.string().nullish(),
+    protocol: z.string(),
   });
 }
 
@@ -304,6 +352,17 @@ export function SetPortfolioDetailsInputSchema(): z.ZodObject<
   });
 }
 
+export function SetPositionsInputSchema(): z.ZodObject<
+  Properties<SetPositionsInput>
+> {
+  return z.object({
+    chainId: z.number(),
+    fetchedAt: z.iso.datetime(),
+    positions: z.array(z.lazy(() => PositionInputSchema())),
+    wallet: z.string(),
+  });
+}
+
 export function SetPriceOverrideInputSchema(): z.ZodObject<
   Properties<SetPriceOverrideInput>
 > {
@@ -318,10 +377,31 @@ export function SnapshotSchema(): z.ZodObject<Properties<Snapshot>> {
   return z.object({
     __typename: z.literal("Snapshot").optional(),
     id: z.string(),
+    liabilities: z.array(z.lazy(() => SnapshotLiabilitySchema())).nullish(),
+    netWorth: z.string().nullish(),
     perAsset: z.array(z.lazy(() => AssetValueSchema())),
     perLocation: z.array(z.lazy(() => LocationValueSchema())),
     timestamp: z.iso.datetime(),
     totalValue: z.string(),
+  });
+}
+
+export function SnapshotLiabilitySchema(): z.ZodObject<
+  Properties<SnapshotLiability>
+> {
+  return z.object({
+    __typename: z.literal("SnapshotLiability").optional(),
+    amount: z.string(),
+    asset: z.string(),
+  });
+}
+
+export function SnapshotLiabilityInputSchema(): z.ZodObject<
+  Properties<SnapshotLiabilityInput>
+> {
+  return z.object({
+    amount: z.string(),
+    asset: z.string(),
   });
 }
 
@@ -330,6 +410,10 @@ export function TakeSnapshotInputSchema(): z.ZodObject<
 > {
   return z.object({
     id: z.string(),
+    liabilities: z
+      .array(z.lazy(() => SnapshotLiabilityInputSchema()))
+      .nullish(),
+    netWorth: z.string().nullish(),
     perAsset: z.array(z.lazy(() => AssetValueInputSchema())),
     perLocation: z.array(z.lazy(() => LocationValueInputSchema())),
     timestamp: z.iso.datetime(),
@@ -345,5 +429,17 @@ export function UpdateAddressInputSchema(): z.ZodObject<
     id: z.string(),
     label: z.string().nullish(),
     tags: z.array(z.string()).nullish(),
+  });
+}
+
+export function WalletPositionsSchema(): z.ZodObject<
+  Properties<WalletPositions>
+> {
+  return z.object({
+    __typename: z.literal("WalletPositions").optional(),
+    chainId: z.number(),
+    fetchedAt: z.iso.datetime(),
+    positions: z.array(z.lazy(() => PositionEntrySchema())),
+    wallet: z.string(),
   });
 }

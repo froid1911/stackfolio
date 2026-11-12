@@ -41,7 +41,7 @@ export const uniswapV3: ProtocolManifest = {
     {
       chainId: 1,
       contracts: [
-        { name: "positions", address: MANAGER, kind: "CORE" },
+        { name: "positions", address: MANAGER, kind: "POSITION" },
         { name: "universal-router", address: "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD", kind: "CORE" },
       ],
       events: [...liquidityEvents, poolSwapEvent],
@@ -57,7 +57,7 @@ export const uniswapV3: ProtocolManifest = {
               : chainId === 56
                 ? "0x7b8A01B39D58278b5DE7e48c8449c9f4F5170613"
                 : MANAGER,
-          kind: "CORE" as const,
+          kind: "POSITION" as const,
         },
       ],
       events: [...liquidityEvents, poolSwapEvent],

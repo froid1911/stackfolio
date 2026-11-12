@@ -22,6 +22,7 @@ export const assetRegistryRegistryOperations: AssetRegistryRegistryOperations =
         kind: action.input.kind,
         chainId: action.input.chainId,
         coingeckoId: action.input.coingeckoId ?? null,
+        underlying: action.input.underlying ?? null,
         custom: action.input.custom,
         addedAt: action.input.addedAt,
       });
@@ -37,6 +38,9 @@ export const assetRegistryRegistryOperations: AssetRegistryRegistryOperations =
       if (action.input.symbol != null) asset.symbol = action.input.symbol;
       if (action.input.name != null) asset.name = action.input.name;
       if (action.input.decimals != null) asset.decimals = action.input.decimals;
+      if (action.input.kind != null) asset.kind = action.input.kind;
+      if (action.input.underlying != null)
+        asset.underlying = action.input.underlying;
     },
     setCoingeckoIdOperation(state, action) {
       const asset = state.assets.find(

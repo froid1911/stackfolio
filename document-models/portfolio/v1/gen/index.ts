@@ -17,6 +17,7 @@ export {
   defaultLocalState,
   defaultPHState,
 } from "./ph-factories.js";
+export * from "./positions/operations.js";
 export * from "./pricing/operations.js";
 export * from "./reconciler/operations.js";
 export * from "./reducer.js";

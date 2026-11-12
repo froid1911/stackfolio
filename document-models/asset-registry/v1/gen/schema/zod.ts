@@ -24,7 +24,7 @@ export const definedNonNullAnySchema = z
   .any()
   .refine((v) => isDefinedNonNullAny(v));
 
-export const AssetKindSchema = z.enum(["ERC20", "NATIVE"]);
+export const AssetKindSchema = z.enum(["DEBT", "ERC20", "NATIVE", "POSITION"]);
 
 export function AssetSchema(): z.ZodObject<Properties<Asset>> {
   return z.object({
@@ -39,6 +39,7 @@ export function AssetSchema(): z.ZodObject<Properties<Asset>> {
     kind: AssetKindSchema,
     name: z.string(),
     symbol: z.string(),
+    underlying: z.string().nullish(),
   });
 }
 
@@ -65,6 +66,7 @@ export function RegisterAssetInputSchema(): z.ZodObject<
     kind: AssetKindSchema,
     name: z.string(),
     symbol: z.string(),
+    underlying: z.string().nullish(),
   });
 }
 
@@ -91,7 +93,9 @@ export function UpdateAssetInputSchema(): z.ZodObject<
   return z.object({
     decimals: z.number().nullish(),
     identifier: z.string(),
+    kind: AssetKindSchema.nullish(),
     name: z.string().nullish(),
     symbol: z.string().nullish(),
+    underlying: z.string().nullish(),
   });
 }

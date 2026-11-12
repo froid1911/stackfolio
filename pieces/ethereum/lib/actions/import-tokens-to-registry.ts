@@ -1,6 +1,9 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { parseJsonish } from "../jsonish.js";
+import { parseProtocolEntry } from "../manifest.js";
 import { globalState, toGlobalAction } from "../reactor.js";
+
+const PROTOCOL_REGISTRY_TYPE = "stackfolio/protocol-registry";
 
 export const ASSET_REGISTRY_TYPE = "stackfolio/asset-registry";
 
@@ -89,6 +92,12 @@ export const ethereumImportTokensToRegistryAction = createAction({
       displayName: "Added at (ISO timestamp)",
       required: true,
     }),
+    protocolRegistryDocumentId: Property.ShortText({
+      displayName: "Protocol registry document id",
+      description:
+        "Optional stackfolio/protocol-registry document. Tokens whose address is a POSITION or DEBT contract in an active manifest are registered with that kind and the manifest's underlying, and an already-registered plain ERC20 gets corrected.",
+      required: false,
+    }),
   },
   async run(context) {
     const p = context.propsValue;
@@ -103,9 +112,54 @@ export const ethereumImportTokensToRegistryAction = createAction({
         `Document ${p.registryDocumentId} is a ${doc.header.documentType}, not ${ASSET_REGISTRY_TYPE}.`,
       );
     }
-    const assets: Array<{ identifier: string }> =
-      globalState<{ assets?: Array<{ identifier: string }> }>(doc).assets ?? [];
-    const held = new Set(assets.map((asset) => asset.identifier));
+    const assets: Array<{
+      identifier: string;
+      kind?: string;
+      underlying?: string | null;
+    }> =
+      globalState<{ assets?: typeof assets }>(doc).assets ?? [];
+    const held = new Map<
+      string,
+      { kind: string; underlying: string | null }
+    >();
+    for (const asset of assets) {
+      held.set(asset.identifier, {
+        kind: asset.kind ?? "ERC20",
+        underlying: asset.underlying ?? null,
+      });
+    }
+
+    // Position and debt contracts from the active protocol manifests:
+    // the token's class is protocol knowledge, not metadata.
+    const classified = new Map<
+      string,
+      { kind: string; underlying: string | null }
+    >();
+    if (p.protocolRegistryDocumentId) {
+      const protocolDoc = await context.reactor.get(
+        p.protocolRegistryDocumentId,
+      );
+      if (protocolDoc.header.documentType === PROTOCOL_REGISTRY_TYPE) {
+        const protocols =
+          globalState<{ protocols?: unknown[] }>(protocolDoc).protocols ?? [];
+        for (const raw of protocols) {
+          const manifest = parseProtocolEntry(raw);
+          if (!manifest || manifest.status !== "ACTIVE") continue;
+          for (const chain of manifest.chains) {
+            for (const contract of chain.contracts) {
+              if (contract.kind === "CORE") continue;
+              classified.set(
+                `eip155:${chain.chainId}/erc20:${contract.address}`,
+                {
+                  kind: contract.kind,
+                  underlying: contract.underlying ?? null,
+                },
+              );
+            }
+          }
+        }
+      }
+    }
 
     const actions = [];
     const tokens: TokenRow[] = [];
@@ -120,7 +174,7 @@ export const ethereumImportTokensToRegistryAction = createAction({
     for (const chainId of chains) {
       const identifier = nativeIdentifier(chainId);
       if (held.has(identifier)) continue;
-      held.add(identifier);
+      held.set(identifier, { kind: "NATIVE", underlying: null });
       const known = NATIVE_CHAINS[chainId];
       actions.push(
         toGlobalAction("REGISTER_ASSET", {
@@ -138,8 +192,28 @@ export const ethereumImportTokensToRegistryAction = createAction({
       );
     }
     for (const token of tokens) {
-      if (held.has(token.identifier)) continue;
-      held.add(token.identifier);
+      const classification = classified.get(token.identifier);
+      const existing = held.get(token.identifier);
+      if (existing) {
+        if (
+          classification &&
+          (existing.kind !== classification.kind ||
+            existing.underlying !== classification.underlying)
+        ) {
+          actions.push(
+            toGlobalAction("UPDATE_ASSET", {
+              identifier: token.identifier,
+              kind: classification.kind,
+              underlying: classification.underlying,
+            }),
+          );
+        }
+        continue;
+      }
+      held.set(token.identifier, {
+        kind: classification?.kind ?? token.kind,
+        underlying: classification?.underlying ?? null,
+      });
       actions.push(
         toGlobalAction("REGISTER_ASSET", {
           id: token.identifier,
@@ -147,9 +221,10 @@ export const ethereumImportTokensToRegistryAction = createAction({
           symbol: token.symbol,
           name: token.name,
           decimals: token.decimals,
-          kind: token.kind,
+          kind: classification?.kind ?? token.kind,
           chainId: token.chainId,
           coingeckoId: null,
+          underlying: classification?.underlying ?? null,
           custom: false,
           addedAt: p.addedAt,
         }),

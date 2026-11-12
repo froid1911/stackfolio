@@ -32,6 +32,7 @@ type Asset {
   kind: AssetKind!
   chainId: Int!
   coingeckoId: String
+  underlying: String
   custom: Boolean!
   addedAt: DateTime!
 }
@@ -39,6 +40,8 @@ type Asset {
 enum AssetKind {
   NATIVE
   ERC20
+  POSITION
+  DEBT
 }
 
 # registry
@@ -52,6 +55,7 @@ input RegisterAssetInput {
   kind: AssetKind!
   chainId: Int!
   coingeckoId: String
+  underlying: String
   custom: Boolean!
   addedAt: DateTime!
 }
@@ -61,6 +65,8 @@ input UpdateAssetInput {
   symbol: String
   name: String
   decimals: Int
+  kind: AssetKind
+  underlying: String
 }
 
 input SetCoingeckoIdInput {

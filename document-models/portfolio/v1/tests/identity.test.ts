@@ -1,16 +1,19 @@
-import { actions, reducer, utils } from "document-models/portfolio/v1";
+import {
+  actions,
+  reducer,
+  setPortfolioDetails,
+  utils,
+} from "document-models/portfolio/v1";
 import { describe, expect, it } from "vitest";
 
-const { setPortfolioDetails, takeSnapshot } = actions;
+const { takeSnapshot } = actions;
 
 const snapshotInput = (id: string) => ({
   id,
   timestamp: "2026-11-11T00:00:00.000Z",
   totalValue: "1000",
   perLocation: [{ location: "eip155:1", value: "1000" }],
-  perAsset: [
-    { asset: "eip155:1/slip44:60", amount: "1.5", value: "1000" },
-  ],
+  perAsset: [{ asset: "eip155:1/slip44:60", amount: "1.5", value: "1000" }],
 });
 
 describe("IdentityOperations", () => {
@@ -47,11 +50,11 @@ describe("IdentityOperations", () => {
   });
 
   it("should reject changing the currency once a snapshot exists", () => {
-    let document = reducer(utils.createDocument(), takeSnapshot(snapshotInput("s1")));
-    document = reducer(
-      document,
-      setPortfolioDetails({ baseCurrency: "USD" }),
+    let document = reducer(
+      utils.createDocument(),
+      takeSnapshot(snapshotInput("s1")),
     );
+    document = reducer(document, setPortfolioDetails({ baseCurrency: "USD" }));
 
     expect(document.operations.global[1].error).toBe(
       "Cannot change the base currency once snapshots exist",
@@ -60,7 +63,10 @@ describe("IdentityOperations", () => {
   });
 
   it("should allow restating the same currency after a snapshot", () => {
-    let document = reducer(utils.createDocument(), takeSnapshot(snapshotInput("s1")));
+    let document = reducer(
+      utils.createDocument(),
+      takeSnapshot(snapshotInput("s1")),
+    );
     document = reducer(
       document,
       setPortfolioDetails({ baseCurrency: "EUR", name: "Renamed" }),

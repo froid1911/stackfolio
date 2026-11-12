@@ -151,10 +151,37 @@ export type PortfolioState = {
   ignoredAssets: Array<Scalars["String"]["output"]>;
   lastCheck: Maybe<ReconcilerCheck>;
   name: Maybe<Scalars["String"]["output"]>;
+  positions: Array<WalletPositions>;
   priceOverrides: Array<PriceOverride>;
   resources: Maybe<ManagedResources>;
   snapshots: Array<Snapshot>;
 };
+
+export type PositionAsset = {
+  amount: Scalars["String"]["output"];
+  asset: Scalars["String"]["output"];
+};
+
+export type PositionAssetInput = {
+  amount: Scalars["String"]["input"];
+  asset: Scalars["String"]["input"];
+};
+
+export type PositionEntry = {
+  assets: Array<PositionAsset>;
+  kind: PositionKind;
+  note: Maybe<Scalars["String"]["output"]>;
+  protocol: Scalars["String"]["output"];
+};
+
+export type PositionInput = {
+  assets: Array<PositionAssetInput>;
+  kind: PositionKind;
+  note?: InputMaybe<Scalars["String"]["input"]>;
+  protocol: Scalars["String"]["input"];
+};
+
+export type PositionKind = "LP" | "SPOT";
 
 export type PriceOverride = {
   asset: Scalars["String"]["output"];
@@ -223,6 +250,13 @@ export type SetPortfolioDetailsInput = {
   name?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type SetPositionsInput = {
+  chainId: Scalars["Int"]["input"];
+  fetchedAt: Scalars["DateTime"]["input"];
+  positions: Array<PositionInput>;
+  wallet: Scalars["String"]["input"];
+};
+
 export type SetPriceOverrideInput = {
   asset: Scalars["String"]["input"];
   price: Scalars["String"]["input"];
@@ -231,14 +265,28 @@ export type SetPriceOverrideInput = {
 
 export type Snapshot = {
   id: Scalars["OID"]["output"];
+  liabilities: Maybe<Array<SnapshotLiability>>;
+  netWorth: Maybe<Scalars["String"]["output"]>;
   perAsset: Array<AssetValue>;
   perLocation: Array<LocationValue>;
   timestamp: Scalars["DateTime"]["output"];
   totalValue: Scalars["String"]["output"];
 };
 
+export type SnapshotLiability = {
+  amount: Scalars["String"]["output"];
+  asset: Scalars["String"]["output"];
+};
+
+export type SnapshotLiabilityInput = {
+  amount: Scalars["String"]["input"];
+  asset: Scalars["String"]["input"];
+};
+
 export type TakeSnapshotInput = {
   id: Scalars["OID"]["input"];
+  liabilities?: InputMaybe<Array<SnapshotLiabilityInput>>;
+  netWorth?: InputMaybe<Scalars["String"]["input"]>;
   perAsset: Array<AssetValueInput>;
   perLocation: Array<LocationValueInput>;
   timestamp: Scalars["DateTime"]["input"];
@@ -250,4 +298,11 @@ export type UpdateAddressInput = {
   id: Scalars["OID"]["input"];
   label?: InputMaybe<Scalars["String"]["input"]>;
   tags?: InputMaybe<Array<Scalars["String"]["input"]>>;
+};
+
+export type WalletPositions = {
+  chainId: Scalars["Int"]["output"];
+  fetchedAt: Scalars["DateTime"]["output"];
+  positions: Array<PositionEntry>;
+  wallet: Scalars["String"]["output"];
 };

@@ -1,17 +1,7 @@
 import { actions, reducer, utils } from "document-models/portfolio/v1";
 import { describe, expect, it } from "vitest";
 
-const {
-  setPortfolioDetails,
-  addAddress,
-  setPriceOverride,
-  takeSnapshot,
-  deleteSnapshot,
-  recordResources,
-  recordCheck,
-  setGrant,
-  clearGrant,
-} = actions;
+const { setPortfolioDetails, addAddress, setPriceOverride, takeSnapshot, deleteSnapshot, recordResources, recordCheck, setGrant, clearGrant } = actions;
 
 /** The setup wizard and reconciler flow over one portfolio document. */
 describe("portfolio scenario", () => {

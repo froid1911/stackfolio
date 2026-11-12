@@ -73,9 +73,10 @@ export type Asset = {
   kind: AssetKind;
   name: Scalars["String"]["output"];
   symbol: Scalars["String"]["output"];
+  underlying: Maybe<Scalars["String"]["output"]>;
 };
 
-export type AssetKind = "ERC20" | "NATIVE";
+export type AssetKind = "DEBT" | "ERC20" | "NATIVE" | "POSITION";
 
 export type AssetRegistryState = {
   assets: Array<Asset>;
@@ -92,6 +93,7 @@ export type RegisterAssetInput = {
   kind: AssetKind;
   name: Scalars["String"]["input"];
   symbol: Scalars["String"]["input"];
+  underlying?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type RemoveAssetInput = {
@@ -106,6 +108,8 @@ export type SetCoingeckoIdInput = {
 export type UpdateAssetInput = {
   decimals?: InputMaybe<Scalars["Int"]["input"]>;
   identifier: Scalars["String"]["input"];
+  kind?: InputMaybe<AssetKind>;
   name?: InputMaybe<Scalars["String"]["input"]>;
   symbol?: InputMaybe<Scalars["String"]["input"]>;
+  underlying?: InputMaybe<Scalars["String"]["input"]>;
 };

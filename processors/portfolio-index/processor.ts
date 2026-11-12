@@ -74,15 +74,47 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
   /** Writes are serialised: two batches for one document must not interleave. */
   private queue: Promise<void> = Promise.resolve();
 
+  /**
+   * Fallback state source for deliveries that arrive without resulting
+   * state: an operation index behind, the reactor replays operations
+   * statelessly, and a skipped state would leave the rows stale until the
+   * document's next write. The factory wires this to the host module's
+   * document read; tests can supply a stub.
+   */
+  private fetchState?: (documentId: string) => Promise<string | undefined>;
+
+  setDocumentReader(read: {
+    get(id: string): Promise<{ state: unknown }>;
+  }): void {
+    this.fetchState = async (documentId) => {
+      try {
+        const doc = await read.get(documentId);
+        return JSON.stringify(doc.state);
+      } catch {
+        return undefined; // deleted or unreadable
+      }
+    };
+  }
+
   onOperations(operations: OperationWithContext[]): Promise<void> {
+    const first = operations[0]?.context;
+    console.log(
+      `[portfolio-index] onOperations ${operations.length} op(s) ordinal ${first?.ordinal ?? "?"} ${first?.documentType ?? "?"}`,
+    );
     const next = this.queue.then(() => this.index(operations));
     // Keep the chain alive after a failure, or one bad batch stalls every
     // later one behind a rejected promise.
     this.queue = next.catch(() => undefined);
+    void next.finally(() =>
+      console.log(
+        `[portfolio-index] batch done ordinal ${first?.ordinal ?? "?"}`,
+      ),
+    );
     return next;
   }
 
   onDisconnect(): Promise<void> {
+    console.log("[portfolio-index] onDisconnect");
     return Promise.resolve();
   }
 
@@ -97,6 +129,7 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
   private async index(operations: OperationWithContext[]): Promise<void> {
     const latest = new Map<string, Latest>();
     const deleted = new Set<string>();
+    const statelessDocs = new Map<string, string>();
     let stateless = 0;
 
     for (const { operation, context } of operations) {
@@ -128,12 +161,24 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
       if (deleted.has(documentId)) continue;
       if (!context.resultingState) {
         stateless += 1;
+        statelessDocs.set(documentId, documentType);
         continue;
       }
+      statelessDocs.delete(documentId);
       latest.set(documentId, {
         documentType,
         resultingState: context.resultingState,
       });
+    }
+
+    // A stateless delivery is not a reason to leave rows stale: read the
+    // document's current state off the reactor instead.
+    for (const [documentId, documentType] of statelessDocs) {
+      if (!this.fetchState) continue;
+      const state = await this.fetchState(documentId);
+      if (state === undefined) continue;
+      latest.set(documentId, { documentType, resultingState: state });
+      stateless -= 1;
     }
 
     if (stateless > 0) {

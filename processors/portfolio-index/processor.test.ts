@@ -139,6 +139,51 @@ describe("portfolio-index", () => {
     expect(rows).toHaveLength(2);
   });
 
+  it("fetches the document state when a delivery carries none", async () => {
+    const { db, processor } = await harness();
+    const wallet = walletDocument();
+    processor.setDocumentReader({
+      get: async () => ({ state: wallet.state }),
+    });
+    const op = testOperation({
+      documentId: wallet.header.id,
+      documentType: wallet.header.documentType,
+      type: "SET_LABEL",
+    });
+    await processor.onOperations([op]);
+
+    const rows = await db
+      .selectFrom("events")
+      .select(["event_id"])
+      .where("document_id", "=", wallet.header.id)
+      .execute();
+    expect(rows).toHaveLength(2);
+  });
+
+  it("leaves rows alone when a stateless delivery's document is unreadable", async () => {
+    const { db, processor } = await harness();
+    const wallet = walletDocument();
+    await processor.onOperations(replay(wallet));
+    processor.setDocumentReader({
+      get: async () => {
+        throw new Error("deleted");
+      },
+    });
+    const op = testOperation({
+      documentId: wallet.header.id,
+      documentType: wallet.header.documentType,
+      type: "SET_LABEL",
+    });
+    await processor.onOperations([op]);
+
+    const rows = await db
+      .selectFrom("events")
+      .select(["event_id"])
+      .where("document_id", "=", wallet.header.id)
+      .execute();
+    expect(rows).toHaveLength(2);
+  });
+
   it("carries the wallet's address and label onto every event row", async () => {
     const { db, processor } = await harness();
     const wallet = walletDocument();

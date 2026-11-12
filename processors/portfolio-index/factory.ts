@@ -39,6 +39,9 @@ export const portfolioIndexFactoryBuilder: ProcessorFactoryBuilder = (
     // The drive id lets the processor drop its namespace on the drive's deletion.
     const processor = new PortfolioIndex(namespace, filter, store, driveHeader.id);
 
+    // Stateless replays fall back to reading the document's current state.
+    processor.setDocumentReader(module.read);
+
     // Nothing in the runtime calls this, so without it the first write hits
     // a database with no tables.
     await processor.initAndUpgrade();

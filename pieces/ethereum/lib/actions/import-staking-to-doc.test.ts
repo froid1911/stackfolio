@@ -134,4 +134,25 @@ describe("import-staking-to-doc", () => {
     ];
     expect(actions.map((a) => a.type)).toEqual(["RECORD_BALANCES"]);
   });
+
+  it("stringifies numeric balances before recording", async () => {
+    get.mockResolvedValue(stakingDoc());
+
+    await run({
+      stakingDocumentId: "s1",
+      validatorsJson: JSON.stringify([]),
+      // fetch-validators hands over gwei as numbers; the document type is
+      // a string and its reducer would reject anything else.
+      balancesJson: JSON.stringify([
+        { validatorIndex: 7, day: "2026-11-11", balanceGwei: 32000000000 },
+      ]),
+    });
+
+    const [, , actions] = execute.mock.calls[0] as [
+      string,
+      string,
+      Array<{ type: string; input: { points: Array<{ balanceGwei: unknown }> } }>,
+    ];
+    expect(actions[0].input.points[0].balanceGwei).toBe("32000000000");
+  });
 });

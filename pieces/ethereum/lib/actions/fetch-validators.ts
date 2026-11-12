@@ -175,10 +175,12 @@ export const ethereumFetchValidatorsAction = createAction({
     }
 
     if (addresses.length > 0) {
-      // Standard beacon nodes resolve validators by withdrawal
-      // credentials through the same id filter; query each credential
-      // separately so one node's odd rejection cannot sink the others.
-      // ETH1 (0x01) and compound (0x02) credentials embed the address.
+      // ETH1 (0x01) and compound (0x02) credentials embed the address, and
+      // the id filter usually resolves them. Prysm rejects 32-byte
+      // credential ids that aren't BLS public keys (HTTP 400 on 0x02), so
+      // rejected addresses are resolved afterwards by one bounded
+      // client-side scan of the head validator set.
+      const hexes = new Map<string, string[]>(); // address -> failed credentials
       for (const address of addresses) {
         if (typeof address !== "string") continue;
         const hex = address.toLowerCase().replace(/^0x/, "");
@@ -194,9 +196,36 @@ export const ethereumFetchValidatorsAction = createAction({
               baseUrl,
             );
             for (const entry of list) pushRow(entry, null);
-          } catch (error) {
+          } catch {
+            (hexes.get(hex) ?? hexes.set(hex, []).get(hex)!).push(credentials);
+          }
+        }
+      }
+      if (hexes.size > 0) {
+        const wanted = new Set(hexes.keys());
+        try {
+          for (let start = 0; ; start += 50_000) {
+            const ids = Array.from({ length: 50_000 }, (_, i) => start + i);
+            const list = await beaconGet<BeaconValidatorData[]>(
+              `/eth/v1/beacon/states/head/validators?id=${ids.join(",")}`,
+              baseUrl,
+            );
+            if (list.length === 0) break;
+            for (const entry of list) {
+              const credential = entry.validator?.withdrawal_credentials;
+              if (
+                typeof credential === "string" &&
+                wanted.has(credential.toLowerCase().slice(-40))
+              ) {
+                pushRow(entry, null);
+              }
+            }
+            if (list.length < ids.length) break; // scanned past the tip
+          }
+        } catch (error) {
+          for (const failed of hexes.values()) {
             errors.push(
-              `validators by ${credentials.slice(0, 6)}…${hex.slice(-6)}: ${
+              `validators by ${failed.join(", ")}: ${
                 error instanceof Error ? error.message : String(error)
               }`,
             );

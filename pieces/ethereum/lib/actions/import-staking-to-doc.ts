@@ -86,11 +86,18 @@ export const ethereumImportStakingToDocAction = createAction({
   async run(context) {
     const p = context.propsValue;
     const incomingValidators = parseArray(p.validatorsJson, "validatorsJson") as IncomingValidator[];
-    const incomingBalances = parseArray(p.balancesJson, "balancesJson") as Array<{
-      validatorIndex: number;
-      day: string;
-      balanceGwei: string;
-    }>;
+    const incomingBalances = (
+      parseArray(p.balancesJson, "balancesJson") as Array<{
+        validatorIndex: number;
+        day: string;
+        balanceGwei: string | number;
+      }>
+    ).map((point) => ({
+      // The document stores gwei as a string; a producer that hands over a
+      // number still means the same balance.
+      ...point,
+      balanceGwei: String(point.balanceGwei),
+    }));
 
     const doc = await context.reactor.get(p.stakingDocumentId);
     if (doc.header.documentType !== ETH_STAKING_TYPE) {

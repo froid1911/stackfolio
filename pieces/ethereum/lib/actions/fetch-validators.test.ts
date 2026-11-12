@@ -217,6 +217,56 @@ describe("fetch-validators", () => {
     ]);
   });
 
+  it("falls back to a head-state scan when a credential id is rejected", async () => {
+    // Prysm answers a 32-byte non-pubkey id with HTTP 400 instead of an
+    // empty list, so 0x02 credentials resolve only through the scan.
+    const address = `0x${CRED_02.slice(-40)}`;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.endsWith("/eth/v1/beacon/genesis")) {
+        return json({ data: { genesis_time: String(GENESIS_TIME) } });
+      }
+      if (url.includes("validators?id=0x01")) return json({ data: [] });
+      if (url.includes("validators?id=0x02")) {
+        return { ok: false, status: 400, json: () => ({ code: 400 }) };
+      }
+      if (url.includes("validators?id=")) {
+        const ids = url.split("id=")[1].split(",").map(Number);
+        const page = ids.filter((i) => i < 10).map((i) => {
+          if (i !== 9) {
+            return { index: String(i), balance: "32000000000", validator: {
+              pubkey: PUBKEY, withdrawal_credentials: CRED_00,
+            } };
+          }
+          return exitedValidator;
+        });
+        return json({ data: page });
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    const result = (await ethereumFetchValidatorsAction.run({
+      propsValue: {
+        indicesJson: null,
+        withdrawalAddressesJson: [address],
+        hour: "2026-11-11T10:00:00.000Z",
+      },
+      auth: {
+        props: {
+          rpcUrl: "http://127.0.0.1:8545",
+          beaconUrl: "http://127.0.0.1:5052",
+        },
+      },
+    } as unknown as Parameters<
+      typeof ethereumFetchValidatorsAction.run
+    >[0])) as {
+      validators: Array<{ index: number; withdrawalAddress: string | null }>;
+      error: string | null;
+    };
+
+    expect(result.error).toBeNull();
+    expect(result.validators.map((v) => v.index)).toEqual([9]);
+  });
+
   it("rejects malformed index lists", async () => {
     await expect(
       ethereumFetchValidatorsAction.run({

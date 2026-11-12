@@ -92,6 +92,7 @@ describe("specs", () => {
       accountDocumentId: "w1",
       redecode: true,
       registryDocumentId: "reg-1",
+      budgetMs: 180_000,
     });
     expect(spec.steps[1].config).toMatchObject({
       redecode: true,

@@ -268,6 +268,10 @@ export function redecodeSpec(
           accountDocumentId: walletDocumentId,
           redecode: true,
           registryDocumentId,
+          // Smaller walk budget than the plain backfill: every window
+          // also fetches registry logs, and the run must finish well
+          // inside the step timeout, not be killed by it.
+          budgetMs: 180_000,
         },
       },
       {

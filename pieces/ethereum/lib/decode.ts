@@ -28,6 +28,12 @@ export function amountFromData(data: string): string {
   return BigInt(data).toString();
 }
 
+/** True when a Transfer log's payload holds a value word; ERC-721 transfers
+ * carry `0x` and are ledger-inert. */
+export function hasAmountPayload(data: string): boolean {
+  return data.toLowerCase().replace(/^0x/, "").length > 0;
+}
+
 /** A log as the action sees it: what viem's `getLogs` returns, narrowed to
  * the fields decoding needs. */
 export interface TransferLog {
@@ -59,6 +65,7 @@ export function decodeTransferLogs(
   const rows: EventRow[] = [];
   for (const log of logs) {
     if (log.topics[0] !== TRANSFER_TOPIC) continue;
+    if (!hasAmountPayload(log.data)) continue;
     const from = log.topics[1] ? addressFromTopic(log.topics[1]) : null;
     const to = log.topics[2] ? addressFromTopic(log.topics[2]) : null;
     const isSpend = from === wanted;

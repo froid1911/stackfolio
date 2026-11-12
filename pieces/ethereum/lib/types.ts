@@ -18,7 +18,15 @@ export type EventSubtype =
   | "AIRDROP"
   | "DONATE"
   | "DEPOSIT_ASSET"
-  | "REMOVE_ASSET";
+  | "REMOVE_ASSET"
+  | "BORROW"
+  | "REPAY"
+  | "LIQUIDATION"
+  | "YIELD"
+  | "LP_MINT"
+  | "LP_BURN"
+  | "NAME_REGISTRATION"
+  | "BRIDGE";
 
 /** One decoded ledger event; amounts are unsigned decimal strings in the
  * asset's smallest unit (wei for the native coin, base units for tokens),

@@ -24,7 +24,14 @@ export type ProtocolPlugin = (input: PluginInput) => PluginOutput;
  * A manifest naming a plugin here that this map lacks makes the protocol
  * inert: the engine drops its rows rather than guess (see protocol-decode).
  *
- * The launch set decodes declaratively, so the map starts empty; adding one
- * means adding an entry and naming it in the manifest's `plugins`.
+ * A plugin that returns null falls through to the manifest's declarative
+ * rules — naming such a plugin in a manifest is how a protocol declares
+ * "I am understood" while its positions reader (fetch-positions gates the
+ * money-market walk on the name) still gets its signal.
  */
-export const PLUGIN: Readonly<Record<string, ProtocolPlugin>> = {};
+export const PLUGIN: Readonly<Record<string, ProtocolPlugin>> = {
+  // Aave books entirely by event rule (Supply/Borrow/Repay/Withdraw attach
+  // their legs); the name exists so the manifest can carry the
+  // fetch-positions gate without making the decoder inert.
+  "aave-v3": () => null,
+};

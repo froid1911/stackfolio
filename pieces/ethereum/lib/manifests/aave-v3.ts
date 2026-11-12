@@ -74,5 +74,9 @@ export const aaveV3: ProtocolManifest = {
   id: "aave-v3",
   status: "ACTIVE",
   chains,
-  plugins: [],
+  // fetch-positions only walks money-market reserves for entries that
+  // name this plugin; an empty list here silently disables Aave position
+  // sweeping for every fresh seed. The plugin falls through to the
+  // declarative event rules (see lib/plugins/index.ts).
+  plugins: ["aave-v3"],
 };

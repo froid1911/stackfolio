@@ -193,4 +193,16 @@ describe("seed manifests", () => {
       "0x03a520b32c04bf3beef7beb72e919cf822ed34f1",
     );
   });
+
+  it("names the plugins its position sweep needs", () => {
+    // fetch-positions gates every non-ERC20 position read on the entry's
+    // plugin list: a missing plugin makes the sweep read the contract as a
+    // plain share token (revert for the Uniswap NFT manager, silent skip
+    // for money-market pools). The seed must carry them.
+    const plugins = Object.fromEntries(
+      SEED_MANIFESTS.map((m) => [m.id, m.plugins]),
+    );
+    expect(plugins["aave-v3"]).toContain("aave-v3");
+    expect(plugins["uniswap-v3"]).toContain("univ3-position-math");
+  });
 });

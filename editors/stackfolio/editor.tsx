@@ -16,7 +16,6 @@ import {
 import type { EditorProps } from "document-model";
 import { useEffect, useState } from "react";
 import {
-  AccountsSection,
   AssetsSection,
   DashboardSection,
   DeFiSection,

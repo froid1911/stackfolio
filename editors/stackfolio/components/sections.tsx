@@ -48,50 +48,7 @@ import { useState } from "react";
  * drive app share one set of sections. Each section owns its data reads;
  * the shell only picks which one to render.
  */
-export function AccountsSection({
-  driveId,
-  adding,
-  setAdding,
-}: {
-  driveId: string;
-  adding: boolean;
-  setAdding: (v: boolean) => void;
-}) {
-  const accounts = useAccounts(driveId);
-  const issues = useIssues(driveId);
-  const nodes = useNodesInSelectedDrive();
-  const portfolioNode = (nodes ?? []).find(
-    (node) => "documentType" in node && node.documentType === "stackfolio/portfolio",
-  ) as { id: string } | undefined;
-  return (
-    <div>
-      <div className="flex justify-end px-6 pt-4">
-        <button
-          type="button"
-          className="rounded border border-border px-3 py-1 text-sm hover:bg-accent"
-          onClick={() => setAdding(!adding)}
-        >
-          {adding ? "Cancel" : "Add account"}
-        </button>
-      </div>
-      {adding && portfolioNode && (
-        <div className="mx-6 mt-2 rounded border border-border p-4">
-          <AddAccountForm portfolioId={portfolioNode.id} onDone={() => setAdding(false)} />
-        </div>
-      )}
-      <Accounts accounts={accounts} issues={issues} />
-      <div className="px-6 pb-6">
-        <DeFiSection driveId={driveId} />
-      </div>
-    </div>
-  );
-}
 
-/** Portfolio-document state the DeFi views read directly: positions the
- * reconciler fetched and the newest snapshot's liabilities.
- * useDocumentSafe RETRIEVES the document into the cache and subscribes;
- * useDocumentById only reads documents the app already opened, and the
- * drive app never opens the portfolio document itself. */
 export function usePortfolioBook(list: { kind: string; id: string; documentType?: string }[]) {
   const { data: doc } = useDocumentSafe(portfolioNodeId(list));
   const global = (

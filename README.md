@@ -7,19 +7,24 @@ without a Python server.
 
 ## Views
 
-Live against a local Geth node - real wallet, real chain data.
+Live against a local Geth node - real wallet, real chain data. The drive
+opens in a drawer shell: a sidebar rail addresses pages through `?page=`,
+anything clickable is a URL, and **Ctrl/Cmd+K** opens a command palette
+that searches pages, assets, accounts and events.
 
-**Dashboard** - net worth from snapshots, allocation, latest events:
+| Page (`?page=`) | What it shows | Deep links (`?detail=`) |
+|---|---|---|
+| `dashboard` | Net worth from snapshots, allocation, latest events, open issues | - |
+| `balances` | Holdings per address per asset from the newest snapshot | `account:` / `asset:` overlay |
+| `history` | The ledger: filter, sort, CSV export; issues sub-tab | `event:` overlay |
+| `pnl` | Realized/unrealized report, income by month | - |
+| `staking` | Validators from the beacon node, withdrawals, rewards | - |
+| `address-book` | The portfolio's tracked addresses, editable | `account:` highlight / add-form |
+| `assets` | The registry: kind, decimals, sources | `asset:` overlay |
+| `prices` | Price book per asset: history, overrides, sources | - |
+| `defi` | Protocol positions (Hyperliquid, points-of-interest) | - |
 
-![Dashboard](docs/screenshots/dashboard.png)
-
-**Transactions** - the ledger, filterable; every row is a document event:
-
-![Transactions](docs/screenshots/transactions.png)
-
-**Accounts** - balances, scan cursors, backfill progress, run health:
-
-![Accounts](docs/screenshots/accounts.png)
+Old `?tab=` links (the pre-shell tab strip) still resolve.
 
 ## What is in the box
 | Piece | Role |
@@ -28,7 +33,7 @@ Live against a local Geth node - real wallet, real chain data.
 | `pieces/ethereum/` | A workflow piece: node scans (`scan-account-logs`, `scan-native-transactions`), state fetches, ENS lookups, CoinGecko prices, Prysm beacon reads, and the import actions that file everything onto documents |
 | `processors/` | `portfolio-index` (the read model every view queries) and `stackfolio-reconciler`, which builds and repairs each portfolio's workflows |
 | `subgraphs/portfolio-api/` | The GraphQL read API: accounts, ledger events, snapshots, staking, prices, issues - plus server-side ENS |
-| `editors/stackfolio/` | The drive app: first-run wizard, dashboard, transactions ledger, accounts, staking, assets, prices |
+| `editors/stackfolio/` | The drive app: drawer shell + first-run wizard, dashboard, balances, history, P&L, staking, address book, assets, prices, DeFi |
 
 ## How a portfolio runs
 

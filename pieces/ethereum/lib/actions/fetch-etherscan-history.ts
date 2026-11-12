@@ -5,6 +5,7 @@ import { globalState } from "../reactor.js";
 import { WALLET_ACCOUNT_TYPE } from "./import-events-to-wallet-account.js";
 import {
   createEtherscanClient,
+  etherscanCacheDir,
   etherscanHeadBlock,
   EtherscanError,
   fetchWindowCapped,
@@ -266,6 +267,7 @@ export const ethereumFetchEtherscanHistoryAction = createAction({
       apiKey: auth.apiKey,
       baseUrl: auth.baseUrl,
       chainId: global.chainId ?? 1,
+      cacheDir: etherscanCacheDir(),
     });
     const address = global.address ?? "";
     if (address === "") {

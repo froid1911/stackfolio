@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   fetchWindowCapped,
   EtherscanError,
   createEtherscanClient,
+  isImmutableCall,
   type EtherscanRow,
 } from "./etherscan.js";
 
@@ -315,5 +318,153 @@ describe("fetchWindowCapped", () => {
     });
     expect(out.truncated).toBe(false);
     expect(out.rows).toHaveLength(3);
+  });
+});
+describe("the immutable response cache", () => {
+  async function tempDir(): Promise<string> {
+    const { mkdtemp } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    return mkdtemp(join(tmpdir(), "stackfolio-etherscan-cache-"));
+  }
+
+  it("serves a repeated bounded window from disk without fetching twice", async () => {
+    const dir = await tempDir();
+    let calls = 0;
+    const impl = (async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({ status: "1", result: [{ hash: "0xa" }], message: "OK" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+    const client = createEtherscanClient({
+      apiKey: KEY,
+      baseUrl: "https://api.etherscan.io/v2/api?chainid=1",
+      fetchImpl: impl,
+      sleepFn: noSleep,
+      cacheDir: dir,
+    });
+    const params = {
+      module: "account",
+      action: "txlist",
+      address: "0xabc",
+      startblock: 0,
+      endblock: 100000,
+    };
+    const first = (await client.call(params)) as EtherscanRow[];
+    const second = (await client.call(params)) as EtherscanRow[];
+    expect(first[0]?.hash).toBe("0xa");
+    expect(second[0]?.hash).toBe("0xa");
+    expect(calls).toBe(1);
+    // A fresh client on the same disk answers from the first client's fetch.
+    const other = createEtherscanClient({
+      apiKey: KEY,
+      baseUrl: "https://api.etherscan.io/v2/api?chainid=1",
+      fetchImpl: impl,
+      sleepFn: noSleep,
+      cacheDir: dir,
+    });
+    const third = (await other.call(params)) as EtherscanRow[];
+    expect(third[0]?.hash).toBe("0xa");
+    expect(calls).toBe(1);
+  });
+
+  it("never caches the head or latest-tagged state", async () => {
+    const dir = await tempDir();
+    let calls = 0;
+    const impl = (async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({ jsonrpc: "2.0", result: "0x64", id: 1 }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+    const client = createEtherscanClient({
+      apiKey: KEY,
+      baseUrl: "https://api.etherscan.io/v2/api?chainid=1",
+      fetchImpl: impl,
+      sleepFn: noSleep,
+      cacheDir: dir,
+    });
+    await client.call({ module: "proxy", action: "eth_blockNumber" });
+    await client.call({ module: "proxy", action: "eth_blockNumber" });
+    await client.call({
+      module: "proxy",
+      action: "eth_getBlockByNumber",
+      tag: "latest",
+      boolean: "false",
+    });
+    await client.call({
+      module: "proxy",
+      action: "eth_getBlockByNumber",
+      tag: "latest",
+      boolean: "false",
+    });
+    expect(calls).toBe(4);
+  });
+
+  it("keeps chains apart and reads through a broken cache file", async () => {
+    const dir = await tempDir();
+    let calls = 0;
+    const impl = (async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({ status: "1", result: [{ hash: `0x${calls}` }], message: "OK" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+    const params = {
+      module: "account",
+      action: "tokentx",
+      address: "0xabc",
+      startblock: 0,
+      endblock: 500,
+    };
+    const one = createEtherscanClient({
+      apiKey: KEY,
+      baseUrl: "https://api.etherscan.io/v2/api?chainid=1",
+      fetchImpl: impl,
+      sleepFn: noSleep,
+      cacheDir: dir,
+    });
+    await one.call(params);
+    const ten = createEtherscanClient({
+      apiKey: KEY,
+      baseUrl: "https://api.etherscan.io/v2/api?chainid=10",
+      chainId: 10,
+      fetchImpl: impl,
+      sleepFn: noSleep,
+      cacheDir: dir,
+    });
+    await ten.call(params);
+    expect(calls).toBe(2); // different chain ids are different data
+    // Poison the file for chain 1; the next read-through must survive it.
+    const files = await (await import("node:fs/promises")).readdir(join(dir, "1"));
+    await writeFile(join(dir, "1", files[0]), "{not json");
+    const rows = (await one.call(params)) as EtherscanRow[];
+    expect(rows[0]?.hash).toBe("0x3");
+    expect(calls).toBe(3);
+  });
+
+  it("isImmutableCall draws the finality line", () => {
+    expect(
+      isImmutableCall({ module: "account", action: "txlist", startblock: 0, endblock: 5 }),
+    ).toBe(true);
+    expect(
+      isImmutableCall({ module: "account", action: "balance", address: "0xabc" }),
+    ).toBe(false);
+    expect(
+      isImmutableCall({ module: "logs", action: "getLogs", startblock: 0, endblock: 9 }),
+    ).toBe(true);
+    expect(
+        isImmutableCall({ module: "proxy", action: "eth_getTransactionReceipt", txhash: "0x1" }),
+      ).toBe(true);
+    expect(
+      isImmutableCall({ module: "proxy", action: "eth_getBlockByNumber", tag: "latest" }),
+    ).toBe(false);
+    expect(
+      isImmutableCall({ module: "proxy", action: "eth_getBlockByNumber", tag: "0x10" }),
+    ).toBe(true);
+    expect(isImmutableCall({ module: "proxy", action: "eth_blockNumber" })).toBe(false);
   });
 });

@@ -13,6 +13,74 @@
 // meter by key, the way the providers meter.
 import { keyGates, RETRY_DELAYS_MS } from "./gate.js";
 
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
+/**
+ * Where immutable Etherscan answers are kept: this process's working
+ * directory's build cache, overridable with STACKFOLIO_ETHERSCAN_CACHE
+ * ("off" turns the cache off entirely). A second walk of a walked
+ * history - the retrofit, a retry after a restart, a wallet added
+ * tomorrow - answers from disk instead of the API and the key's
+ * throttle budget.
+ */
+export function etherscanCacheDir(): string | undefined {
+  const env = process.env.STACKFOLIO_ETHERSCAN_CACHE?.trim();
+  if (env !== undefined && env !== "") {
+    return env === "off" ? undefined : env;
+  }
+  return join(process.cwd(), "node_modules/.cache/etherscan");
+}
+
+/**
+ * Whether a call's answer can never change: a bounded window of
+ * account history or logs (every caller ends its windows below the safe
+ * head, so the window is final by construction), or a receipt, a
+ * transaction or a numbered block. The head itself and "latest" state
+ * are answered fresh, always.
+ */
+export function isImmutableCall(params: Record<string, string | number>): boolean {
+  const action = String(params.action ?? "");
+  if (params.module === "account") {
+    return (
+      ["txlist", "txlistinternal", "tokentx", "tokenApprovals"].includes(action) &&
+      Number.isFinite(Number(params.endblock)) &&
+      String(params.endblock) !== ""
+    );
+  }
+  if (params.module === "logs" && action === "getLogs") {
+    return (
+      Number.isFinite(Number(params.endblock)) && String(params.endblock) !== ""
+    );
+  }
+  if (params.module === "proxy") {
+    if (["eth_getTransactionReceipt", "eth_getTransactionByHash"].includes(action)) {
+      return true;
+    }
+    // A numbered block is final once fetched; "latest" is whatever the
+    // chain believes right now.
+    return (
+      action === "eth_getBlockByNumber" && String(params.tag ?? "").startsWith("0x")
+    );
+  }
+  return false;
+}
+
+const cacheKey = (
+  chainId: number,
+  params: Record<string, string | number>,
+): string => {
+  const normalized = Object.fromEntries(
+    Object.entries(params)
+      .filter(([name]) => name !== "apikey")
+      .sort(([a], [b]) => (a < b ? -1 : 1)),
+  );
+  return createHash("sha256")
+    .update(JSON.stringify([chainId, normalized]))
+    .digest("hex");
+};
+
 export type EtherscanRow = Record<string, string | undefined>;
 
 export class EtherscanError extends Error {
@@ -40,12 +108,19 @@ export function createEtherscanClient(opts: {
   fetchImpl?: typeof fetch;
   spacingMs?: number;
   sleepFn?: (ms: number) => Promise<void>;
+  cacheDir?: string;
 }): { call(params: Record<string, string | number>): Promise<unknown> } {
   const doFetch = opts.fetchImpl ?? fetch;
   const sleep =
     opts.sleepFn ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   const spacingMs = opts.spacingMs ?? 250;
   const chainId = opts.chainId ?? 1;
+
+  const cachePath = (params: Record<string, string | number>): string | null =>
+    opts.cacheDir && isImmutableCall(params)
+      ? join(opts.cacheDir, String(chainId), `${cacheKey(chainId, params)}.json`)
+      : null;
+
 
   const attempt = async (
     params: Record<string, string | number>,
@@ -157,7 +232,18 @@ export function createEtherscanClient(opts: {
   };
 
   return {
-    call(params: Record<string, string | number>): Promise<unknown> {
+    async call(params: Record<string, string | number>): Promise<unknown> {
+      // Immutable answers out of the walk's path first: a repeated
+      // window costs neither the key's throttle nor the pacing wait.
+      const file = cachePath(params);
+      if (file) {
+        try {
+          return JSON.parse(await readFile(file, "utf8")) as unknown;
+        } catch {
+          // A miss - or a cache that cannot be read at all. The walk
+          // answers from the API and fills the file back in.
+        }
+      }
       // Etherscan's rate limit is per key, not per client: backfills on
       // several chains run concurrently in this process, so every client
       // for the same key shares one gate.
@@ -175,7 +261,19 @@ export function createEtherscanClient(opts: {
           () => undefined,
         ),
       );
-      return run;
+      const value = await run;
+      if (file && value !== undefined && value !== null) {
+        try {
+          await mkdir(join(opts.cacheDir as string, String(chainId)), {
+            recursive: true,
+          });
+          await writeFile(file, JSON.stringify(value));
+        } catch {
+          // A cache that cannot be written is a cache miss tomorrow,
+          // never a failed walk today.
+        }
+      }
+      return value;
     },
   };
 }

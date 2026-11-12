@@ -99,7 +99,32 @@ describe("register-missing-assets", () => {
       decimals: 18,
       kind: "ERC20",
       underlying: null,
+      // The fixture address is one digit off the real DAI, so the known-id
+      // table must not fire here: the fallback route stays null.
+      coingeckoId: null,
     });
+  });
+
+  it("stamps a well-known token with its built-in coingeckoId", async () => {
+    // The registry row prices through the id route from then on; without
+    // the stamp, every round pays a rate-limited contract lookup (or 429).
+    get.mockResolvedValue(registryDoc([]));
+    const usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+    ethCall.mockImplementation((to: string, data: string) => {
+      if (data.startsWith("0x95d89b41")) return Promise.resolve(abiString("USDC"));
+      if (data.startsWith("0x06fdde03")) return Promise.resolve(abiString("USD Coin"));
+      if (data.startsWith("0x313ce567")) return Promise.resolve(`0x${word("6")}`);
+      return Promise.reject(new Error("revert"));
+    });
+
+    await run([`eip155:1/erc20:${usdc}`]);
+
+    const [, , actions] = execute.mock.calls[0] as [
+      string,
+      string,
+      Array<{ type: string; input: Record<string, unknown> }>,
+    ];
+    expect(actions[0].input).toMatchObject({ coingeckoId: "usd-coin", decimals: 6 });
   });
 
   it("degrades a broken token to the address fallback", async () => {

@@ -2,6 +2,7 @@ import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { ethereumAuth } from "../auth.js";
 import { authProps } from "../client.js";
 import { toDecimal } from "../history.js";
+import { knownCoingeckoId } from "../known-tokens.js";
 import { parseJsonish } from "../jsonish.js";
 
 const ETH_IDENTIFIER = "eip155:1/slip44:60";
@@ -134,7 +135,7 @@ export const ethereumFetchPricesAction = createAction({
             ? (entry as { asset: string }).asset
             : null;
       if (identifier === null) continue;
-      const known = registry.get(identifier);
+      const known = registry.get(identifier) ?? knownCoingeckoId(identifier);
       if (known) {
         ids.set(identifier, known);
       } else if (identifier === ETH_IDENTIFIER) {
@@ -163,13 +164,18 @@ export const ethereumFetchPricesAction = createAction({
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const apiKey = (authProps(context.auth).coingeckoApiKey ?? "").trim();
     const headers = apiKey ? { "x-cg-demo-api-key": apiKey } : undefined;
+    // The keyless public tier takes one contract address per call and
+    // throttles at a handful of calls a minute; a demo key widens both.
+    // Policing our own pace is cheaper than eating 429s.
+    const gapMs = apiKey ? 300 : 3000;
+    const maxAttempts = apiKey ? 3 : 6;
     let lastCall = 0;
     const get = async (url: string): Promise<Record<string, unknown>> => {
       // The keyless public endpoint throttles hard; a busy wallet's token
       // sweep would otherwise be a burst of failures. Space calls a beat
       // apart and back off on rate-limit answers (the endpoint is
       // inconsistent about whether a burst is a 429 or a 400).
-      const gap = Math.max(0, 300 - (Date.now() - lastCall));
+      const gap = Math.max(0, gapMs - (Date.now() - lastCall));
       if (gap > 0) await sleep(gap);
       let wait = 2000;
       for (let attempt = 0; ; attempt += 1) {
@@ -180,10 +186,10 @@ export const ethereumFetchPricesAction = createAction({
         }
         if (
           (response.status === 429 || response.status === 400) &&
-          attempt < 3
+          attempt < maxAttempts
         ) {
           await sleep(wait);
-          wait *= 2;
+          wait = Math.min(wait * 2, 30_000);
           continue;
         }
         throw new Error(`CoinGecko answered HTTP ${response.status}`);

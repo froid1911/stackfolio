@@ -106,14 +106,32 @@ describe("fetch-prices", () => {
     fetchMock.mockImplementation((url: string) => {
       if (
         url.includes(
-          "contract_addresses=0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "contract_addresses=0x9999999999999999999999999999999999999999",
         )
       ) {
         return Promise.resolve({
           ok: true,
           json: () => ({
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": { eur: 1.0002 },
+            "0x9999999999999999999999999999999999999999": { eur: 1.0002 },
           }),
+        });
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    const result = await runAction([UNKNOWN], null);
+
+    expect(result.prices).toEqual([
+      { asset: UNKNOWN, price: "1.0002", source: "COINGECKO", hour: HOUR },
+    ]);
+  });
+
+  it("prices a well-known token without a registry row", async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes("ids=usd-coin")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => ({ "usd-coin": { eur: 0.902851 } }),
         });
       }
       throw new Error(`unexpected url ${url}`);
@@ -122,7 +140,7 @@ describe("fetch-prices", () => {
     const result = await runAction([USDC], null);
 
     expect(result.prices).toEqual([
-      { asset: USDC, price: "1.0002", source: "COINGECKO", hour: HOUR },
+      { asset: USDC, price: "0.902851", source: "COINGECKO", hour: HOUR },
     ]);
   });
 
@@ -152,17 +170,17 @@ describe("fetch-prices", () => {
         return {
           ok: true,
           json: () => ({
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": { eur: 1.084e-9 },
+            "0x9999999999999999999999999999999999999999": { eur: 1.084e-9 },
           }),
         };
       }
       throw new Error(`unexpected url ${url}`);
     });
 
-    const result = await runAction([USDC], null);
+    const result = await runAction([UNKNOWN], null);
 
     expect(result.prices).toEqual([
-      { asset: USDC, price: "0.000000001084", source: "COINGECKO", hour: HOUR },
+      { asset: UNKNOWN, price: "0.000000001084", source: "COINGECKO", hour: HOUR },
     ]);
     expect(result.error).toBeNull();
   });
@@ -187,7 +205,7 @@ describe("fetch-prices", () => {
     const result = await running;
     vi.useRealTimers();
 
-    expect(fetchMock).toHaveBeenCalledTimes(4); // one try, three retries
+    expect(fetchMock).toHaveBeenCalledTimes(7); // one try, six keyless-tier retries
     expect(result.prices).toEqual([]);
     expect(result.error).toContain("429");
   });

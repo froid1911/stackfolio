@@ -1,6 +1,7 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 import { ethereumAuth } from "../auth.js";
 import { authProps, createClientBundle } from "../client.js";
+import { knownCoingeckoId } from "../known-tokens.js";
 import { parseJsonish } from "../jsonish.js";
 import {
   classifyProtocolContracts,
@@ -147,7 +148,10 @@ export const ethereumRegisterMissingAssetsAction = createAction({
           decimals,
           kind: classification?.kind ?? "ERC20",
           chainId,
-          coingeckoId: null,
+          // A well-known token prices through its built-in CoinGecko id
+          // instead of the rate-limited address route; a wrong id would
+          // misprice a real balance, so the table only holds certainties.
+          coingeckoId: knownCoingeckoId(identifier) ?? null,
           underlying: classification?.underlying ?? null,
           custom: false,
           addedAt: p.addedAt,

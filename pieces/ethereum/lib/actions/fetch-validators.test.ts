@@ -174,10 +174,11 @@ describe("fetch-validators", () => {
   it("resolves validators by withdrawal credentials via the id filter", async () => {
     const address = `0x${CRED_01.slice(-40)}`.toLowerCase();
     fetchMock.mockImplementation(
-      (url: string) => {
+      (url: string, init?: { method?: string; body?: string }) => {
         if (url.endsWith("/eth/v1/beacon/genesis")) {
           return json({ data: { genesis_time: String(GENESIS_TIME) } });
         }
+        if (init?.method === "POST") return json({ data: [] });
         if (url.includes("validators?id=")) {
           const wanted = url.split("id=")[1];
           const hex = address.replace(/^0x/, "");
@@ -217,32 +218,41 @@ describe("fetch-validators", () => {
     ]);
   });
 
-  it("falls back to a head-state scan when a credential id is rejected", async () => {
-    // Prysm answers a 32-byte non-pubkey id with HTTP 400 instead of an
-    // empty list, so 0x02 credentials resolve only through the scan.
+  it("falls back to a paged head-state scan for compound credentials", async () => {
+    // 0x01 resolves by id; the compound 0x02 set is found by scanning the
+    // head validator set through paged POSTs (GET id lists of that size
+    // overflow the response limit).
     const address = `0x${CRED_02.slice(-40)}`;
-    fetchMock.mockImplementation((url: string) => {
-      if (url.endsWith("/eth/v1/beacon/genesis")) {
-        return json({ data: { genesis_time: String(GENESIS_TIME) } });
-      }
-      if (url.includes("validators?id=0x01")) return json({ data: [] });
-      if (url.includes("validators?id=0x02")) {
-        return { ok: false, status: 400, json: () => ({ code: 400 }) };
-      }
-      if (url.includes("validators?id=")) {
-        const ids = url.split("id=")[1].split(",").map(Number);
-        const page = ids.filter((i) => i < 10).map((i) => {
-          if (i !== 9) {
-            return { index: String(i), balance: "32000000000", validator: {
-              pubkey: PUBKEY, withdrawal_credentials: CRED_00,
-            } };
-          }
-          return exitedValidator;
-        });
-        return json({ data: page });
-      }
-      throw new Error(`unexpected url ${url}`);
-    });
+    fetchMock.mockImplementation(
+      (url: string, init?: { method?: string; body?: string }) => {
+        if (url.endsWith("/eth/v1/beacon/genesis")) {
+          return json({ data: { genesis_time: String(GENESIS_TIME) } });
+        }
+        if (url.includes("validators?id=0x01")) return json({ data: [] });
+        if (
+          url.endsWith("/eth/v1/beacon/states/head/validators") &&
+          init?.method === "POST"
+        ) {
+          const body = JSON.parse(init?.body ?? "{}") as { ids: number[] };
+          const page = body.ids
+            .filter((i) => i < 10)
+            .map((i) =>
+              i === 9
+                ? exitedValidator
+                : {
+                    index: String(i),
+                    balance: "32000000000",
+                    validator: {
+                      pubkey: PUBKEY,
+                      withdrawal_credentials: CRED_00,
+                    },
+                  },
+            );
+          return json({ data: page });
+        }
+        throw new Error(`unexpected url ${url}`);
+      },
+    );
 
     const result = (await ethereumFetchValidatorsAction.run({
       propsValue: {

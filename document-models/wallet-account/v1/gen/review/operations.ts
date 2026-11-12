@@ -5,6 +5,7 @@
 import { type SignalDispatch } from "document-model";
 import type { WalletAccountGlobalState } from "../types.js";
 import type {
+  PinValuationsAction,
   RetypeEventAction,
   SetEventIgnoredAction,
   SetEventNotesAction,
@@ -24,6 +25,11 @@ export interface WalletAccountReviewOperations {
   retypeEventOperation: (
     state: WalletAccountGlobalState,
     action: RetypeEventAction,
+    dispatch?: SignalDispatch,
+  ) => void;
+  pinValuationsOperation: (
+    state: WalletAccountGlobalState,
+    action: PinValuationsAction,
     dispatch?: SignalDispatch,
   ) => void;
 }

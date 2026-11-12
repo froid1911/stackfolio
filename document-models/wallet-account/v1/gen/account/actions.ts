@@ -5,6 +5,7 @@
 import type { Action } from "document-model";
 import type {
   SetAccountDetailsInput,
+  SetEnsNamesInput,
   SetIgnoredInput,
   SetWalletXpubInput,
 } from "../types.js";
@@ -21,8 +22,13 @@ export type SetWalletXpubAction = Action & {
   type: "SET_WALLET_XPUB";
   input: SetWalletXpubInput;
 };
+export type SetEnsNamesAction = Action & {
+  type: "SET_ENS_NAMES";
+  input: SetEnsNamesInput;
+};
 
 export type WalletAccountAccountAction =
   | SetAccountDetailsAction
   | SetIgnoredAction
-  | SetWalletXpubAction;
+  | SetWalletXpubAction
+  | SetEnsNamesAction;

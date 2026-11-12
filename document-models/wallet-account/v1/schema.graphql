@@ -29,6 +29,7 @@ type WalletAccountState {
   backfill: BackfillState
   nativeBalance: NativeBalance
   bitcoinXpub: String
+  ensNames: [EnsName!]!
 }
 
 type LedgerEvent {
@@ -46,6 +47,20 @@ type LedgerEvent {
   ignored: Boolean!
   source: EventSource!
   importBatch: String
+  valuation: Valuation
+}
+
+type Valuation {
+  unit: String!
+  price: String!
+  source: ValuationSource!
+  granularity: ValuationGranularity!
+  pinnedAt: DateTime!
+}
+
+type EnsName {
+  name: String!
+  owned: Boolean!
 }
 
 type ScanCursor {
@@ -88,11 +103,30 @@ enum EventSubtype {
   DONATE
   DEPOSIT_ASSET
   REMOVE_ASSET
+  BORROW
+  REPAY
+  LIQUIDATION
+  YIELD
+  LP_MINT
+  LP_BURN
+  NAME_REGISTRATION
+  BRIDGE
 }
 
 enum EventSource {
   CHAIN
   MANUAL
+}
+
+enum ValuationSource {
+  COINGECKO
+  MANUAL
+  UNPRICED
+}
+
+enum ValuationGranularity {
+  DAY
+  NONE
 }
 
 enum BackfillPhase {
@@ -118,6 +152,15 @@ input SetWalletXpubInput {
   xpub: String
 }
 
+input SetEnsNamesInput {
+  names: [EnsNameInput!]!
+}
+
+input EnsNameInput {
+  name: String!
+  owned: Boolean!
+}
+
 # feed
 
 input ImportEventsInput {
@@ -137,6 +180,48 @@ input ImportedEventInput {
   amount: String!
   counterparty: String
   notes: String
+  valuation: ValuationInput
+}
+
+input ValuationInput {
+  unit: String!
+  price: String!
+  source: ValuationSource!
+  granularity: ValuationGranularity!
+  pinnedAt: DateTime!
+}
+
+input ReplaceEventsInput {
+  batchId: String!
+  remove: [EventLocatorInput!]!
+  add: [ImportedEventInput!]!
+}
+
+input EventLocatorInput {
+  id: OID!
+  sequenceIndex: Int!
+}
+
+input ImportedEventInput {
+  id: OID!
+  eventIdentifier: String!
+  sequenceIndex: Int!
+  timestamp: DateTime!
+  type: EventType!
+  subtype: EventSubtype!
+  asset: String!
+  amount: String!
+  counterparty: String
+  notes: String
+  valuation: ValuationInput
+}
+
+input ValuationInput {
+  unit: String!
+  price: String!
+  source: ValuationSource!
+  granularity: ValuationGranularity!
+  pinnedAt: DateTime!
 }
 
 # review
@@ -155,6 +240,24 @@ input RetypeEventInput {
   id: OID!
   type: EventType!
   subtype: EventSubtype!
+}
+
+input PinValuationsInput {
+  events: [PinValuationInput!]!
+}
+
+input PinValuationInput {
+  id: OID!
+  sequenceIndex: Int!
+  valuation: ValuationInput!
+}
+
+input ValuationInput {
+  unit: String!
+  price: String!
+  source: ValuationSource!
+  granularity: ValuationGranularity!
+  pinnedAt: DateTime!
 }
 
 # cursor

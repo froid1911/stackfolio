@@ -16,9 +16,9 @@
           "initialValue": ""
         },
         "global": {
-          "schema": "type WalletAccountState {\n  address: String!\n  chainId: Int!\n  label: String\n  ignored: Boolean!\n  ledger: [LedgerEvent!]!\n  cursor: ScanCursor\n  backfill: BackfillState\n  nativeBalance: NativeBalance\n  bitcoinXpub: String\n}\n\ntype LedgerEvent {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  counterpartyLabel: String\n  notes: String\n  ignored: Boolean!\n  source: EventSource!\n  importBatch: String\n}\n\ntype ScanCursor {\n  lastLogsBlock: Int\n  lastNativeScanBlock: Int\n  lastEventTimestamp: DateTime\n  lastRunAt: DateTime\n}\n\ntype BackfillState {\n  state: BackfillPhase!\n  startBlock: Int\n  nextBlock: Int\n}\n\ntype NativeBalance {\n  amount: String!\n  blockNumber: Int!\n  observedAt: DateTime!\n}\n\nenum EventType {\n  SPEND\n  RECEIVE\n  TRADE\n  TRANSFER\n  STAKING\n  MIGRATE\n  INFORMATIONAL\n}\n\nenum EventSubtype {\n  NONE\n  FEE\n  APPROVE\n  WITHDRAWAL\n  BLOCK_PRODUCTION\n  SPAM\n  AIRDROP\n  DONATE\n  DEPOSIT_ASSET\n  REMOVE_ASSET\n}\n\nenum EventSource {\n  CHAIN\n  MANUAL\n}\n\nenum BackfillPhase {\n  IDLE\n  LOGS\n  NATIVE\n  DONE\n}",
+          "schema": "type WalletAccountState {\n  address: String!\n  chainId: Int!\n  label: String\n  ignored: Boolean!\n  ledger: [LedgerEvent!]!\n  cursor: ScanCursor\n  backfill: BackfillState\n  nativeBalance: NativeBalance\n  bitcoinXpub: String\n  ensNames: [EnsName!]!\n}\n\ntype LedgerEvent {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  counterpartyLabel: String\n  notes: String\n  ignored: Boolean!\n  source: EventSource!\n  importBatch: String\n  valuation: Valuation\n}\n\ntype Valuation {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}\n\ntype EnsName {\n  name: String!\n  owned: Boolean!\n}\n\ntype ScanCursor {\n  lastLogsBlock: Int\n  lastNativeScanBlock: Int\n  lastEventTimestamp: DateTime\n  lastRunAt: DateTime\n}\n\ntype BackfillState {\n  state: BackfillPhase!\n  startBlock: Int\n  nextBlock: Int\n}\n\ntype NativeBalance {\n  amount: String!\n  blockNumber: Int!\n  observedAt: DateTime!\n}\n\nenum EventType {\n  SPEND\n  RECEIVE\n  TRADE\n  TRANSFER\n  STAKING\n  MIGRATE\n  INFORMATIONAL\n}\n\nenum EventSubtype {\n  NONE\n  FEE\n  APPROVE\n  WITHDRAWAL\n  BLOCK_PRODUCTION\n  SPAM\n  AIRDROP\n  DONATE\n  DEPOSIT_ASSET\n  REMOVE_ASSET\n  BORROW\n  REPAY\n  LIQUIDATION\n  YIELD\n  LP_MINT\n  LP_BURN\n  NAME_REGISTRATION\n  BRIDGE\n}\n\nenum EventSource {\n  CHAIN\n  MANUAL\n}\n\nenum ValuationSource {\n  COINGECKO\n  MANUAL\n  UNPRICED\n}\n\nenum ValuationGranularity {\n  DAY\n  NONE\n}\n\nenum BackfillPhase {\n  IDLE\n  LOGS\n  NATIVE\n  DONE\n}",
           "examples": [],
-          "initialValue": "{\"address\": \"\", \"chainId\": 0, \"label\": null, \"ignored\": false, \"ledger\": [], \"cursor\": null, \"backfill\": null, \"nativeBalance\": null, \"bitcoinXpub\": null}"
+          "initialValue": "{\"address\":\"\",\"chainId\":0,\"label\":null,\"ignored\":false,\"ledger\":[],\"cursor\":null,\"backfill\":null,\"nativeBalance\":null,\"bitcoinXpub\":null,\"ensNames\":[]}"
         }
       },
       "modules": [
@@ -66,6 +66,22 @@
               ],
               "examples": [],
               "scope": "global"
+            },
+            {
+              "id": "setEnsNames",
+              "name": "SET_ENS_NAMES",
+              "description": "Full replace of the ENS names associated with this wallet, each marked owned when forward resolution points back to the address.",
+              "schema": "input SetEnsNamesInput {\n  names: [EnsNameInput!]!\n}\n\ninput EnsNameInput {\n  name: String!\n  owned: Boolean!\n}",
+              "template": "Record the ENS names for this wallet.",
+              "reducer": "state.ensNames = action.input.names.map((entry) => ({\n  name: entry.name.toLowerCase(),\n  owned: entry.owned,\n}));",
+              "errors": [],
+              "examples": [
+                {
+                  "id": "ensExample1",
+                  "value": "{\"names\":[{\"name\":\"frankp.eth\",\"owned\":true}]}"
+                }
+              ],
+              "scope": "global"
             }
           ],
           "description": "Address, chain, label and the ignored switch"
@@ -81,31 +97,57 @@
               "errors": [
                 {
                   "id": "d08c7a42-b8ec-42fe-9ef0-ad83900b788d",
-                  "name": "EmptyImportError",
                   "code": "EMPTY_IMPORT",
-                  "description": "An import batch must carry at least one event",
-                  "template": ""
+                  "name": "EmptyImportError",
+                  "template": "",
+                  "description": "An import batch must carry at least one event"
                 },
                 {
                   "id": "edbd5ddc-77d2-477c-a5d8-5fcf4507ab72",
-                  "name": "DuplicateEventError",
                   "code": "DUPLICATE_EVENT",
-                  "description": "An event with the same identifier and sequence index exists",
-                  "template": ""
+                  "name": "DuplicateEventError",
+                  "template": "",
+                  "description": "An event with the same identifier and sequence index exists"
                 },
                 {
                   "id": "0464a456-4b19-4787-bf4a-138ca28d4890",
-                  "name": "InvalidAmountError",
                   "code": "INVALID_AMOUNT",
-                  "description": "An event amount is not a decimal",
-                  "template": ""
+                  "name": "InvalidAmountError",
+                  "template": "",
+                  "description": "An event amount is not a decimal"
                 }
               ],
-              "schema": "input ImportEventsInput {\n  batchId: String!\n  importedAt: DateTime!\n  events: [ImportedEventInput!]!\n}\n\ninput ImportedEventInput {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  notes: String\n}",
+              "schema": "input ImportEventsInput {\n  batchId: String!\n  importedAt: DateTime!\n  events: [ImportedEventInput!]!\n}\n\ninput ImportedEventInput {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  notes: String\n  valuation: ValuationInput\n}\n\ninput ValuationInput {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}",
               "reducer": "if (action.input.events.length === 0) {\n  throw new EmptyImportError(\"An import batch must carry at least one event\");\n}\nconst isDecimal = (value: string) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nconst seen = new Set(state.ledger.map((e) => `${e.eventIdentifier}#${e.sequenceIndex}`));\nfor (const event of action.input.events) {\n  if (!isDecimal(event.amount)) {\n    throw new InvalidAmountError(`${event.amount} is not a decimal amount`);\n  }\n  const key = `${event.eventIdentifier}#${event.sequenceIndex}`;\n  if (seen.has(key)) {\n    throw new DuplicateEventError(\n      `Event ${event.eventIdentifier}#${event.sequenceIndex} already imported`,\n    );\n  }\n  seen.add(key);\n}\nfor (const event of action.input.events) {\n  state.ledger.push({\n    id: event.id,\n    eventIdentifier: event.eventIdentifier,\n    sequenceIndex: event.sequenceIndex,\n    timestamp: event.timestamp,\n    type: event.type,\n    subtype: event.subtype,\n    asset: event.asset,\n    amount: event.amount,\n    counterparty: event.counterparty ?? null,\n    counterpartyLabel: null,\n    notes: event.notes ?? null,\n    ignored: false,\n    source: \"CHAIN\",\n    importBatch: action.input.batchId,\n  });\n}",
               "examples": [],
               "template": "",
               "description": ""
+            },
+            {
+              "id": "replaceEvents",
+              "name": "REPLACE_EVENTS",
+              "description": "Atomically remove ledger rows and import their semantic replacements, carrying review overrides (ignored, notes, counterparty labels) onto rows with the same id.",
+              "schema": "input ReplaceEventsInput {\n  batchId: String!\n  remove: [EventLocatorInput!]!\n  add: [ImportedEventInput!]!\n}\n\ninput EventLocatorInput {\n  id: OID!\n  sequenceIndex: Int!\n}\n\ninput ImportedEventInput {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  notes: String\n  valuation: ValuationInput\n}\n\ninput ValuationInput {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}",
+              "template": "Replace decoded generic rows with semantic rows.",
+              "reducer": "if (action.input.remove.length === 0 && action.input.add.length === 0) {\n  throw new EmptyReplacementError(\"A replacement must remove or add at least one event\");\n}\nconst isDecimal = (value) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nfor (const event of action.input.add) {\n  if (!isDecimal(event.amount)) {\n    throw new InvalidAmountError(event.amount + \" is not a decimal amount\");\n  }\n}\nconst removeKeys = {};\nfor (const entry of action.input.remove) {\n  removeKeys[entry.id + \"-\" + entry.sequenceIndex] = true;\n}\nconst carried = {};\nconst kept = [];\nfor (const event of state.ledger) {\n  const key = event.id + \"-\" + event.sequenceIndex;\n  if (removeKeys[key]) {\n    carried[key] = {\n      ignored: event.ignored,\n      notes: event.notes,\n      counterpartyLabel: event.counterpartyLabel,\n    };\n    continue;\n  }\n  kept.push(event);\n}\nconst surviving = {};\nfor (const event of kept) {\n  surviving[event.eventIdentifier + \"#\" + event.sequenceIndex] = true;\n}\nstate.ledger.length = 0;\nfor (const event of kept) state.ledger.push(event);\nfor (const input of action.input.add) {\n  const dedupKey = input.eventIdentifier + \"#\" + input.sequenceIndex;\n  if (surviving[dedupKey]) continue;\n  surviving[dedupKey] = true;\n  const carry = carried[input.id + \"-\" + input.sequenceIndex] || {};\n  state.ledger.push({\n    id: input.id,\n    eventIdentifier: input.eventIdentifier,\n    sequenceIndex: input.sequenceIndex,\n    timestamp: input.timestamp,\n    type: input.type,\n    subtype: input.subtype,\n    asset: input.asset,\n    amount: input.amount,\n    counterparty: input.counterparty ?? null,\n    counterpartyLabel: carry.counterpartyLabel ?? null,\n    notes: carry.notes ?? input.notes ?? null,\n    ignored: carry.ignored ?? false,\n    valuation: input.valuation ?? null,\n    source: \"CHAIN\",\n    importBatch: action.input.batchId,\n  });\n}",
+              "errors": [
+                {
+                  "id": "replaceEmpty",
+                  "name": "EmptyReplacementError",
+                  "code": "INVALID_INPUT",
+                  "description": "A replacement must remove or add at least one event.",
+                  "template": ""
+                },
+                {
+                  "id": "replaceInvalidAmount",
+                  "name": "InvalidAmountError",
+                  "code": "INVALID_AMOUNT",
+                  "description": "An added event amount is not a decimal.",
+                  "template": ""
+                }
+              ],
+              "examples": [],
+              "scope": "global"
             }
           ],
           "description": "Batch imports of decoded chain events"
@@ -121,10 +163,10 @@
               "errors": [
                 {
                   "id": "3a659ecc-c891-4375-bdda-6ab534dac6d4",
-                  "name": "EventNotFoundError",
                   "code": "EVENT_NOT_FOUND",
-                  "description": "No ledger event with that id",
-                  "template": ""
+                  "name": "EventNotFoundError",
+                  "template": "",
+                  "description": "No ledger event with that id"
                 }
               ],
               "schema": "input SetEventIgnoredInput {\n  id: OID!\n  ignored: Boolean!\n}",
@@ -140,10 +182,10 @@
               "errors": [
                 {
                   "id": "ec2bfc77-72f0-4c65-a092-470096973cd9",
-                  "name": "EventNotFoundError",
                   "code": "EVENT_NOT_FOUND",
-                  "description": "No ledger event with that id",
-                  "template": ""
+                  "name": "EventNotFoundError",
+                  "template": "",
+                  "description": "No ledger event with that id"
                 }
               ],
               "schema": "input SetEventNotesInput {\n  id: OID!\n  notes: String\n}",
@@ -159,10 +201,10 @@
               "errors": [
                 {
                   "id": "f3f38dd8-aa05-44a2-bdf2-f08282136c0d",
-                  "name": "EventNotFoundError",
                   "code": "EVENT_NOT_FOUND",
-                  "description": "No ledger event with that id",
-                  "template": ""
+                  "name": "EventNotFoundError",
+                  "template": "",
+                  "description": "No ledger event with that id"
                 }
               ],
               "schema": "input RetypeEventInput {\n  id: OID!\n  type: EventType!\n  subtype: EventSubtype!\n}",
@@ -170,6 +212,30 @@
               "examples": [],
               "template": "",
               "description": ""
+            },
+            {
+              "id": "pinValuations",
+              "name": "PIN_VALUATIONS",
+              "description": "Attach daily-close valuations to ledger events by id and sequence index; manual valuations are never overwritten by oracles.",
+              "schema": "input PinValuationsInput {\n  events: [PinValuationInput!]!\n}\n\ninput PinValuationInput {\n  id: OID!\n  sequenceIndex: Int!\n  valuation: ValuationInput!\n}\n\ninput ValuationInput {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}",
+              "template": "Pin oracle or manual prices onto ledger events.",
+              "reducer": "const isDecimal = (value) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nconst wanted = {};\nfor (const pin of action.input.events) {\n  if (!isDecimal(pin.valuation.price) || !pin.valuation.unit) {\n    throw new InvalidValuationError(\"valuation needs a decimal price and a unit\");\n  }\n  const key = pin.id + \"-\" + pin.sequenceIndex;\n  if (!wanted[key]) wanted[key] = pin.valuation;\n}\nfor (const event of state.ledger) {\n  const valuation = wanted[event.id + \"-\" + event.sequenceIndex];\n  if (!valuation) continue;\n  if (event.valuation && event.valuation.source === \"MANUAL\" && valuation.source !== \"MANUAL\") {\n    continue;\n  }\n  event.valuation = {\n    unit: valuation.unit,\n    price: valuation.price,\n    source: valuation.source,\n    granularity: valuation.granularity,\n    pinnedAt: valuation.pinnedAt,\n  };\n}",
+              "errors": [
+                {
+                  "id": "pinValuationsInvalid",
+                  "name": "InvalidValuationError",
+                  "code": "INVALID_INPUT",
+                  "description": "A valuation lacks a decimal price or a unit.",
+                  "template": ""
+                }
+              ],
+              "examples": [
+                {
+                  "id": "pinExample1",
+                  "value": "{\"events\":[{\"id\":\"4f4e06f2-8b5a-4d7e-9b52-c2f1d2e7a101\",\"sequenceIndex\":0,\"valuation\":{\"unit\":\"EUR\",\"price\":\"3000.00\",\"source\":\"COINGECKO\",\"granularity\":\"DAY\",\"pinnedAt\":\"2026-11-12T00:00:00.000Z\"}}]}"
+                }
+              ],
+              "scope": "global"
             }
           ],
           "description": "Human corrections on ledger events"
@@ -185,10 +251,10 @@
               "errors": [
                 {
                   "id": "caf51411-ed1a-441a-94da-fdd4fef0f2a8",
-                  "name": "CursorRegressionError",
                   "code": "CURSOR_REGRESSION",
-                  "description": "A scan cursor must never move backwards",
-                  "template": ""
+                  "name": "CursorRegressionError",
+                  "template": "",
+                  "description": "A scan cursor must never move backwards"
                 }
               ],
               "schema": "input RecordScanProgressInput {\n  lastLogsBlock: Int\n  lastNativeScanBlock: Int\n  lastEventTimestamp: DateTime\n  ranAt: DateTime!\n}",
@@ -215,10 +281,10 @@
               "errors": [
                 {
                   "id": "396bafba-ccdd-4b52-a8ac-93c12b140ca3",
-                  "name": "BalanceStaleError",
                   "code": "BALANCE_STALE",
-                  "description": "The observation is not newer than the stored balance",
-                  "template": ""
+                  "name": "BalanceStaleError",
+                  "template": "",
+                  "description": "The observation is not newer than the stored balance"
                 }
               ],
               "schema": "input SetNativeBalanceInput {\n  amount: String!\n  blockNumber: Int!\n  observedAt: DateTime!\n}",

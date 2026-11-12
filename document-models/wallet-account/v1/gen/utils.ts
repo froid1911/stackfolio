@@ -34,6 +34,7 @@ export const initialGlobalState: WalletAccountGlobalState = {
   backfill: null,
   nativeBalance: null,
   bitcoinXpub: null,
+  ensNames: [],
 };
 export const initialLocalState: WalletAccountLocalState = {};
 

@@ -3,9 +3,12 @@
  * This file is auto-generated and updated by codegen
  */
 import { createAction } from "document-model";
-import { ImportEventsInputSchema } from "../schema/zod.js";
-import type { ImportEventsInput } from "../types.js";
-import type { ImportEventsAction } from "./actions.js";
+import {
+  ImportEventsInputSchema,
+  ReplaceEventsInputSchema,
+} from "../schema/zod.js";
+import type { ImportEventsInput, ReplaceEventsInput } from "../types.js";
+import type { ImportEventsAction, ReplaceEventsAction } from "./actions.js";
 
 export const importEvents = (input: ImportEventsInput) =>
   createAction<ImportEventsAction>(
@@ -13,5 +16,14 @@ export const importEvents = (input: ImportEventsInput) =>
     { ...input },
     undefined,
     ImportEventsInputSchema,
+    "global",
+  );
+
+export const replaceEvents = (input: ReplaceEventsInput) =>
+  createAction<ReplaceEventsAction>(
+    "REPLACE_EVENTS",
+    { ...input },
+    undefined,
+    ReplaceEventsInputSchema,
     "global",
   );

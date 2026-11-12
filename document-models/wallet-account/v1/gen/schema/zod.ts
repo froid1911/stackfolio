@@ -4,6 +4,9 @@ import * as z from "zod";
 import type {
   BackfillPhase,
   BackfillState,
+  EnsName,
+  EnsNameInput,
+  EventLocatorInput,
   EventSource,
   EventSubtype,
   EventType,
@@ -11,16 +14,24 @@ import type {
   ImportedEventInput,
   LedgerEvent,
   NativeBalance,
+  PinValuationInput,
+  PinValuationsInput,
   RecordScanProgressInput,
+  ReplaceEventsInput,
   RetypeEventInput,
   ScanCursor,
   SetAccountDetailsInput,
   SetBackfillStateInput,
+  SetEnsNamesInput,
   SetEventIgnoredInput,
   SetEventNotesInput,
   SetIgnoredInput,
   SetNativeBalanceInput,
   SetWalletXpubInput,
+  Valuation,
+  ValuationGranularity,
+  ValuationInput,
+  ValuationSource,
   WalletAccountState,
 } from "./types.js";
 
@@ -45,13 +56,21 @@ export const EventSubtypeSchema = z.enum([
   "AIRDROP",
   "APPROVE",
   "BLOCK_PRODUCTION",
+  "BORROW",
+  "BRIDGE",
   "DEPOSIT_ASSET",
   "DONATE",
   "FEE",
+  "LIQUIDATION",
+  "LP_BURN",
+  "LP_MINT",
+  "NAME_REGISTRATION",
   "NONE",
   "REMOVE_ASSET",
+  "REPAY",
   "SPAM",
   "WITHDRAWAL",
+  "YIELD",
 ]);
 
 export const EventTypeSchema = z.enum([
@@ -64,12 +83,44 @@ export const EventTypeSchema = z.enum([
   "TRANSFER",
 ]);
 
+export const ValuationGranularitySchema = z.enum(["DAY", "NONE"]);
+
+export const ValuationSourceSchema = z.enum([
+  "COINGECKO",
+  "MANUAL",
+  "UNPRICED",
+]);
+
 export function BackfillStateSchema(): z.ZodObject<Properties<BackfillState>> {
   return z.object({
     __typename: z.literal("BackfillState").optional(),
     nextBlock: z.number().nullish(),
     startBlock: z.number().nullish(),
     state: BackfillPhaseSchema,
+  });
+}
+
+export function EnsNameSchema(): z.ZodObject<Properties<EnsName>> {
+  return z.object({
+    __typename: z.literal("EnsName").optional(),
+    name: z.string(),
+    owned: z.boolean(),
+  });
+}
+
+export function EnsNameInputSchema(): z.ZodObject<Properties<EnsNameInput>> {
+  return z.object({
+    name: z.string(),
+    owned: z.boolean(),
+  });
+}
+
+export function EventLocatorInputSchema(): z.ZodObject<
+  Properties<EventLocatorInput>
+> {
+  return z.object({
+    id: z.string(),
+    sequenceIndex: z.number(),
   });
 }
 
@@ -97,6 +148,7 @@ export function ImportedEventInputSchema(): z.ZodObject<
     subtype: EventSubtypeSchema,
     timestamp: z.iso.datetime(),
     type: EventTypeSchema,
+    valuation: z.lazy(() => ValuationInputSchema().nullish()),
   });
 }
 
@@ -117,6 +169,7 @@ export function LedgerEventSchema(): z.ZodObject<Properties<LedgerEvent>> {
     subtype: EventSubtypeSchema,
     timestamp: z.iso.datetime(),
     type: EventTypeSchema,
+    valuation: z.lazy(() => ValuationSchema().nullish()),
   });
 }
 
@@ -129,6 +182,24 @@ export function NativeBalanceSchema(): z.ZodObject<Properties<NativeBalance>> {
   });
 }
 
+export function PinValuationInputSchema(): z.ZodObject<
+  Properties<PinValuationInput>
+> {
+  return z.object({
+    id: z.string(),
+    sequenceIndex: z.number(),
+    valuation: z.lazy(() => ValuationInputSchema()),
+  });
+}
+
+export function PinValuationsInputSchema(): z.ZodObject<
+  Properties<PinValuationsInput>
+> {
+  return z.object({
+    events: z.array(z.lazy(() => PinValuationInputSchema())),
+  });
+}
+
 export function RecordScanProgressInputSchema(): z.ZodObject<
   Properties<RecordScanProgressInput>
 > {
@@ -137,6 +208,16 @@ export function RecordScanProgressInputSchema(): z.ZodObject<
     lastLogsBlock: z.number().nullish(),
     lastNativeScanBlock: z.number().nullish(),
     ranAt: z.iso.datetime(),
+  });
+}
+
+export function ReplaceEventsInputSchema(): z.ZodObject<
+  Properties<ReplaceEventsInput>
+> {
+  return z.object({
+    add: z.array(z.lazy(() => ImportedEventInputSchema())),
+    batchId: z.string(),
+    remove: z.array(z.lazy(() => EventLocatorInputSchema())),
   });
 }
 
@@ -177,6 +258,14 @@ export function SetBackfillStateInputSchema(): z.ZodObject<
     nextBlock: z.number().nullish(),
     startBlock: z.number().nullish(),
     state: BackfillPhaseSchema,
+  });
+}
+
+export function SetEnsNamesInputSchema(): z.ZodObject<
+  Properties<SetEnsNamesInput>
+> {
+  return z.object({
+    names: z.array(z.lazy(() => EnsNameInputSchema())),
   });
 }
 
@@ -224,6 +313,29 @@ export function SetWalletXpubInputSchema(): z.ZodObject<
   });
 }
 
+export function ValuationSchema(): z.ZodObject<Properties<Valuation>> {
+  return z.object({
+    __typename: z.literal("Valuation").optional(),
+    granularity: ValuationGranularitySchema,
+    pinnedAt: z.iso.datetime(),
+    price: z.string(),
+    source: ValuationSourceSchema,
+    unit: z.string(),
+  });
+}
+
+export function ValuationInputSchema(): z.ZodObject<
+  Properties<ValuationInput>
+> {
+  return z.object({
+    granularity: ValuationGranularitySchema,
+    pinnedAt: z.iso.datetime(),
+    price: z.string(),
+    source: ValuationSourceSchema,
+    unit: z.string(),
+  });
+}
+
 export function WalletAccountStateSchema(): z.ZodObject<
   Properties<WalletAccountState>
 > {
@@ -234,6 +346,7 @@ export function WalletAccountStateSchema(): z.ZodObject<
     bitcoinXpub: z.string().nullish(),
     chainId: z.number(),
     cursor: z.lazy(() => ScanCursorSchema().nullish()),
+    ensNames: z.array(z.lazy(() => EnsNameSchema())),
     ignored: z.boolean(),
     label: z.string().nullish(),
     ledger: z.array(z.lazy(() => LedgerEventSchema())),

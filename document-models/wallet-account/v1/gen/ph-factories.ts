@@ -24,6 +24,7 @@ export function defaultGlobalState(): WalletAccountGlobalState {
     backfill: null,
     nativeBalance: null,
     bitcoinXpub: null,
+    ensNames: [],
   };
 }
 

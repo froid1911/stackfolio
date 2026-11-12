@@ -3,6 +3,7 @@ import { createReducer, isDocumentAction } from "document-model";
 import type { WalletAccountPHState } from "document-models/wallet-account/v1";
 import type {
   SetAccountDetailsAction,
+  SetEnsNamesAction,
   SetIgnoredAction,
   SetWalletXpubAction,
 } from "./account/actions.js";
@@ -11,8 +12,12 @@ import type {
   SetBackfillStateAction,
   SetNativeBalanceAction,
 } from "./cursor/actions.js";
-import type { ImportEventsAction } from "./feed/actions.js";
 import type {
+  ImportEventsAction,
+  ReplaceEventsAction,
+} from "./feed/actions.js";
+import type {
+  PinValuationsAction,
   RetypeEventAction,
   SetEventIgnoredAction,
   SetEventNotesAction,
@@ -25,10 +30,13 @@ import { walletAccountReviewOperations } from "../src/reducers/review.js";
 
 import {
   ImportEventsInputSchema,
+  PinValuationsInputSchema,
   RecordScanProgressInputSchema,
+  ReplaceEventsInputSchema,
   RetypeEventInputSchema,
   SetAccountDetailsInputSchema,
   SetBackfillStateInputSchema,
+  SetEnsNamesInputSchema,
   SetEventIgnoredInputSchema,
   SetEventNotesInputSchema,
   SetIgnoredInputSchema,
@@ -92,12 +100,36 @@ const stateReducer: StateReducer<WalletAccountPHState> = (
       break;
     }
 
+    case "SET_ENS_NAMES": {
+      memoizedSchema(SetEnsNamesInputSchema).parse(action.input);
+
+      walletAccountAccountOperations.setEnsNamesOperation(
+        state.global,
+        action as SetEnsNamesAction,
+        dispatch,
+      );
+
+      break;
+    }
+
     case "IMPORT_EVENTS": {
       memoizedSchema(ImportEventsInputSchema).parse(action.input);
 
       walletAccountFeedOperations.importEventsOperation(
         state.global,
         action as ImportEventsAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "REPLACE_EVENTS": {
+      memoizedSchema(ReplaceEventsInputSchema).parse(action.input);
+
+      walletAccountFeedOperations.replaceEventsOperation(
+        state.global,
+        action as ReplaceEventsAction,
         dispatch,
       );
 
@@ -134,6 +166,18 @@ const stateReducer: StateReducer<WalletAccountPHState> = (
       walletAccountReviewOperations.retypeEventOperation(
         state.global,
         action as RetypeEventAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "PIN_VALUATIONS": {
+      memoizedSchema(PinValuationsInputSchema).parse(action.input);
+
+      walletAccountReviewOperations.pinValuationsOperation(
+        state.global,
+        action as PinValuationsAction,
         dispatch,
       );
 

@@ -4,6 +4,7 @@
  */
 import type { Action } from "document-model";
 import type {
+  PinValuationsInput,
   RetypeEventInput,
   SetEventIgnoredInput,
   SetEventNotesInput,
@@ -21,8 +22,13 @@ export type RetypeEventAction = Action & {
   type: "RETYPE_EVENT";
   input: RetypeEventInput;
 };
+export type PinValuationsAction = Action & {
+  type: "PIN_VALUATIONS";
+  input: PinValuationsInput;
+};
 
 export type WalletAccountReviewAction =
   | SetEventIgnoredAction
   | SetEventNotesAction
-  | RetypeEventAction;
+  | RetypeEventAction
+  | PinValuationsAction;

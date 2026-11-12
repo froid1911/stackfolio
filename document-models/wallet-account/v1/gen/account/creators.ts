@@ -5,16 +5,19 @@
 import { createAction } from "document-model";
 import {
   SetAccountDetailsInputSchema,
+  SetEnsNamesInputSchema,
   SetIgnoredInputSchema,
   SetWalletXpubInputSchema,
 } from "../schema/zod.js";
 import type {
   SetAccountDetailsInput,
+  SetEnsNamesInput,
   SetIgnoredInput,
   SetWalletXpubInput,
 } from "../types.js";
 import type {
   SetAccountDetailsAction,
+  SetEnsNamesAction,
   SetIgnoredAction,
   SetWalletXpubAction,
 } from "./actions.js";
@@ -43,5 +46,14 @@ export const setWalletXpub = (input: SetWalletXpubInput) =>
     { ...input },
     undefined,
     SetWalletXpubInputSchema,
+    "global",
+  );
+
+export const setEnsNames = (input: SetEnsNamesInput) =>
+  createAction<SetEnsNamesAction>(
+    "SET_ENS_NAMES",
+    { ...input },
+    undefined,
+    SetEnsNamesInputSchema,
     "global",
   );

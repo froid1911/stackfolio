@@ -1,6 +1,10 @@
+import { generateMock } from "document-model/mock";
 import {
+  isWalletAccountDocument,
   reducer,
   setAccountDetails,
+  setEnsNames,
+  SetEnsNamesInputSchema,
   setIgnored,
   setWalletXpub,
   utils,
@@ -82,5 +86,24 @@ describe("AccountOperations", () => {
         "xpub must be an extended public key: xpub/tpub/vpub/uppub/zpub/Zpub/Ypub in base58",
       );
     });
+  });
+
+  it("should handle setEnsNames operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(SetEnsNamesInputSchema());
+
+    const updatedDocument = reducer(document, setEnsNames(input));
+
+    expect(isWalletAccountDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    // A rejected operation records its error; give it the state it needs.
+    expect(updatedDocument.operations.global[0].error).toBeUndefined();
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "SET_ENS_NAMES",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 });

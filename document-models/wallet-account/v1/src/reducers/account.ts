@@ -28,4 +28,10 @@ export const walletAccountAccountOperations: WalletAccountAccountOperations = {
       state.bitcoinXpub = xpub;
     }
   },
+  setEnsNamesOperation(state, action) {
+    state.ensNames = action.input.names.map((entry) => ({
+      name: entry.name.toLowerCase(),
+      owned: entry.owned,
+    }));
+  },
 };

@@ -1,4 +1,8 @@
-export type ErrorCode = "EMPTY_IMPORT" | "DUPLICATE_EVENT" | "INVALID_AMOUNT";
+export type ErrorCode =
+  | "EMPTY_IMPORT"
+  | "DUPLICATE_EVENT"
+  | "INVALID_AMOUNT"
+  | "INVALID_INPUT";
 
 export interface ReducerError {
   errorCode: ErrorCode;
@@ -25,6 +29,15 @@ export class InvalidAmountError extends Error implements ReducerError {
   }
 }
 
+export class EmptyReplacementError extends Error implements ReducerError {
+  errorCode = "INVALID_INPUT" as ErrorCode;
+  constructor(message = "EmptyReplacementError") {
+    super(message);
+  }
+}
+
 export const errors = {
   ImportEvents: { EmptyImportError, DuplicateEventError, InvalidAmountError },
+
+  ReplaceEvents: { EmptyReplacementError, InvalidAmountError },
 };

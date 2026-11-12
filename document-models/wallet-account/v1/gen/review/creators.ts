@@ -4,16 +4,19 @@
  */
 import { createAction } from "document-model";
 import {
+  PinValuationsInputSchema,
   RetypeEventInputSchema,
   SetEventIgnoredInputSchema,
   SetEventNotesInputSchema,
 } from "../schema/zod.js";
 import type {
+  PinValuationsInput,
   RetypeEventInput,
   SetEventIgnoredInput,
   SetEventNotesInput,
 } from "../types.js";
 import type {
+  PinValuationsAction,
   RetypeEventAction,
   SetEventIgnoredAction,
   SetEventNotesAction,
@@ -43,5 +46,14 @@ export const retypeEvent = (input: RetypeEventInput) =>
     { ...input },
     undefined,
     RetypeEventInputSchema,
+    "global",
+  );
+
+export const pinValuations = (input: PinValuationsInput) =>
+  createAction<PinValuationsAction>(
+    "PIN_VALUATIONS",
+    { ...input },
+    undefined,
+    PinValuationsInputSchema,
     "global",
   );

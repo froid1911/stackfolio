@@ -6,6 +6,7 @@ import { type SignalDispatch } from "document-model";
 import type { WalletAccountGlobalState } from "../types.js";
 import type {
   SetAccountDetailsAction,
+  SetEnsNamesAction,
   SetIgnoredAction,
   SetWalletXpubAction,
 } from "./actions.js";
@@ -24,6 +25,11 @@ export interface WalletAccountAccountOperations {
   setWalletXpubOperation: (
     state: WalletAccountGlobalState,
     action: SetWalletXpubAction,
+    dispatch?: SignalDispatch,
+  ) => void;
+  setEnsNamesOperation: (
+    state: WalletAccountGlobalState,
+    action: SetEnsNamesAction,
     dispatch?: SignalDispatch,
   ) => void;
 }

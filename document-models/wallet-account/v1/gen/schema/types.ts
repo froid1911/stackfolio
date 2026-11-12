@@ -70,19 +70,42 @@ export type BackfillState = {
   state: BackfillPhase;
 };
 
+export type EnsName = {
+  name: Scalars["String"]["output"];
+  owned: Scalars["Boolean"]["output"];
+};
+
+export type EnsNameInput = {
+  name: Scalars["String"]["input"];
+  owned: Scalars["Boolean"]["input"];
+};
+
+export type EventLocatorInput = {
+  id: Scalars["OID"]["input"];
+  sequenceIndex: Scalars["Int"]["input"];
+};
+
 export type EventSource = "CHAIN" | "MANUAL";
 
 export type EventSubtype =
   | "AIRDROP"
   | "APPROVE"
   | "BLOCK_PRODUCTION"
+  | "BORROW"
+  | "BRIDGE"
   | "DEPOSIT_ASSET"
   | "DONATE"
   | "FEE"
+  | "LIQUIDATION"
+  | "LP_BURN"
+  | "LP_MINT"
+  | "NAME_REGISTRATION"
   | "NONE"
   | "REMOVE_ASSET"
+  | "REPAY"
   | "SPAM"
-  | "WITHDRAWAL";
+  | "WITHDRAWAL"
+  | "YIELD";
 
 export type EventType =
   | "INFORMATIONAL"
@@ -110,6 +133,7 @@ export type ImportedEventInput = {
   subtype: EventSubtype;
   timestamp: Scalars["DateTime"]["input"];
   type: EventType;
+  valuation?: InputMaybe<ValuationInput>;
 };
 
 export type LedgerEvent = {
@@ -127,6 +151,7 @@ export type LedgerEvent = {
   subtype: EventSubtype;
   timestamp: Scalars["DateTime"]["output"];
   type: EventType;
+  valuation: Maybe<Valuation>;
 };
 
 export type NativeBalance = {
@@ -135,11 +160,27 @@ export type NativeBalance = {
   observedAt: Scalars["DateTime"]["output"];
 };
 
+export type PinValuationInput = {
+  id: Scalars["OID"]["input"];
+  sequenceIndex: Scalars["Int"]["input"];
+  valuation: ValuationInput;
+};
+
+export type PinValuationsInput = {
+  events: Array<PinValuationInput>;
+};
+
 export type RecordScanProgressInput = {
   lastEventTimestamp?: InputMaybe<Scalars["DateTime"]["input"]>;
   lastLogsBlock?: InputMaybe<Scalars["Int"]["input"]>;
   lastNativeScanBlock?: InputMaybe<Scalars["Int"]["input"]>;
   ranAt: Scalars["DateTime"]["input"];
+};
+
+export type ReplaceEventsInput = {
+  add: Array<ImportedEventInput>;
+  batchId: Scalars["String"]["input"];
+  remove: Array<EventLocatorInput>;
 };
 
 export type RetypeEventInput = {
@@ -167,6 +208,10 @@ export type SetBackfillStateInput = {
   state: BackfillPhase;
 };
 
+export type SetEnsNamesInput = {
+  names: Array<EnsNameInput>;
+};
+
 export type SetEventIgnoredInput = {
   id: Scalars["OID"]["input"];
   ignored: Scalars["Boolean"]["input"];
@@ -191,12 +236,33 @@ export type SetWalletXpubInput = {
   xpub?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type Valuation = {
+  granularity: ValuationGranularity;
+  pinnedAt: Scalars["DateTime"]["output"];
+  price: Scalars["String"]["output"];
+  source: ValuationSource;
+  unit: Scalars["String"]["output"];
+};
+
+export type ValuationGranularity = "DAY" | "NONE";
+
+export type ValuationInput = {
+  granularity: ValuationGranularity;
+  pinnedAt: Scalars["DateTime"]["input"];
+  price: Scalars["String"]["input"];
+  source: ValuationSource;
+  unit: Scalars["String"]["input"];
+};
+
+export type ValuationSource = "COINGECKO" | "MANUAL" | "UNPRICED";
+
 export type WalletAccountState = {
   address: Scalars["String"]["output"];
   backfill: Maybe<BackfillState>;
   bitcoinXpub: Maybe<Scalars["String"]["output"]>;
   chainId: Scalars["Int"]["output"];
   cursor: Maybe<ScanCursor>;
+  ensNames: Array<EnsName>;
   ignored: Scalars["Boolean"]["output"];
   label: Maybe<Scalars["String"]["output"]>;
   ledger: Array<LedgerEvent>;

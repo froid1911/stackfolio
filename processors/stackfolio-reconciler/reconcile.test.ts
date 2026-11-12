@@ -27,6 +27,7 @@ const wallet = (
     address: `0x${id.repeat(40).slice(0, 40)}`,
     chainId: 1,
     ignored: false,
+    ensNames: [],
     ledger: [],
     backfill: { state: "DONE", startBlock: 0, nextBlock: 0 },
     cursor: null,

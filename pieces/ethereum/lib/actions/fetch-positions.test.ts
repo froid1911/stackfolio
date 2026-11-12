@@ -169,8 +169,15 @@ beforeEach(() => {
 
 describe("fetch-positions", () => {
   it("collects LP and SPOT positions and replaces the wallet entry", async () => {
-    const output = (await run()) as { positions: number };
+    const output = (await run()) as { positions: number; assets: string[] };
     expect(output.positions).toBe(2);
+    expect(new Set(output.assets)).toEqual(
+      new Set([
+        "eip155:1/erc20:0x00000000000000000000000000000000000000aa",
+        "eip155:1/erc20:0x00000000000000000000000000000000000000bb",
+        "eip155:1/erc20:0x1111111111111111111111111111111111111111",
+      ]),
+    );
 
     const [documentId, branch, actions] = execute.mock.calls[0] as [
       string,
@@ -256,7 +263,7 @@ describe("fetch-positions", () => {
         result = `0x${fields.map((entry) => word(entry)).join("")}${word(A_TOKEN)}${word(0)}${word(VAR_DEBT)}`;
       } else if (to.toLowerCase() === POOL && data.startsWith("0xbf92857c")) {
         const fields = [0, 0, 0, 0, 0];
-        result = `0x${fields.map((entry) => word(entry)).join("")}${word(1_230_000_000_000_000_000_000_000_000n)}`;
+        result = `0x${fields.map((entry) => word(entry)).join("")}${word(1_230_000_000_000_000_000n)}`;
       } else if (to.toLowerCase() === A_TOKEN && data.startsWith("0x70a08231")) {
         result = `0x${word(5_000_000)}`;
       } else if (to.toLowerCase() === VAR_DEBT && data.startsWith("0x70a08231")) {
@@ -313,5 +320,191 @@ describe("fetch-positions", () => {
         amount: "-2000000",
       },
     ]);
+  });
+
+  it("reads the health factor from the v3.0 eight-word reply", async () => {
+    // v3.0 pools answer getUserAccountData with eight words (maxLtv
+    // last); the health factor is the seventh. The v3.1 six-word shape
+    // (factor last) is covered by the money-market test above.
+    get.mockResolvedValueOnce({
+      header: { documentType: "stackfolio/protocol-registry" },
+      state: {
+        global: {
+          protocols: [
+            {
+              id: "aave-legacy",
+              status: "ACTIVE",
+              plugins: ["aave-v3"],
+              chains: [
+                {
+                  chainId: 1,
+                  contracts: [{ name: "pool", address: POOL, kind: "CORE" }],
+                  events: [event],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const legacyRpc = vi.fn(async (_url: string, init: { body: string }) => {
+      const request = JSON.parse(init.body) as {
+        params: Array<{ to: string; data: string }>;
+      };
+      const { to, data } = request.params[0];
+      let result = "0x";
+      if (to.toLowerCase() === POOL && data.startsWith("0xd1946dbc")) {
+        result = `0x${word(32)}${word(1)}${word(UNDERLYING)}`;
+      } else if (to.toLowerCase() === POOL && data.startsWith("0x35ea6a75")) {
+        const fields = [0, 0, 0, 0, 0, 0, 0, 0];
+        result = `0x${fields.map((entry) => word(entry)).join("")}${word(A_TOKEN)}${word(0)}${word(VAR_DEBT)}`;
+      } else if (to.toLowerCase() === POOL && data.startsWith("0xbf92857c")) {
+        const fields = [0, 0, 0, 0, 0, 800_000_000_000_000_000n];
+        result = `0x${fields
+          .map((entry) => word(entry))
+          .join("")}${word(1_230_000_000_000_000_000n)}${word(850_000_000_000_000_000n)}`;
+      } else if (
+        to.toLowerCase() === A_TOKEN &&
+        data.startsWith("0x70a08231")
+      ) {
+        result = `0x${word(5_000_000)}`;
+      } else if (
+        to.toLowerCase() === VAR_DEBT &&
+        data.startsWith("0x70a08231")
+      ) {
+        result = `0x${word(0)}`;
+      } else {
+        throw new Error(`unexpected eth_call target ${to}`);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ jsonrpc: "2.0", id: 1, result }),
+      };
+    });
+    await run({ fetchImpl: legacyRpc });
+    const actions = execute.mock.calls[0][2] as Array<{
+      input: { positions: Array<{ note: string | null }> };
+    }>;
+    expect(actions[0].input.positions[0].note).toBe("supplied — health 1.23");
+  });
+
+  it("skips a POSITION contract that reverts instead of losing the sweep", async () => {
+    // Production failure: a registry entry whose plugin list was empty
+    // made the sweep read the Uniswap NFT manager as a plain ERC20; the
+    // manager's balanceOf reverted and the whole workflow failed before
+    // SET_POSITIONS was dispatched. A bad contract may cost its own entry
+    // (skipped here) but never the sweep.
+    get.mockResolvedValueOnce({
+      header: { documentType: "stackfolio/protocol-registry" },
+      state: {
+        global: {
+          protocols: [
+            {
+              id: "bad-protocol",
+              status: "ACTIVE",
+              plugins: [],
+              chains: [
+                {
+                  chainId: 1,
+                  contracts: [
+                    {
+                      name: "not-a-token",
+                      address: `0x${"44".repeat(20)}`,
+                      kind: "POSITION",
+                    },
+                  ],
+                  events: [event],
+                },
+              ],
+            },
+            {
+              id: "morpho",
+              status: "ACTIVE",
+              plugins: [],
+              chains: [
+                {
+                  chainId: 1,
+                  contracts: [
+                    { name: "vault", address: VAULT, kind: "POSITION" },
+                  ],
+                  events: [event],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const revertRpc = vi.fn(async (_url: string, init: { body: string }) => {
+      const request = JSON.parse(init.body) as {
+        params: Array<{ to: string }>;
+      };
+      if (request.params[0].to.toLowerCase() === VAULT) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jsonrpc: "2.0",
+            id: 1,
+            result: `0x${word(12345)}`,
+          }),
+        };
+      }
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: 1,
+          error: { code: 3, message: "execution reverted" },
+        }),
+      };
+    });
+    const output = (await run({ fetchImpl: revertRpc })) as {
+      positions: number;
+    };
+    expect(output.positions).toBe(1);
+    const actions = execute.mock.calls[0][2] as Array<{
+      input: { positions: Array<Record<string, unknown>> };
+    }>;
+    expect(actions[0].input.positions[0].protocol).toBe("morpho");
+  });
+
+  it("skips a pool whose getReservesList returns no data", async () => {
+    // A call into an address that is not (or no longer) a pool returns
+    // empty or short return data; slicing a word count out of "0x" threw
+    // and killed the sweep.
+    get.mockResolvedValueOnce({
+      header: { documentType: "stackfolio/protocol-registry" },
+      state: {
+        global: {
+          protocols: [
+            {
+              id: "ghost-market",
+              status: "ACTIVE",
+              plugins: ["aave-v3"],
+              chains: [
+                {
+                  chainId: 1,
+                  contracts: [{ name: "pool", address: POOL, kind: "CORE" }],
+                  events: [event],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const emptyRpc = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ jsonrpc: "2.0", id: 1, result: "0x" }),
+    }));
+    const output = (await run({ fetchImpl: emptyRpc })) as {
+      positions: number;
+    };
+    expect(output.positions).toBe(0);
+    expect(execute).toHaveBeenCalledOnce();
   });
 });

@@ -172,6 +172,9 @@ export const ethereumFetchPositionsAction = createAction({
             continue; // not a pool at this address
           }
           const body = list.startsWith("0x") ? list.slice(2) : list;
+          if (body.length < 128) {
+            continue; // not a usable reserves list (empty or non-standard)
+          }
           const count = Number(BigInt(`0x${body.slice(64, 128)}`));
           let accountNote: string | null = null;
           try {
@@ -179,11 +182,19 @@ export const ethereumFetchPositionsAction = createAction({
               pool.address,
               `${SELECTORS.getUserAccountData}${pad(wallet)}`,
             );
-            const factor = BigInt(word(acct, 5));
+            // getUserAccountData grew and shrank across pool versions:
+            // v3.0 returns 8 words (health factor 6th, maxLtv last), the
+            // v3.1 mainnet pool returns 6 (health factor last). Pick the
+            // health factor by shape: second-to-last on 8-word replies,
+            // last on shorter ones. 1e18 units; "no debt" replies with the
+            // uint max or 0.
+            const words = (acct.startsWith("0x") ? acct.slice(2) : acct).length / 64;
+            if (words < 6) throw new Error("account data too short");
+            const factor = BigInt(word(acct, words === 8 ? 6 : words - 1));
             const health =
               factor >= 1n << 255n
                 ? "unlimited"
-                : (Number(factor) / 1e27).toFixed(2);
+                : (Number(factor) / 1e18).toFixed(2);
             accountNote = `health ${health}`;
           } catch {
             /* older pool without account data; the balances still stand */
@@ -236,10 +247,17 @@ export const ethereumFetchPositionsAction = createAction({
         if (contract.kind !== "POSITION") continue;
         if (!univ3) {
           // A plain ERC20 share token: a balance is the whole position.
-          const result = await ethCall(
-            contract.address,
-            `${SELECTORS.balanceOfAddress}${pad(wallet)}`,
-          );
+          // Guarded like the univ3 reads: a POSITION contract that is not
+          // an ERC20 (or is unreachable) must not stop the sweep.
+          let result: string;
+          try {
+            result = await ethCall(
+              contract.address,
+              `${SELECTORS.balanceOfAddress}${pad(wallet)}`,
+            );
+          } catch {
+            continue;
+          }
           const amount = BigInt(word(result, 0));
           if (amount > 0n) {
             positions.push({
@@ -253,23 +271,45 @@ export const ethereumFetchPositionsAction = createAction({
         }
         // Uniswap v3: enumerate the wallet's NFTs and split each one's
         // liquidity over the pool's current tick.
-        const slot = await ethCall(contract.address, SELECTORS.slot0);
+        // A stale plugin list (empty plugins on a registry entry seeded
+        // before the manager needed a plugin) makes the plain-ERC20 branch
+        // above call balanceOf on the NFT manager; the manager reverts and
+        // used to kill the whole sweep. These entry-level reads stay
+        // guarded: one unreachable or wrong-kind contract must not stop
+        // the sweep for every other protocol.
+        let slot: string;
+        try {
+          slot = await ethCall(contract.address, SELECTORS.slot0);
+        } catch {
+          continue;
+        }
         const tick = signedWord(slot, 1);
-        const countResult = await ethCall(
-          contract.address,
-          `${SELECTORS.nftBalanceOf}${pad(wallet)}`,
-        );
+        let countResult: string;
+        try {
+          countResult = await ethCall(
+            contract.address,
+            `${SELECTORS.nftBalanceOf}${pad(wallet)}`,
+          );
+        } catch {
+          continue;
+        }
         const count = Number(BigInt(word(countResult, 0)));
         for (let index = 0; index < count; index++) {
-          const idResult = await ethCall(
-            contract.address,
-            `${SELECTORS.tokenOfOwnerByIndex}${pad(wallet)}${pad(index)}`,
-          );
-          const tokenId = BigInt(word(idResult, 0));
-          const packed = await ethCall(
-            contract.address,
-            `${SELECTORS.positions}${pad(tokenId)}`,
-          );
+          let tokenId: bigint;
+          let packed: string;
+          try {
+            const idResult = await ethCall(
+              contract.address,
+              `${SELECTORS.tokenOfOwnerByIndex}${pad(wallet)}${pad(index)}`,
+            );
+            tokenId = BigInt(word(idResult, 0));
+            packed = await ethCall(
+              contract.address,
+              `${SELECTORS.positions}${pad(tokenId)}`,
+            );
+          } catch {
+            continue; // one unreadable token must not lose the rest
+          }
           const token0 = `0x${word(packed, 2).slice(-40)}`;
           const token1 = `0x${word(packed, 3).slice(-40)}`;
           const tickLower = signedWord(packed, 5);
@@ -308,7 +348,18 @@ export const ethereumFetchPositionsAction = createAction({
       }),
     ]);
 
-    return { positions: positions.length };
+    // The asset identifiers feed the register-missing-assets step: a
+    // protocol position can name an underlying the ledger never traded
+    // (an Aave reserve the wallet only ever supplied), so the registry
+    // would otherwise never learn its symbol or decimals.
+    const assets = [
+      ...new Set(
+        positions.flatMap((position) =>
+          position.assets.map((asset) => asset.asset),
+        ),
+      ),
+    ];
+    return { positions: positions.length, assets };
   },
 });
 

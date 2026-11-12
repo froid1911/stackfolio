@@ -34,6 +34,15 @@ interface WalletGlobalState {
 interface PortfolioGlobalState {
   ignoredAssets?: string[];
   priceOverrides?: Array<{ asset: string; price: string }>;
+  positions?: Array<{
+    wallet: string;
+    chainId: number;
+    positions: Array<{
+      protocol: string;
+      kind: string;
+      assets: Array<{ asset: string; amount: string }>;
+    }>;
+  }>;
 }
 
 interface PriceBookGlobalState {
@@ -201,8 +210,22 @@ export const ethereumHoldingsFromLedgerAction = createAction({
       });
     }
 
+    // Everything the portfolio can hold a view on: ledger assets and the
+    // assets of the DeFi positions the reconciler swept (supplied and
+    // borrowed alike — a borrowed stablecoin is an exposure the price book
+    // must have a row for, or the debts table renders blanks).
+    const identifiers = new Set<string>(nets.keys());
+    for (const entry of portfolio.positions ?? []) {
+      for (const position of entry.positions ?? []) {
+        for (const held of position.assets ?? []) {
+          if (typeof held.asset === "string") identifiers.add(held.asset);
+        }
+      }
+    }
+
     return {
       holdings,
+      identifiers: [...identifiers],
       totalValue: formatScaled(totalScaled, VALUE_SCALE),
       incomplete,
       baseCurrency: book.baseCurrency ?? "EUR",

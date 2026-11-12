@@ -126,6 +126,55 @@ describe("holdings-from-ledger", () => {
     expect(result.incomplete).toBe(false);
   });
 
+  it("lists ledger and position assets as identifiers to price", async () => {
+    // The prices round fetches by this list; a debt token that exists only
+    // in a position (never in a ledger) must appear, or the debts table
+    // stays blank forever.
+    get.mockImplementation((id: string) =>
+      Promise.resolve(
+        id === "p1"
+          ? doc("stackfolio/portfolio", {
+              ignoredAssets: [],
+              priceOverrides: [],
+              positions: [
+                {
+                  wallet: "0xaaa",
+                  chainId: 1,
+                  positions: [
+                    {
+                      protocol: "aave-v3",
+                      kind: "SPOT",
+                      assets: [
+                        { asset: USDC, amount: "-51176182102" },
+                        { asset: ETH, amount: "10062747000000000000" },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            })
+          : id === "b1"
+            ? book
+            : id === "r1"
+              ? registry
+              : id === "w1"
+                ? walletA
+                : walletB,
+      ),
+    );
+
+    const result = (await run({ asOf: "2026-11-11T00:00:00.000Z" })) as {
+      identifiers: string[];
+    };
+
+    // A borrowed stablecoin with no ledger row, and the dedup across
+    // ledger and positions: exactly the union, no repeats.
+    expect(result.identifiers).toContain(USDC);
+    expect(result.identifiers.filter((a) => a === USDC)).toHaveLength(1);
+    expect(result.identifiers).toContain(ETH);
+    expect(result.identifiers.filter((a) => a === ETH)).toHaveLength(1);
+  });
+
   it("reports a null value and incomplete when a price is missing", async () => {
     get.mockImplementation((id: string) =>
       Promise.resolve(

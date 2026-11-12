@@ -391,6 +391,19 @@ export async function reconcilePortfolio(
   for (const id of ownedIds) {
     const workflow = await io.readWorkflow(id);
     if (workflow) {
+      // Two documents claiming one spec key (a creation race from two
+      // passes): the later one is switched off and leaves the record,
+      // so the schedule runs once.
+      if (owned.has(workflow.name)) {
+        if (workflow.facts.status === "ENABLED") {
+          await io.updateWorkflow(id, [disableAction()]);
+          fixes.push({
+            code: "WORKFLOW_DISABLED",
+            message: `${workflow.name} was claimed twice; the duplicate was switched off.`,
+          });
+        }
+        continue;
+      }
       owned.set(workflow.name, { id, facts: workflow.facts });
       allIds.add(id);
     }

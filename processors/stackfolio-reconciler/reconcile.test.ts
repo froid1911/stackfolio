@@ -607,6 +607,33 @@ describe("reconcilePortfolio", () => {
     expect(disabled?.id).toBe("wf-redecode");
   });
 
+  it("switches off a duplicate claim on the same spec key", async () => {
+    const fake = new FakeIO();
+    fake.connectionStatus["eth-1"] = "OK";
+    const facts = fake.inSyncFacts("w1");
+    fake.workflows.set("wf-first", facts);
+    fake.workflows.set("wf-second", facts);
+    const doc = portfolioDocWith({
+      grant: true,
+      resources: { connectionId: "eth-1", workflowIds: ["wf-first", "wf-second"] },
+      lastCheck: { issues: [], fixes: [] },
+    });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+
+    // The duplicate is switched off...
+    const disabled = fake.updated.find((u) =>
+      u.actions.some((a) => (a as { type: string }).type === "SET_WORKFLOW_STATUS"),
+    );
+    expect(disabled?.id).toBe("wf-second");
+    // ...and leaves the record: only the keeper is dispatched back.
+    const resources = fake.dispatched
+      .flatMap((d) => d.actions)
+      .find((a) => (a as { type: string }).type === "RECORD_RESOURCES") as {
+      input: { workflowIds: string[] };
+    } | undefined;
+    expect(resources?.input.workflowIds).toEqual(["wf-first"]);
+  });
+
   it("never re-decodes a wallet whose history is still walking", async () => {
     const fake = new FakeIO();
     fake.wallets = [

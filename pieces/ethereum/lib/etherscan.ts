@@ -49,11 +49,6 @@ export function isImmutableCall(params: Record<string, string | number>): boolea
       String(params.endblock) !== ""
     );
   }
-  if (params.module === "logs" && action === "getLogs") {
-    return (
-      Number.isFinite(Number(params.endblock)) && String(params.endblock) !== ""
-    );
-  }
   if (params.module === "proxy") {
     if (["eth_getTransactionReceipt", "eth_getTransactionByHash"].includes(action)) {
       return true;
@@ -368,72 +363,11 @@ export function parseCount(value: unknown): number {
   return 0;
 }
 
-/** A log as the `logs` module answers it, narrowed for decoding. */
-export interface EtherscanLog {
-  address: string;
-  topics: string[];
-  data: string;
-  logIndex: number;
-  transactionHash: string;
-}
-
 type RawLog = Record<string, unknown>;
 
 /** String fields from a raw Etherscan object; anything else falls back. */
 function asText(value: unknown, fallback: string): string {
   return typeof value === "string" ? value : fallback;
-}
-
-/**
- * Logs of any of `addresses` in one block window. The endpoint takes at
- * most 20 comma-joined addresses per call and caps a page at 1000 entries;
- * `truncated` says a chunk hit the page ceiling, so the caller can shrink
- * the window rather than silently import a partial hit list.
- *
- * Ruling: the proxy module has no eth_getLogs - only `module=logs` answers.
- */
-export async function getLogs(
-  client: {
-    call(params: Record<string, string | number>): Promise<unknown>;
-  },
-  params: {
-    addresses: string[];
-    startBlock: number;
-    endBlock: number;
-    maxPages?: number;
-  },
-): Promise<{ logs: EtherscanLog[]; truncated: boolean }> {
-  const maxPages = params.maxPages ?? 10;
-  const logs: EtherscanLog[] = [];
-  let truncated = false;
-  for (let start = 0; start < params.addresses.length; start += 20) {
-    const csv = params.addresses.slice(start, start + 20).join(",");
-    for (let page = 1; page <= maxPages; page += 1) {
-      const batch = (await client.call({
-        module: "logs",
-        action: "getLogs",
-        address: csv,
-        startblock: params.startBlock,
-        endblock: params.endBlock,
-        page,
-        offset: 1000,
-        sort: "asc",
-      })) as RawLog[] | null;
-      const list = Array.isArray(batch) ? batch : [];
-      for (const raw of list) {
-        logs.push({
-          address: asText(raw.address, ""),
-          topics: Array.isArray(raw.topics) ? (raw.topics as string[]) : [],
-          data: asText(raw.data, "0x"),
-          logIndex: parseCount(raw.logIndex),
-          transactionHash: asText(raw.transactionHash, ""),
-        });
-      }
-      if (list.length < 1000) break;
-      if (page === maxPages) truncated = true;
-    }
-  }
-  return { logs, truncated };
 }
 
 /** A mined receipt narrowed to what the decode engine reads. */

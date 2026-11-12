@@ -1,13 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getLogs, getTransactionReceipt } from "./etherscan.js";
+import { getTransactionReceipt } from "./etherscan.js";
 import { manifestForChain } from "./manifest.js";
 import { SEED_MANIFESTS } from "./manifests/index.js";
-import {
-  contractChunks,
-  fetchDecodedRows,
-  mergeDecoded,
-} from "./decoded-import.js";
+import { fetchDecodedRows, mergeDecoded } from "./decoded-import.js";
 
 const index = manifestForChain(SEED_MANIFESTS, 1);
 
@@ -19,65 +15,7 @@ const clientReturning =
       },
     });
 
-describe("getLogs", () => {
-  it("chunks addresses to 20 per call and decodes the log shape", async () => {
-    const seen: string[] = [];
-    const client = clientReturning((params) => {
-      if (params.action !== "getLogs") return [];
-      seen.push(String(params.address));
-      return seen.length === 1
-        ? [
-            {
-              address: "0xPool",
-              topics: ["0xt0", "0xt1"],
-              data: "0x01",
-              logIndex: "0x0a",
-              transactionHash: "0xdead",
-            },
-          ]
-        : [];
-    });
-    const addresses = Array.from(
-      { length: 45 },
-      (_, i) => `0x${i.toString(16).padStart(40, "0")}`,
-    );
-    const { logs, truncated } = await getLogs(client, {
-      addresses,
-      startBlock: 100,
-      endBlock: 200,
-    });
-    expect(seen).toHaveLength(3);
-    expect(seen[0].split(",")).toHaveLength(20);
-    expect(seen[2].split(",")).toHaveLength(5);
-    expect(truncated).toBe(false);
-    expect(logs).toEqual([
-      {
-        address: "0xPool",
-        topics: ["0xt0", "0xt1"],
-        data: "0x01",
-        logIndex: 10,
-        transactionHash: "0xdead",
-      },
-    ]);
-  });
-
-  it("reports truncation once the page ceiling is hit", async () => {
-    const full = Array.from({ length: 1000 }, (_, i) => ({
-      address: "0xtok",
-      topics: ["0xt"],
-      data: "0x",
-      logIndex: String(i),
-      transactionHash: `0x${i}`,
-    }));
-    const client = clientReturning(() => full);
-    const { truncated } = await getLogs(client, {
-      addresses: ["0xtok"],
-      startBlock: 0,
-      endBlock: 1,
-    });
-    expect(truncated).toBe(true);
-  });
-});
+const REGISTRY = "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2";
 
 describe("getTransactionReceipt", () => {
   it("narrows the JSON-RPC receipt to what decoding needs", async () => {
@@ -107,26 +45,15 @@ describe("getTransactionReceipt", () => {
 });
 
 describe("fetchDecodedRows", () => {
-  it("fetches receipts only for hit hashes and stamps timestamps from blocks", async () => {
+  it("fetches receipts only for transactions sent to a registry contract", async () => {
     const calls: string[] = [];
     const client = clientReturning((params) => {
       const action = String(params.action);
       calls.push(action);
-      if (action === "getLogs") {
-        return [
-          {
-            address: "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2",
-            topics: ["0xb3d08482"],
-            data: "0x",
-            logIndex: "0x5",
-            transactionHash: "0xhit",
-          },
-        ];
-      }
       if (action === "eth_getTransactionReceipt") {
         return {
           transactionHash: "0xhit",
-          to: "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2",
+          to: REGISTRY,
           blockNumber: "0x64",
           logs: [],
         };
@@ -135,7 +62,7 @@ describe("fetchDecodedRows", () => {
         return { timestamp: "0x65f00000" };
       }
       if (action === "eth_getTransactionByHash") {
-        return { value: "0x0", to: "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2" };
+        return { value: "0x0", to: REGISTRY };
       }
       return [];
     });
@@ -143,34 +70,37 @@ describe("fetchDecodedRows", () => {
       index,
       chainId: 1,
       account: "0x1AD3d72e54Fb0eB46e87F82f77B284FC8a66b16C",
-      startBlock: 0,
-      endBlock: 1000,
+      transactions: [
+        { hash: "0xmiss", to: "0x1111111111111111111111111111111111111111" },
+        { hash: "0xhit", to: REGISTRY },
+        { hash: "", to: REGISTRY },
+      ],
     });
-    expect(calls.filter((c) => c === "eth_getTransactionReceipt")).toHaveLength(1);
+    expect(
+      calls.filter((c) => c === "eth_getTransactionReceipt"),
+    ).toHaveLength(1);
     expect(calls).toContain("eth_getBlockByNumber");
     expect(out.inert).toBe(0);
   });
 
-  it("defers hits beyond the receipt budget as overflow", async () => {
-    const hits = Array.from({ length: 25 }, (_, i) => ({
-      address: "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2",
-      topics: ["0xb3d08482"],
-      data: "0x",
-      logIndex: String(i),
-      transactionHash: `0xhit${i}`,
+  it("defers candidates beyond the receipt budget as overflow", async () => {
+    const transactions = Array.from({ length: 60 }, (_, i) => ({
+      hash: `0xhit${i}`,
+      to: REGISTRY,
     }));
     const client = clientReturning((params) => {
-      if (params.action === "getLogs") return hits;
       if (params.action === "eth_getTransactionReceipt")
         return { transactionHash: params.txhash, to: null, logs: [] };
+      if (params.action === "eth_getTransactionByHash") return { value: "0x0" };
+      if (params.action === "eth_getBlockByNumber")
+        return { timestamp: "0x65f00000" };
       return [];
     });
     const out = await fetchDecodedRows(client, {
       index,
       chainId: 1,
       account: "0x1",
-      startBlock: 0,
-      endBlock: 10,
+      transactions,
       receiptBudget: 20,
     });
     expect(out.overflow).toBe(true);
@@ -186,10 +116,13 @@ describe("fetchDecodedRows", () => {
       index,
       chainId: 1,
       account: "0x1",
-      startBlock: 0,
-      endBlock: 10,
+      transactions: [{ hash: "0xhit", to: REGISTRY }],
     });
-    expect(out).toMatchObject({ rows: [], decodedTxHashes: [], overflow: false });
+    expect(out).toMatchObject({
+      rows: [],
+      decodedTxHashes: [],
+      overflow: false,
+    });
   });
 });
 
@@ -216,13 +149,8 @@ describe("mergeDecoded", () => {
 
   it("is a no-op for an empty decode", () => {
     const generic = [row("0xaa")];
-    expect(mergeDecoded(generic, { rows: [], decodedTxHashes: [] })).toEqual(generic);
-  });
-});
-
-describe("log address chunks", () => {
-  it("splits contract sets into logscan-sized calls", () => {
-    const chunks = contractChunks(["0xa", "0xb", "0xc"]);
-    expect(chunks).toEqual([["0xa", "0xb", "0xc"]]);
+    expect(
+      mergeDecoded(generic, { rows: [], decodedTxHashes: [] }),
+    ).toEqual(generic);
   });
 });

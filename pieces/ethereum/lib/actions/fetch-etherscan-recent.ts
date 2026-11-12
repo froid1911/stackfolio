@@ -101,11 +101,10 @@ export async function fetchEtherscanRecent(
       index: opts.decode.index,
       chainId: opts.chainId,
       account: opts.address,
-      startBlock: opts.fromBlock,
-      endBlock: toBlock,
+      transactions: txs.map((tx) => ({ hash: tx.hash ?? "", to: tx.to })),
       timestampOf: (hash) => stamps.get(hash),
     });
-    if (decoded.overflow || decoded.logsTruncated) {
+    if (decoded.overflow) {
       skippedCategories.push("decoded-overflow");
     }
     rows = mergeDecoded(generic, decoded);

@@ -454,9 +454,6 @@ describe("the immutable response cache", () => {
       isImmutableCall({ module: "account", action: "balance", address: "0xabc" }),
     ).toBe(false);
     expect(
-      isImmutableCall({ module: "logs", action: "getLogs", startblock: 0, endblock: 9 }),
-    ).toBe(true);
-    expect(
         isImmutableCall({ module: "proxy", action: "eth_getTransactionReceipt", txhash: "0x1" }),
       ).toBe(true);
     expect(

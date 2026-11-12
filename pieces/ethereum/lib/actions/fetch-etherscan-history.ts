@@ -150,11 +150,10 @@ export async function fetchEtherscanHistory(
         index: opts.decode.index,
         chainId: opts.chainId,
         account: opts.address,
-        startBlock: block,
-        endBlock: end,
+        transactions: txs.map((tx) => ({ hash: tx.hash ?? "", to: tx.to })),
         timestampOf: (hash) => stamps.get(hash),
       });
-      if (decoded.overflow || decoded.logsTruncated) {
+      if (decoded.overflow) {
         skipped.add("decoded-overflow");
       }
       rows.push(...mergeDecoded(generic, decoded));

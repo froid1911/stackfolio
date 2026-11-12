@@ -271,14 +271,13 @@ const pad = (address: string) =>
   `0x${"0".repeat(24)}${address.toLowerCase().slice(2)}`;
 const AMT = "23680295108162211874";
 
-function decodingClient(opts: { logs?: unknown[] } = {}) {
+function decodingClient(opts: { txTo?: string } = {}) {
   const seen: string[] = [];
   const client: HistoryClient = {
     async call(params) {
       const action = String(params.action);
       seen.push(`${String(params.module)}.${action}`);
       if (action === "eth_blockNumber") return "0x" + (200_000).toString(16);
-      if (action === "getLogs") return opts.logs ?? [];
       if (action === "eth_getTransactionReceipt") {
         return {
           transactionHash: "0xaa",
@@ -302,8 +301,8 @@ function decodingClient(opts: { logs?: unknown[] } = {}) {
       }
       if (action === "eth_getTransactionByHash") return { value: "0x0" };
       if (action === "eth_getBlockByNumber") return { timestamp: "0x65f00000" };
-      const pages: Record<string, EtherscanRow[][]> = {};
-      if (action === "txlist" && !("0" in pages)) return [TX];
+      if (action === "txlist")
+        return opts.txTo ? [{ ...TX, to: opts.txTo }] : [TX];
       return [];
     },
   };
@@ -316,17 +315,7 @@ const REGISTRY_INDEX = manifestForChain(SEED_MANIFESTS, 1);
 
 describe("fetchEtherscanHistory with a registry", () => {
   it("replaces the generic rows of decoded txs with semantic ones", async () => {
-    const { client, seen } = decodingClient({
-      logs: [
-        {
-          address: POOL,
-          topics: [SUPPLY_TOPIC],
-          data: "0x",
-          logIndex: "0x1",
-          transactionHash: "0xaa",
-        },
-      ],
-    });
+    const { client, seen } = decodingClient({ txTo: POOL });
     const out = await fetchEtherscanHistory(client, {
       address: ADDR,
       chainId: 1,
@@ -337,7 +326,7 @@ describe("fetchEtherscanHistory with a registry", () => {
       budgetMs: 0,
       decode: { index: REGISTRY_INDEX },
     });
-    expect(seen).toContain("logs.getLogs");
+    expect(seen.filter((s) => s.startsWith("logs."))).toEqual([]);
     expect(out.rows.find((r) => r.eventIdentifier === "0xaa")).toBeUndefined();
     const supply = out.rows.find((r) => r.subtype === "DEPOSIT_ASSET");
     expect(supply).toMatchObject({

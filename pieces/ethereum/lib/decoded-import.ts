@@ -1,6 +1,5 @@
 import {
   getBlockTimestamp,
-  getLogs,
   getTransactionReceipt,
   getTransactionValue,
 } from "./etherscan.js";
@@ -8,35 +7,27 @@ import { decodeReceipts, type ReceiptLike } from "./protocol-decode.js";
 import type { ChainIndex } from "./manifest.js";
 import type { EventRow } from "./types.js";
 
-/** Split contract addresses into logscan-sized calls (the endpoint takes at
- * most 20 comma-joined addresses). */
-export function contractChunks(addresses: string[]): string[][] {
-  const unique = [...new Set(addresses.map((a) => a.toLowerCase()))];
-  const chunks: string[][] = [];
-  for (let i = 0; i < unique.length; i += 20) {
-    chunks.push(unique.slice(i, i + 20));
-  }
-  return chunks;
-}
-
 export interface DecodedFetch {
   rows: EventRow[];
   decodedTxHashes: string[];
   inert: number;
-  /** Hits existed beyond the receipt budget; the next window re-sees them
-   * only when the caller restarts the window - the truncation flag on the
-   * page walk covers that. */
+  /** Candidates existed beyond the receipt budget; they re-decode when the
+   * window is re-walked (a re-decode pass re-imports the window). */
   overflow: boolean;
-  /** The logscan itself hit the page ceiling. */
-  logsTruncated: boolean;
 }
 
 /**
- * Registry-aware rows for one block window: scan the registry contracts'
- * logs, fetch receipts for the hit transactions, and decode them against
- * the manifest index. Enrichment never fails an import - a throwing
- * indexer, a rate limit, any error yields the empty decode and the generic
- * rows stand on their own.
+ * Registry-aware rows for one block window: take the account's own
+ * transactions whose recipient is a registry contract, fetch their
+ * receipts, and decode them against the manifest index. Scanning the
+ * registry contracts' own logs instead drowns in stranger's traffic (a
+ * busy pool emits more logs per window than the endpoint pages), and its
+ * address-list calls fail outright on Etherscan V2 - only the account's
+ * txlist is a cheap, precise candidate source. A protocol interaction
+ * hidden behind a non-registry `to` (a zap contract calling Curve, say)
+ * needs the zap in the registry to be seen; that is the accepted gap.
+ * Enrichment never fails an import - a throwing indexer, a rate limit,
+ * any error yields the empty decode and the generic rows stand alone.
  */
 export async function fetchDecodedRows(
   client: {
@@ -46,37 +37,43 @@ export async function fetchDecodedRows(
     index: ChainIndex;
     chainId: number;
     account: string;
-    startBlock: number;
-    endBlock: number;
+    /** The window's account transactions (txlist rows); only those sent to
+     * a registry contract become decode candidates. */
+    transactions: readonly { hash: string; to?: string | null }[];
     /** Receipts fetched per window; the free plan's budget stays predictable.
-     * Default 20. */
+     * Default 50. */
     receiptBudget?: number;
     /** Timestamp lookup from an already-known source (the generic rows of
      * the same transactions); falls back to one block call per receipt. */
     timestampOf?: (txHash: string) => string | undefined;
   },
 ): Promise<DecodedFetch> {
+  const empty: DecodedFetch = {
+    rows: [],
+    decodedTxHashes: [],
+    inert: 0,
+    overflow: false,
+  };
   try {
-    const addresses = opts.index.contracts.map((contract) => contract.address);
-    if (addresses.length === 0) {
-      return {
-        rows: [],
-        decodedTxHashes: [],
-        inert: 0,
-        overflow: false,
-        logsTruncated: false,
-      };
-    }
-    const { logs, truncated } = await getLogs(client, {
-      addresses,
-      startBlock: opts.startBlock,
-      endBlock: opts.endBlock,
-    });
-    const hits = [...new Set(logs.map((log) => log.transactionHash))].filter(
-      Boolean,
+    const registry = new Set(
+      opts.index.contracts.map((contract) => contract.address.toLowerCase()),
     );
-    const budget = opts.receiptBudget ?? 20;
-    const chosen = hits.slice(0, budget);
+    if (registry.size === 0) return empty;
+    const candidates = [
+      ...new Set(
+        opts.transactions
+          .filter(
+            (tx) =>
+              tx.hash !== "" &&
+              tx.to !== null &&
+              tx.to !== undefined &&
+              registry.has(tx.to.toLowerCase()),
+          )
+          .map((tx) => tx.hash),
+      ),
+    ];
+    const budget = opts.receiptBudget ?? 50;
+    const chosen = candidates.slice(0, budget);
     const receipts: ReceiptLike[] = [];
     for (const hash of chosen) {
       const receipt = await getTransactionReceipt(client, hash);
@@ -93,19 +90,9 @@ export async function fetchDecodedRows(
       opts.account,
       receipts,
     );
-    return {
-      ...decoded,
-      overflow: hits.length > budget,
-      logsTruncated: truncated,
-    };
+    return { ...decoded, overflow: candidates.length > budget };
   } catch {
-    return {
-      rows: [],
-      decodedTxHashes: [],
-      inert: 0,
-      overflow: false,
-      logsTruncated: false,
-    };
+    return empty;
   }
 }
 

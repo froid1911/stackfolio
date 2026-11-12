@@ -70,6 +70,10 @@ function pkgCopies(name) {
  * the names ESM consumers import. `mode` picks the shim shape above:
  * "static" when consumers only name-import.
  */
+/** Named ESM re-exports after inlining an implementation whose
+ * `exports.name = ...` assignments were kept (tail references `exports`). */
+const NAMED = (names) => names.map((n) => "export const " + n + " = exports." + n + ";\n").join("");
+
 const FACES = [
   {
     // @powerhousedao shared bundle imports { stringify } (and CJS consumers
@@ -96,7 +100,7 @@ const FACES = [
     name: "use-sync-external-store",
     file: "shim/index.js",
     mode: "static",
-    tail: "export const useSyncExternalStore = __cjsModule.exports.useSyncExternalStore;\n",
+    tail: NAMED(["useSyncExternalStore"]),
   },
   {
     // The other subpath entries; zustand imports the root entry by name
@@ -104,19 +108,19 @@ const FACES = [
     name: "use-sync-external-store",
     file: "index.js",
     mode: "static",
-    tail: "export const useSyncExternalStore = __cjsModule.exports.useSyncExternalStore;\n",
+    tail: NAMED(["useSyncExternalStore"]),
   },
   {
     name: "use-sync-external-store",
     file: "with-selector.js",
     mode: "static",
-    tail: "export const useSyncExternalStoreWithSelector = __cjsModule.exports.useSyncExternalStoreWithSelector;\n",
+    tail: NAMED(["useSyncExternalStoreWithSelector"]),
   },
   {
     name: "use-sync-external-store",
     file: "shim/with-selector.js",
     mode: "static",
-    tail: "export const useSyncExternalStoreWithSelector = __cjsModule.exports.useSyncExternalStoreWithSelector;\n",
+    tail: NAMED(["useSyncExternalStoreWithSelector"]),
   },
 ];
 
@@ -135,27 +139,21 @@ function devImplOf(cur, fileDir) {
   return existsSync(join(fileDir, rel)) ? rel : null;
 }
 
-function shimSource(stem, face, devRel) {
+function shimSource(stem, face, devRel, devSource) {
   const devImport = devRel ? "./" + devRel.replace(/\\/g, "/") : "./" + stem + ".cjs";
   const header =
     "// " + SHIM_MARK + " (stackfolio postinstall): ESM view over the\n" +
     "// CommonJS implementation — Vite dev serves .cjs raw, so ESM consumers\n" +
     "// import through this shim instead.\n";
   if (face.mode === "static") {
-    // `__cjsModule.exports` is the dev implementation's module.exports:
-    // its default export when Node/bundlers apply CJS interop, the
-    // namespace otherwise (raw .js in Vite dev — its CJS named-export
-    // synthetics cover the namespaced form).
-    return (
-      header +
-      "// Static re-export: bundlers resolve named imports statically, and\n" +
-      "// the dev implementation is the browser build. The CJS dispatcher\n" +
-      "// (same exports, dev/prod-selected by process.env.NODE_ENV) remains\n" +
-      "// in ." + "/" + stem + ".cjs for require() consumers.\n" +
-      'import __devDefault, * as __devNs from "' + devImport + '";\n' +
-      "const __cjsModule = { exports: __devDefault ?? __devNs };\n" +
-      face.tail
-    );
+    // Inline the dev implementation instead of importing it: Vite dev
+    // serves .js/.cjs raw without CJS interop, so an import would fail
+    // exactly like the original did. The dev build's guards
+    // (`"production" !== process.env.NODE_ENV && (function(){…})()`)
+    // become `true &&` — Vite dev defines process.env.NODE_ENV, and the
+    // inlined code runs the dev path. The dispatcher and production build
+    // remain in ./index.cjs for require() consumers.
+    return esmInline(devSource ?? "", face.tail, { keepExports: true });
   }
   return (
     header +
@@ -219,13 +217,13 @@ for (const face of FACES) {
       writeFileSync(cjs, cur);
       const stem = face.file.split("/").pop().replace(/\.js$/, "");
       let out;
-      if (face.mode === "static" && !devRel) {
-        // Single-file CJS implementation (safe-stable-stringify): inline
-        // the implementation with its export wiring replaced by the ESM
-        // tail — no import, so no raw-CJS edge in the browser graph.
-        out = esmInline(cur, face.tail);
+      if (face.mode === "static") {
+        // Inline the browser build (dev implementation, or the entry
+        // itself for single-file CJS): a static import would hit raw CJS.
+        const devSource = devRel ? readFileSync(join(dirname(file), devRel), "utf8") : cur;
+        out = shimSource(stem, face, devRel ? "./" + devRel : null, devSource).replaceAll("././", "./");
       } else {
-        out = shimSource(stem, face, devRel ? "./" + devRel : null).replaceAll("././", "./");
+        out = shimSource(stem, face, devRel ? "./" + devRel : null, cur).replaceAll("././", "./");
       }
       writeFileSync(file, out);
       console.log(`[stackfolio] ESM face for ${face.name} ${face.file}: ${dir}`);
@@ -241,12 +239,13 @@ for (const face of FACES) {
  * `exports.name = …` assignment lines and the `@ts-expect-error` directives
  * attached to them, plus any UMD footer), plus `tail`'s export statements.
  */
-function esmInline(cjsSource, tail) {
+function esmInline(cjsSource, tail, opts = {}) {
   const lines = cjsSource.split("\n");
   const out = [];
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx];
-    if (/^\s*(?:module\.)?exports(?:\.\w+)?\s*=/.test(line)) continue;
+    if (/^\s*module\.exports(?:\.\w+)?\s*=/.test(line)) continue;
+    if (!opts.keepExports && /^\s*exports(?:\.\w+)?\s*=/.test(line)) continue;
     if (/\/\*\* @preserve/.test(line)) continue; // UMD footer
     if (
       /^\/\/ @ts-expect-error/.test(line) &&
@@ -263,6 +262,7 @@ function esmInline(cjsSource, tail) {
     "// without interop, so ESM consumers (raw-served @powerhousedao\n" +
     "// bundles) import this file instead; require() consumers keep the\n" +
     "// original in ./index.cjs.\n" +
+    (opts.keepExports ? "const exports = {};\n" : "") +
     out.join("\n").trimEnd() + "\n" + tail
   );
 }

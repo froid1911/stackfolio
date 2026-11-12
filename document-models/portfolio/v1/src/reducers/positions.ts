@@ -19,6 +19,12 @@ export const portfolioPositionsOperations: PortfolioPositionsOperations = {
         note: position.note ?? null,
       })),
     };
+    // Documents created before the positions field existed carry no key
+    // at all; without this backfill SET_POSITIONS throws and the whole
+    // sweep fails on them.
+    if (!Array.isArray(state.positions)) {
+      state.positions = [];
+    }
     const index = state.positions.findIndex(
       (p) =>
         p.wallet === action.input.wallet && p.chainId === action.input.chainId,

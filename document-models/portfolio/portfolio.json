@@ -300,7 +300,7 @@
               "description": "",
               "schema": "input SetPositionsInput {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionInput!]!\n}\n\ninput PositionInput {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAssetInput!]!\n  note: String\n}\n\ninput PositionAssetInput {\n  asset: String!\n  amount: String!\n}",
               "template": "",
-              "reducer": "const entry = {\n  wallet: action.input.wallet,\n  chainId: action.input.chainId,\n  fetchedAt: action.input.fetchedAt,\n  positions: action.input.positions,\n};\nconst index = state.positions.findIndex(\n  (p) => p.wallet === action.input.wallet && p.chainId === action.input.chainId,\n);\nif (index === -1) {\n  state.positions.push(entry);\n} else {\n  state.positions[index] = entry;\n};",
+              "reducer": "const entry = {\n  wallet: action.input.wallet,\n  chainId: action.input.chainId,\n  fetchedAt: action.input.fetchedAt,\n  positions: action.input.positions,\n};\n// Documents created before the positions field existed carry no key at\n// all; without this backfill SET_POSITIONS throws and the sweep fails.\nif (!Array.isArray(state.positions)) {\n  state.positions = [];\n}\nconst index = state.positions.findIndex(\n  (p) => p.wallet === action.input.wallet && p.chainId === action.input.chainId,\n);\nif (index === -1) {\n  state.positions.push(entry);\n} else {\n  state.positions[index] = entry;\n};",
               "errors": [],
               "examples": [],
               "scope": "global"

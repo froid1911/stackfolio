@@ -43,9 +43,14 @@ describe("SnapshotOperations", () => {
     let document = reducer(utils.createDocument(), takeSnapshot(validInput()));
     document = reducer(
       document,
-      takeSnapshot(validInput({ id: "snap-2", timestamp: "2026-11-12T00:00:00.000Z" })),
+      takeSnapshot(
+        validInput({ id: "snap-2", timestamp: "2026-11-12T00:00:00.000Z" }),
+      ),
     );
-    document = reducer(document, takeSnapshot(validInput({ totalValue: "1100" })));
+    document = reducer(
+      document,
+      takeSnapshot(validInput({ totalValue: "1100" })),
+    );
 
     expect(document.state.global.snapshots).toHaveLength(2);
     expect(document.state.global.snapshots[0].totalValue).toBe("1100");

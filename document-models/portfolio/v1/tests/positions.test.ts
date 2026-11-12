@@ -93,4 +93,19 @@ describe("PositionsOperations", () => {
 
     expect(document.state.global.positions[0].positions).toEqual([]);
   });
+
+  it("backfills the positions list on documents predating the field", () => {
+    const legacy = reducer(utils.createDocument(), set("0xaa", 1, []));
+    // Simulate the stored shape of a document created before the model
+    // had a positions field: the key is simply absent.
+    delete (legacy.state.global as { positions?: unknown }).positions;
+
+    const document = reducer(
+      legacy,
+      set("0xaa", 1, [entry("aave-v3", "1500")]),
+    );
+
+    expect(document.operations.global.at(-1)?.error).toBeUndefined();
+    expect(document.state.global.positions).toHaveLength(1);
+  });
 });

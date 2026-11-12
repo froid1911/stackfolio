@@ -23,6 +23,8 @@ const resources = {
   priceBookDocumentId: "b1",
   stakingDocumentId: "s1",
   walletDocumentIds: ["w1", "w2"],
+  validatorIndices: [7],
+  withdrawalAddresses: ["0xabcd"],
 };
 
 const newIds = (prefix: string) => {
@@ -142,6 +144,11 @@ describe("specs", () => {
     ]);
     expect(off.steps.map((s) => s.name)).toEqual(["validators", "import"]);
     expect(on.trigger).toEqual({ kind: "interval", seconds: 86_400 });
+    const validators = on.steps[0];
+    expect(validators.config).toMatchObject({
+      indicesJson: [7],
+      withdrawalAddressesJson: ["0xabcd"],
+    });
   });
 
   it("builds a new workflow in runtime order", () => {

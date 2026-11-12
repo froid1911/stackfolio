@@ -47,7 +47,7 @@ class FakeIO {
   dispatched: Array<{ id: string; actions: unknown[] }> = [];
   workflows = new Map<string, { name: string; facts: WorkflowFacts }>();
   wallets: Array<{ id: string; state: WalletAccountState }> = [];
-  singletons: Record<string, { id: string; name: string } | null> = {};
+  singletons: Record<string, { id: string; name: string; state?: unknown } | null> = {};
   connectionStatus: Record<string, string | null> = {};
   reactorConnectionId: string | null = "reac-1";
   nextId = 1;
@@ -82,7 +82,10 @@ class FakeIO {
       findChainConnection: () => Promise.resolve(null),
       findReactorConnection: () => Promise.resolve(this.reactorConnectionId),
       findWallets: () => Promise.resolve(this.wallets),
-      findSingleton: (type) => Promise.resolve(this.singletons[type] ?? null),
+      findSingleton: (type) => {
+        const hit = this.singletons[type];
+        return Promise.resolve(hit ? { state: undefined, ...hit } : null);
+      },
       dispatchPortfolio: (id, actions) => {
         this.dispatched.push({ id, actions });
         return Promise.resolve();
@@ -227,6 +230,47 @@ describe("reconcilePortfolio", () => {
     expect(step?.input).toMatchObject({
       actionName: "sync-hyperliquid",
       config: { hyperliquidDocumentId: "h1" },
+    });
+  });
+
+  it("feeds watched validators and mainnet wallet addresses to the staking spec", async () => {
+    const fake = new FakeIO();
+    fake.wallets = [
+      wallet("w1"),
+      wallet("w2", { chainId: 10 }),
+      wallet("w3", { ignored: true }),
+    ];
+    fake.singletons["stackfolio/eth-staking"] = {
+      id: "s1",
+      name: "ETH Staking",
+      state: {
+        validators: [
+          { index: 7 },
+          { index: 11 },
+          { index: "bad" },
+        ],
+      },
+    };
+    const doc = portfolioDocWith({ grant: true });
+    await reconcilePortfolio(doc, emptyRecorded(), fake.io());
+
+    const built = fake.created.find((c) => c.key === "staking-daily");
+    expect(built).toBeDefined();
+    const actions = built!.actions as {
+      type: string;
+      input?: { actionName?: string; config?: Record<string, unknown> };
+    }[];
+    const validators = actions.find(
+      (a) => a.input?.actionName === "fetch-validators",
+    );
+    // Watched indices go verbatim; non-integers are dropped. Addresses are
+    // the non-ignored mainnet wallets only; w2 (chain 10) and w3 (ignored)
+    // can't host Ethereum validators withdrawing here.
+    expect(validators?.input?.config).toMatchObject({
+      indicesJson: [7, 11],
+      withdrawalAddressesJson: [
+        `0x${"w1".repeat(40).slice(0, 40)}`,
+      ],
     });
   });
 

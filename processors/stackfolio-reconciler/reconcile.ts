@@ -85,8 +85,16 @@ export type ReconcileIO = {
    * progress stood still, so the workflow behind it has stalled.
    */
   progressFingerprint(key: string, fingerprint: string): boolean;
-  /** The first document of `type` in the drive; the drive holds one. */
-  findSingleton(type: string): Promise<{ id: string; name: string } | null>;
+  /**
+   * The first document of `type` in the drive; the drive holds one. The
+   * global state rides along: the staking round reads the watched
+   * validator indices straight out of it.
+   */
+  findSingleton(type: string): Promise<{
+    id: string;
+    name: string;
+    state: unknown;
+  } | null>;
   /** Portfolio-document actions (RECORD_CHECK, RECORD_RESOURCES). */
   dispatchPortfolio(id: string, actions: Action[]): Promise<void>;
   dispatchWallet(id: string, actions: Action[]): Promise<void>;
@@ -322,6 +330,16 @@ export async function reconcilePortfolio(
     );
   }
   if (staking) {
+    const watchedValidators = Array.isArray(
+      (staking.state as { validators?: unknown } | null | undefined)?.validators,
+    )
+      ? (
+          (staking.state as { validators: Array<{ index: number }> })
+            .validators ?? []
+        )
+          .map((validator) => validator.index)
+          .filter((index) => Number.isInteger(index))
+      : [];
     specs.push(
       stakingSpec({
         portfolioDocumentId: doc.id,
@@ -332,6 +350,12 @@ export async function reconcilePortfolio(
           .filter((w) => !w.state.ignored)
           .map((w) => w.id),
         autoSnapshotEnabled: s.autoSnapshot.enabled,
+        validatorIndices: watchedValidators,
+        // The beacon resolves withdrawal addresses; only mainnet wallets
+        // can have Ethereum validators withdrawing to them.
+        withdrawalAddresses: wallets
+          .filter((w) => !w.state.ignored && w.state.chainId === 1)
+          .map((w) => w.state.address),
       }),
     );
   }

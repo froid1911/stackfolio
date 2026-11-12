@@ -304,7 +304,11 @@ export class StackfolioReconciler implements IProcessor {
         const page = await read.find({ type, parentId: this.driveId });
         const first = page.results.at(0);
         if (!first) return null;
-        return { id: first.header.id, name: first.header.name };
+        return {
+          id: first.header.id,
+          name: first.header.name,
+          state: (first.state as unknown as { global?: unknown })?.global,
+        };
       },
       dispatchPortfolio: async (portfolioId, actions) => {
         await dispatch.execute(portfolioId, "main", actions);

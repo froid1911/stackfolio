@@ -380,12 +380,17 @@ export function pricesSpec(resources: PortfolioResources): WorkflowSpec {
 }
 
 /**
- * The daily staking round: validators by index and by withdrawal address,
- * filed onto the staking document; with auto-snapshot enabled, the priced
- * holdings follow and land as a portfolio snapshot.
+ * The daily staking round: validators by index (the ones watched on the
+ * staking document) and by withdrawal address (every tracked mainnet
+ * wallet), filed onto the staking document; with auto-snapshot enabled,
+ * the priced holdings follow and land as a portfolio snapshot.
  */
 export function stakingSpec(
-  resources: PortfolioResources & { autoSnapshotEnabled: boolean },
+  resources: PortfolioResources & {
+    autoSnapshotEnabled: boolean;
+    validatorIndices: number[];
+    withdrawalAddresses: string[];
+  },
 ): WorkflowSpec {
   const steps: StepSpec[] = [
     {
@@ -393,8 +398,8 @@ export function stakingSpec(
       piece: "ethereum",
       action: "fetch-validators",
       config: {
-        indicesJson: [],
-        withdrawalAddressesJson: [],
+        indicesJson: resources.validatorIndices,
+        withdrawalAddressesJson: resources.withdrawalAddresses,
         hour: firedAt,
       },
     },

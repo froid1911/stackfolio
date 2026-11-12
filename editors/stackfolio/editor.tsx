@@ -9,6 +9,7 @@ import {
   useDocumentById,
   useSelectedDrive,
   useSetPHAppConfig,
+  useSetSearchParams,
 } from "@powerhousedao/reactor-browser";
 import type { EditorProps } from "document-model";
 import { useState } from "react";
@@ -34,6 +35,14 @@ import { Dashboard } from "./components/Dashboard.js";
 import { Prices } from "./components/Prices.js";
 import { Staking } from "./components/Staking.js";
 import { Transactions } from "./components/Transactions.js";
+import { Pnl } from "./components/Pnl.js";
+import {
+  DeFi,
+  PositionsByProtocol,
+  type DocSnapshot,
+  type DocWalletPositions,
+} from "./components/DeFi.js";
+import { short } from "./components/Dashboard.js";
 import { AddAccountForm, Setup } from "./components/Setup.js";
 import { DriveContents } from "./components/DriveContents.js";
 import { FolderTree } from "./components/FolderTree.js";
@@ -109,6 +118,7 @@ export default function Editor({ children }: EditorProps) {
         )}
         {active === "transactions" && <TransactionsSection driveId={driveId} />}
         {active === "staking" && <StakingSection driveId={driveId} />}
+        {active === "pnl" && <PnlSection driveId={driveId} list={list} />}
         {active === "assets" && <AssetsSection driveId={driveId} list={list} />}
         {active === "prices" && <PricesSection driveId={driveId} list={list} />}
       </div>
@@ -148,7 +158,78 @@ function AccountsSection({
         </div>
       )}
       <Accounts accounts={accounts} issues={issues} />
+      <div className="px-6 pb-6">
+        <DeFiSection driveId={driveId} />
+      </div>
     </div>
+  );
+}
+
+/** Portfolio-document state the DeFi views read directly: positions the
+ * reconciler fetched and the newest snapshot's liabilities. */
+function usePortfolioBook(list: { kind: string; id: string; documentType?: string }[]) {
+  const [doc] = useDocumentById(portfolioNodeId(list) ?? "");
+  const global = (
+    doc as
+      | {
+          global?: {
+            baseCurrency?: string;
+            positions?: unknown;
+            snapshots?: { timestamp: string }[];
+          };
+        }
+      | undefined
+  )?.global;
+  const snapshots = [...(global?.snapshots ?? [])].sort((a, b) =>
+    a.timestamp.localeCompare(b.timestamp),
+  );
+  return {
+    currency: global?.baseCurrency ?? "EUR",
+    positions: (global?.positions ?? []) as DocWalletPositions[],
+    latestSnapshot: snapshots.at(-1) as unknown as DocSnapshot | undefined,
+  };
+}
+
+function DeFiSection({ driveId }: { driveId: string }) {
+  const accounts = useAccounts(driveId);
+  const assets = useAssets(driveId);
+  const nodes = useNodesInSelectedDrive();
+  const book = usePortfolioBook(nodes ?? []);
+  return (
+    <DeFi
+      positions={book.positions}
+      latestSnapshot={book.latestSnapshot}
+      assets={assets.data ?? []}
+      currency={book.currency}
+      walletLabel={(address) =>
+        (accounts.data ?? []).find((a) => a.address === address)?.label ||
+        short(address)
+      }
+    />
+  );
+}
+
+function PnlSection({
+  driveId,
+  list,
+}: {
+  driveId: string;
+  list: { kind: string; id: string; documentType?: string }[];
+}) {
+  const accounts = useAccounts(driveId);
+  const assets = useAssets(driveId);
+  const book = usePortfolioBook(list);
+  const setSearchParams = useSetSearchParams();
+  return (
+    <Pnl
+      driveId={driveId}
+      currency={book.currency}
+      assets={assets}
+      accounts={accounts}
+      onOpenEvents={(ids) =>
+        setSearchParams({ tab: "transactions", ids: ids.join(",") })
+      }
+    />
   );
 }
 
@@ -185,7 +266,15 @@ function DashboardSection({
 function TransactionsSection({ driveId }: { driveId: string }) {
   const accounts = useAccounts(driveId);
   const assets = useAssets(driveId);
-  const [filter, setFilter] = useState<EventsFilter>({ ignored: false, first: 50 });
+  // A P&L row can pin the view to particular ledger events: ?ids=…
+  const { ids } = useSearchParams();
+  const [filter, setFilter] = useState<EventsFilter>(() => ({
+    ignored: false,
+    first: 50,
+    ...(ids
+      ? { ids: ids.split(",").filter(Boolean) }
+      : {}),
+  }));
   const page = useEventsPage(driveId, filter);
   return (
     <Transactions
@@ -230,7 +319,20 @@ function AssetsSection({
   const [doc] = useDocumentById(portfolioNodeId(list) ?? "");
   const currency =
     (doc as { global?: { baseCurrency?: string } } | undefined)?.global?.baseCurrency ?? "EUR";
-  return <Assets assets={assets} prices={prices} snapshots={snapshots} currency={currency} />;
+  const book = usePortfolioBook(list);
+  return (
+    <div className="grid gap-4">
+      <Assets assets={assets} prices={prices} snapshots={snapshots} currency={currency} />
+      {book.positions.length > 0 && (
+        <div className="px-6 pb-6">
+          <p className="mb-2 text-xs uppercase text-muted-foreground">
+            Held inside protocols
+          </p>
+          <PositionsByProtocol positions={book.positions} assets={assets.data ?? []} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function PricesSection({ driveId, list }: { driveId: string; list: { kind: string; id: string; documentType?: string }[] }) {

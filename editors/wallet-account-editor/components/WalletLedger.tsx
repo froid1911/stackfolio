@@ -1,6 +1,6 @@
 import { useSelectedWalletAccountDocument, actions } from "document-models/wallet-account";
 import { useState } from "react";
-import { fmtAmount } from "../../stackfolio/lib/format.js";
+import { fmtAmount, fmtFiat } from "../../stackfolio/lib/format.js";
 
 const PAGE = 50;
 
@@ -20,6 +20,9 @@ export function WalletLedger() {
   const [document, dispatch] = useSelectedWalletAccountDocument();
   const [shown, setShown] = useState(PAGE);
   const [error, setError] = useState<string | null>(null);
+  const [pricing, setPricing] = useState<string | null>(null);
+  const [priceValue, setPriceValue] = useState("");
+  const [priceUnit, setPriceUnit] = useState("EUR");
   const state = document.state.global;
   const ledger = [...state.ledger].sort((a, b) =>
     a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : b.sequenceIndex - a.sequenceIndex,
@@ -58,6 +61,7 @@ export function WalletLedger() {
             <th className="py-2">Time</th>
             <th>Type</th>
             <th className="text-right">Amount</th>
+            <th className="text-right">Valuation</th>
             <th>Counterparty</th>
             <th>Notes</th>
             <th />
@@ -82,6 +86,41 @@ export function WalletLedger() {
                 {event.type === "SPEND" ? "-" : ""}
                 {fmtAmount(event.amount, decimalsOf(event.asset), 6)}{" "}
                 <span className="text-xs">{event.asset}</span>
+              </td>
+              <td className="text-right whitespace-nowrap">
+                {event.valuation ? (
+                  <span className="font-mono text-xs">
+                    {fmtFiat(event.valuation.price)} {event.valuation.unit}
+                    {event.valuation.granularity === "DAY" && (
+                      <span
+                        className="ml-1 rounded bg-muted px-1 text-[10px] text-muted-foreground"
+                        title={`Day-rounded price, pinned ${new Date(event.valuation.pinnedAt).toLocaleString()}`}
+                      >
+                        day
+                      </span>
+                    )}
+                    {event.valuation.source === "MANUAL" && (
+                      <span
+                        className="ml-1 rounded bg-muted px-1 text-[10px] text-muted-foreground"
+                        title="You set this price"
+                      >
+                        manual
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-xs underline"
+                    onClick={() => {
+                      setPricing(event.id);
+                      setPriceValue("");
+                      setPriceUnit("EUR");
+                    }}
+                  >
+                    set price
+                  </button>
+                )}
               </td>
               <td className="max-w-[200px] truncate">
                 {event.counterpartyLabel ?? event.counterparty ?? "—"}
@@ -141,6 +180,72 @@ export function WalletLedger() {
           ))}
         </tbody>
       </table>
+      {pricing && (
+        <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/30">
+          <div className="w-80 rounded-xl border border-border bg-card p-4 text-sm">
+            <p className="font-semibold">Price this event</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              One whole unit of the asset, in your base currency. Recorded as
+              a manual valuation; the books re-fold the moment it lands.
+            </p>
+            <label className="mt-3 block text-xs">
+              Price per unit
+              <input
+                className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono"
+                placeholder="2000.00"
+                value={priceValue}
+                onChange={(e) => setPriceValue(e.target.value)}
+              />
+            </label>
+            <label className="mt-2 block text-xs">
+              Unit
+              <input
+                className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5"
+                value={priceUnit}
+                onChange={(e) => setPriceUnit(e.target.value)}
+              />
+            </label>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded border border-border px-3 py-1 text-xs"
+                onClick={() => setPricing(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+                disabled={!/^\d+(\.\d+)?$/.test(priceValue)}
+                onClick={() => {
+                  const event = ledger.find((e) => e.id === pricing);
+                  if (!event) return;
+                  run(
+                    actions.pinValuations({
+                      events: [
+                        {
+                          id: event.id,
+                          sequenceIndex: event.sequenceIndex,
+                          valuation: {
+                            unit: priceUnit || "EUR",
+                            price: priceValue,
+                            source: "MANUAL",
+                            granularity: "NONE",
+                            pinnedAt: new Date().toISOString(),
+                          },
+                        },
+                      ],
+                    }),
+                  );
+                  setPricing(null);
+                }}
+              >
+                Pin valuation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {shown < ledger.length && (
         <button
           type="button"

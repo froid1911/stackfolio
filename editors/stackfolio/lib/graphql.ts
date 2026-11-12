@@ -47,6 +47,8 @@ export interface EventsPage {
 }
 
 export interface EventsFilter {
+  /** Ledger event ids to pin; the deep link from the P&L page. */
+  ids?: string[];
   address?: string;
   asset?: string;
   types?: string[];
@@ -219,6 +221,12 @@ export interface PortfolioApi {
   latestPrices: Price[];
   priceHistory: PricePoint[];
   priceOverrides: Override[];
+  openLots: Lot[];
+  realizedEvents: RealizedEvent[];
+  incomeByMonth: Income[];
+  pnlReport: PnlBucket[];
+  unpricedSummary: Unpriced[];
+  hyperliquidAccounts: HyperliquidAccount[];
 }
 
 function usePortfolioField<K extends keyof PortfolioApi>(
@@ -264,9 +272,9 @@ export function useEventsPage(
   filter: EventsFilter,
 ): QueryState<EventsPage> {
   return usePortfolioField(
-    `query ($driveId: String! $address: String $asset: String $types: [String!] $ignored: Boolean $from: String $to: String $query: String $first: Int $offset: Int) {
+    `query ($driveId: String! $ids: [String!] $address: String $asset: String $types: [String!] $ignored: Boolean $from: String $to: String $query: String $first: Int $offset: Int) {
       portfolioApi {
-        events(driveId: $driveId address: $address asset: $asset types: $types ignored: $ignored from: $from to: $to query: $query first: $first offset: $offset) {
+        events(driveId: $driveId ids: $ids address: $address asset: $asset types: $types ignored: $ignored from: $from to: $to query: $query first: $first offset: $offset) {
           total
           rows { ${EVENTS_ROWS} }
         }
@@ -358,5 +366,133 @@ export function useOverrides(driveId: string): QueryState<Override[]> {
     `query ($driveId: String!) { portfolioApi { priceOverrides(driveId: $driveId) { documentId asset price setAt } } }`,
     { driveId },
     "priceOverrides",
+  );
+}
+
+/** An open cost-basis lot; unit cost is per whole unit, 8 decimals. */
+export interface Lot {
+  wallet: string;
+  asset: string;
+  sourceEventId: string;
+  sourceSeq: number;
+  quantity: string;
+  unitCost: string;
+}
+
+export interface ConsumedLot {
+  sourceEventId: string;
+  quantity: string;
+  cost: string;
+}
+
+export interface RealizedEvent {
+  id: string;
+  wallet: string;
+  asset: string;
+  timestamp: string;
+  quantity: string;
+  cost: string;
+  proceeds: string;
+  pnl: string;
+  sourceEventId: string;
+  sourceSeq: number;
+  consumed: ConsumedLot[];
+}
+
+export interface Income {
+  wallet: string;
+  bucket: string;
+  month: string;
+  amount: string;
+}
+
+export interface PnlBucket {
+  wallet: string;
+  month: string;
+  income: string;
+  expense: string;
+  realizedPnl: string;
+  unpricedIn: number;
+  unpricedOut: number;
+}
+
+export interface Unpriced {
+  wallet: string;
+  month: string;
+  inCount: number;
+  outCount: number;
+}
+
+export interface HyperliquidAccount {
+  documentId: string;
+  address: string;
+  label: string | null;
+  spotValue: string;
+  perpValue: string;
+  at: string;
+}
+
+export function useOpenLots(
+  driveId: string,
+  wallet?: string,
+): QueryState<Lot[]> {
+  return usePortfolioField(
+    `query ($driveId: String! $wallet: String) { portfolioApi { openLots(driveId: $driveId wallet: $wallet) { wallet asset sourceEventId sourceSeq quantity unitCost } } }`,
+    { driveId, wallet },
+    "openLots",
+  );
+}
+
+export function useRealizedEvents(
+  driveId: string,
+  window: { from?: string; to?: string; wallet?: string },
+): QueryState<RealizedEvent[]> {
+  return usePortfolioField(
+    `query ($driveId: String! $wallet: String $from: String $to: String) { portfolioApi { realizedEvents(driveId: $driveId wallet: $wallet from: $from to: $to) { id wallet asset timestamp quantity cost proceeds pnl sourceEventId sourceSeq consumed { sourceEventId quantity cost } } } }`,
+    { driveId, ...window },
+    "realizedEvents",
+  );
+}
+
+export function useIncomeByMonth(
+  driveId: string,
+  wallet?: string,
+): QueryState<Income[]> {
+  return usePortfolioField(
+    `query ($driveId: String! $wallet: String) { portfolioApi { incomeByMonth(driveId: $driveId wallet: $wallet) { wallet bucket month amount } } }`,
+    { driveId, wallet },
+    "incomeByMonth",
+  );
+}
+
+export function usePnlReport(
+  driveId: string,
+  window: { from: string; to: string; wallet?: string },
+): QueryState<PnlBucket[]> {
+  return usePortfolioField(
+    `query ($driveId: String! $from: String! $to: String! $wallet: String) { portfolioApi { pnlReport(driveId: $driveId from: $from to: $to grouping: "MONTH" wallet: $wallet) { wallet month income expense realizedPnl unpricedIn unpricedOut } } }`,
+    { driveId, ...window },
+    "pnlReport",
+  );
+}
+
+export function useUnpricedSummary(
+  driveId: string,
+  wallet?: string,
+): QueryState<Unpriced[]> {
+  return usePortfolioField(
+    `query ($driveId: String! $wallet: String) { portfolioApi { unpricedSummary(driveId: $driveId wallet: $wallet) { wallet month inCount outCount } } }`,
+    { driveId, wallet },
+    "unpricedSummary",
+  );
+}
+
+export function useHyperliquidAccounts(
+  driveId: string,
+): QueryState<HyperliquidAccount[]> {
+  return usePortfolioField(
+    `query ($driveId: String!) { portfolioApi { hyperliquidAccounts(driveId: $driveId) { documentId address label spotValue perpValue at } } }`,
+    { driveId },
+    "hyperliquidAccounts",
   );
 }

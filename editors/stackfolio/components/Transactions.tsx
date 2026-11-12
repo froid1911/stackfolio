@@ -101,6 +101,22 @@ export function Transactions({
         </label>
       </div>
 
+      {filter.ids && filter.ids.length > 0 && (
+        <div className="mt-3 flex items-center gap-3 rounded-lg border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs">
+          <span>
+            Pinned to {filter.ids.length} linked ledger event
+            {filter.ids.length === 1 ? "" : "s"} from the P&L view.
+          </span>
+          <button
+            type="button"
+            className="text-accent underline-offset-2 hover:underline"
+            onClick={() => setFilter({ ...filter, ids: undefined, offset: 0 })}
+          >
+            Show all
+          </button>
+        </div>
+      )}
+
       {page.error && <p className="mt-3 text-sm text-red-700">{page.error}</p>}
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-border">

@@ -8,6 +8,8 @@ export const schema: DocumentNode = gql`
     "One ledger page, newest first. Filters compose; \`query\` matches asset, address, label, note or identifier."
     events(
       driveId: String!
+      "Ledger event ids to pin to; a deep link from another view."
+      ids: [String!]
       address: String
       asset: String
       types: [String!]

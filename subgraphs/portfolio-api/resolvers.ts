@@ -55,6 +55,7 @@ export const getResolvers = (
         _parent: unknown,
         args: {
           driveId: string;
+          ids?: string[];
           address?: string;
           asset?: string;
           types?: string[];
@@ -70,6 +71,9 @@ export const getResolvers = (
         const ids = await driveFileIds(subgraph, args.driveId, ctx);
         if (!ids || ids.length === 0) return { rows: [], total: 0 };
         const filtered = query(args.driveId).selectFrom("events").where("document_id", "in", ids)
+          .$if(Boolean(args.ids?.length), (qb) =>
+            qb.where("event_id", "in", args.ids as string[]),
+          )
           .$if(Boolean(args.address), (qb) =>
             qb.where("address", "=", args.address as string),
           )

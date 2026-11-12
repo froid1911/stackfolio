@@ -5,6 +5,7 @@ export type Tab =
   | "transactions"
   | "accounts"
   | "staking"
+  | "pnl"
   | "assets"
   | "prices"
   | "files";
@@ -14,6 +15,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "transactions", label: "Transactions" },
   { id: "accounts", label: "Accounts" },
   { id: "staking", label: "Staking" },
+  { id: "pnl", label: "P&L" },
   { id: "assets", label: "Assets" },
   { id: "prices", label: "Prices" },
   { id: "files", label: "Files" },

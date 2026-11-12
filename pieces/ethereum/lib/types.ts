@@ -64,4 +64,5 @@ export interface EthereumAuth {
   ankrApiKey?: string;
   hyperliquidUrl?: string;
   bitcoinApiUrl?: string;
+  coingeckoApiKey?: string;
 }

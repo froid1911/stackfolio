@@ -1,5 +1,7 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 
+import { ethereumAuth } from "../auth.js";
+import { authProps } from "../client.js";
 import { globalState, toGlobalAction } from "../reactor.js";
 import { parseJsonish } from "../jsonish.js";
 import { getDailyClose } from "../history.js";
@@ -38,6 +40,7 @@ async function resolveCoinId(
   registry: Map<string, string>,
   base: string,
   doFetch: typeof fetch,
+  apiKey?: string,
 ): Promise<string | null> {
   const known = registry.get(asset);
   if (known) return known;
@@ -49,7 +52,12 @@ async function resolveCoinId(
   try {
     const response = await doFetch(
       `${base}/coins/${platform}/contract/${match[2].toLowerCase()}`,
-      { signal: AbortSignal.timeout(15_000) },
+      {
+        signal: AbortSignal.timeout(15_000),
+        ...(apiKey && apiKey.trim() !== ""
+          ? { headers: { "x-cg-demo-api-key": apiKey.trim() } }
+          : {}),
+      },
     );
     if (!response.ok) return null;
     const body = (await response.json()) as Array<{ id?: unknown }>;
@@ -63,8 +71,9 @@ async function resolveCoinId(
 }
 
 export const ethereumPinPricesAction = createAction({
-  // CoinGecko needs no node connection.
-  requireAuth: false,
+  // CoinGecko needs no node, but the connection carries its optional API
+  // key (and its rate limit).
+  auth: ethereumAuth,
   requireReactor: "write",
   // Saved workflows refer to the action by name: don't rename it once published
   name: "pin-prices",
@@ -116,6 +125,7 @@ export const ethereumPinPricesAction = createAction({
     const ledger =
       globalState<{ ledger?: LedgerRow[] }>(document).ledger ?? [];
     const currency = (props.vsCurrency ?? "EUR").toLowerCase();
+    const apiKey = authProps(context.auth).coingeckoApiKey ?? "";
     const base =
       (props.coingeckoBaseUrl ?? "").trim() ||
       "https://api.coingecko.com/api/v3";
@@ -167,11 +177,13 @@ export const ethereumPinPricesAction = createAction({
           registry,
           base,
           doFetch,
+          apiKey,
         );
         const price = coinId
           ? await getDailyClose(coinId, target.day, currency, {
               baseUrl: base,
               fetchImpl: doFetch,
+              apiKey,
             })
           : null;
         prices.set(key, price);

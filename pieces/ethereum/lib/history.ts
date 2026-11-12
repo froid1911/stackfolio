@@ -22,6 +22,7 @@ export function toDecimal(value: number): string {
 export interface HistoryOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
+  apiKey?: string;
 }
 
 /**
@@ -38,13 +39,17 @@ export async function getDailyClose(
   const doFetch = opts.fetchImpl ?? fetch;
   const base =
     (opts.baseUrl ?? "").trim() || "https://api.coingecko.com/api/v3";
+  const apiKey = (opts.apiKey ?? "").trim();
   const currency = platform.toLowerCase();
   const [year, month, day] = dateUtc.split("-");
   if (!year || !month || !day) return null;
   try {
     const response = await doFetch(
       `${base}/coins/${encodeURIComponent(coinGeckoId)}/history?date=${day}-${month}-${year}&vs_currency=${currency}`,
-      { signal: AbortSignal.timeout(15_000) },
+      {
+        signal: AbortSignal.timeout(15_000),
+        ...(apiKey ? { headers: { "x-cg-demo-api-key": apiKey } } : {}),
+      },
     );
     if (!response.ok) return null;
     const body = (await response.json()) as Record<string, unknown>;

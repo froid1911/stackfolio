@@ -69,6 +69,12 @@ export const ethereumAuth = PieceAuth.CustomAuth({
         "Override for the Bitcoin indexer (mempool.space/Esplora dialect); leave blank to use the public instance for each wallet's network.",
       required: false,
     }),
+    coingeckoApiKey: Property.ShortText({
+      displayName: "CoinGecko API key",
+      description:
+        "Optional demo/pro key for the CoinGecko price API. The keyless public endpoint throttles hard; a free demo key (30 calls/min) makes the hourly price round comfortable. Kept on this connection, never in portfolio documents.",
+      required: false,
+    }),
   },
   validate: async ({ auth }) => {
     if (auth.etherscanApiKey !== undefined && auth.etherscanApiKey.trim() !== "") {

@@ -156,8 +156,15 @@ describe("fetch-prices", () => {
   it("reports a failed coingecko call as error, not as rows", async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 429 });
 
-    const result = await runAction([ETH], registryJson);
+    // The action backs off 2s/4s/8s on rate-limit answers; let those
+    // timers fire instantly.
+    vi.useFakeTimers();
+    const running = runAction([ETH], registryJson);
+    await vi.runAllTimersAsync();
+    const result = await running;
+    vi.useRealTimers();
 
+    expect(fetchMock).toHaveBeenCalledTimes(4); // one try, three retries
     expect(result.prices).toEqual([]);
     expect(result.error).toContain("429");
   });

@@ -1,4 +1,6 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
+import { ethereumAuth } from "../auth.js";
+import { authProps } from "../client.js";
 import { parseJsonish } from "../jsonish.js";
 
 const ETH_IDENTIFIER = "eip155:1/slip44:60";
@@ -37,8 +39,9 @@ interface RegistryAsset {
  * reported in `error` — the action never guesses a number.
  */
 export const ethereumFetchPricesAction = createAction({
-  // CoinGecko needs no node connection.
-  requireAuth: false,
+  // CoinGecko needs no node, but the connection carries its optional API
+  // key (and its rate limit).
+  auth: ethereumAuth,
   // Saved workflows refer to the action by name: don't rename it once published
   name: "fetch-prices",
   displayName: "Fetch Prices",
@@ -156,12 +159,34 @@ export const ethereumFetchPricesAction = createAction({
       hour: string;
     }> = [];
 
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const apiKey = (authProps(context.auth).coingeckoApiKey ?? "").trim();
+    const headers = apiKey ? { "x-cg-demo-api-key": apiKey } : undefined;
+    let lastCall = 0;
     const get = async (url: string): Promise<Record<string, unknown>> => {
-      const response = await fetch(url);
-      if (!response.ok) {
+      // The keyless public endpoint throttles hard; a busy wallet's token
+      // sweep would otherwise be a burst of failures. Space calls a beat
+      // apart and back off on rate-limit answers (the endpoint is
+      // inconsistent about whether a burst is a 429 or a 400).
+      const gap = Math.max(0, 300 - (Date.now() - lastCall));
+      if (gap > 0) await sleep(gap);
+      let wait = 2000;
+      for (let attempt = 0; ; attempt += 1) {
+        lastCall = Date.now();
+        const response = await fetch(url, headers ? { headers } : undefined);
+        if (response.ok) {
+          return (await response.json()) as Record<string, unknown>;
+        }
+        if (
+          (response.status === 429 || response.status === 400) &&
+          attempt < 3
+        ) {
+          await sleep(wait);
+          wait *= 2;
+          continue;
+        }
         throw new Error(`CoinGecko answered HTTP ${response.status}`);
       }
-      return (await response.json()) as Record<string, unknown>;
     };
 
     const collect = (

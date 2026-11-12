@@ -9,9 +9,9 @@
  * never part of any message that leaves this file.
  */
 
-// Shared pacing and per-key gates so Etherscan and Blockscout clients
-// meter by key, the way the providers meter.
-import { keyGates, RETRY_DELAYS_MS } from "./gate.js";
+// Shared pacing and two-lane per-key gates so Etherscan and Blockscout
+// clients meter by key, the way the providers meter.
+import { gated, RETRY_DELAYS_MS, type GateLane } from "./gate.js";
 
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -109,7 +109,12 @@ export function createEtherscanClient(opts: {
   spacingMs?: number;
   sleepFn?: (ms: number) => Promise<void>;
   cacheDir?: string;
-}): { call(params: Record<string, string | number>): Promise<unknown> } {
+}): {
+  call(
+    params: Record<string, string | number>,
+    lane?: GateLane,
+  ): Promise<unknown>;
+} {
   const doFetch = opts.fetchImpl ?? fetch;
   const sleep =
     opts.sleepFn ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
@@ -232,7 +237,10 @@ export function createEtherscanClient(opts: {
   };
 
   return {
-    async call(params: Record<string, string | number>): Promise<unknown> {
+    async call(
+      params: Record<string, string | number>,
+      lane: GateLane = "bulk",
+    ): Promise<unknown> {
       // Immutable answers out of the walk's path first: a repeated
       // window costs neither the key's throttle nor the pacing wait.
       const file = cachePath(params);
@@ -246,22 +254,11 @@ export function createEtherscanClient(opts: {
       }
       // Etherscan's rate limit is per key, not per client: backfills on
       // several chains run concurrently in this process, so every client
-      // for the same key shares one gate.
-      const key = opts.apiKey;
-      const run = (keyGates.get(key) ?? Promise.resolve()).then(async () => {
+      // for the same key shares one gate - live calls jump its queue.
+      const value = await gated(opts.apiKey, lane, async () => {
         await sleep(spacingMs);
         return attempt(params);
       });
-      // Keep the gate alive even when a call rejects, so one failed call
-      // never poisons the calls queued behind it.
-      keyGates.set(
-        key,
-        run.then(
-          () => undefined,
-          () => undefined,
-        ),
-      );
-      const value = await run;
       if (file && value !== undefined && value !== null) {
         try {
           await mkdir(join(opts.cacheDir as string, String(chainId)), {

@@ -8,7 +8,7 @@
  * is the whole newest-first crawl - so the import actions treat
  * paging as the walk and lean on hash-keyed import idempotence.
  */
-import { keyGates, RETRY_DELAYS_MS } from "./gate.js";
+import { gated as keyGate, RETRY_DELAYS_MS } from "./gate.js";
 
 export class BlockscoutError extends Error {
   constructor(
@@ -147,19 +147,10 @@ export function createBlockscoutClient(opts: {
 
   const gated = (path: string, params: Record<string, string | number> | null) => {
     // Meter by key, like Etherscan: one gate per key across all chains.
-    const key = `blockscout:${opts.apiKey}`;
-    const run = (keyGates.get(key) ?? Promise.resolve()).then(async () => {
+    return keyGate(`blockscout:${opts.apiKey}`, "bulk", async () => {
       await sleep(spacingMs);
       return attempt(path, params ?? null);
     });
-    keyGates.set(
-      key,
-      run.then(
-        () => undefined,
-        () => undefined,
-      ),
-    );
-    return run;
   };
 
   return {

@@ -9,7 +9,7 @@
  * Head and balance come from Ankr's per-chain RPC endpoint - plain
  * `eth_blockNumber` / `eth_getBalance` behind the same key.
  */
-import { keyGates, RETRY_DELAYS_MS } from "./gate.js";
+import { gated as keyGate, RETRY_DELAYS_MS } from "./gate.js";
 
 export class AnkrError extends Error {
   constructor(
@@ -193,19 +193,10 @@ export function createAnkrClient(opts: {
 
   const gated = <T>(run: () => Promise<T>): Promise<T> => {
     // One gate per key across every chain and endpoint, like the others.
-    const key = `ankr:${opts.apiKey}`;
-    const chained = (keyGates.get(key) ?? Promise.resolve()).then(async () => {
+    return keyGate(`ankr:${opts.apiKey}`, "bulk", async () => {
       await sleep(spacingMs);
       return run();
     });
-    keyGates.set(
-      key,
-      chained.then(
-        () => undefined,
-        () => undefined,
-      ),
-    );
-    return chained;
   };
 
   return {

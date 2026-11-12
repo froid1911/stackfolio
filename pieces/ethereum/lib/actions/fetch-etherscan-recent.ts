@@ -201,7 +201,12 @@ export const ethereumFetchEtherscanRecentAction = createAction({
     const fromBlock =
       props.fromBlock ??
       (cursorBlock === null || cursorBlock === undefined ? 0 : cursorBlock + 1);
-    return fetchEtherscanRecent(client, {
+    // The poll is what a user waits on: every call it makes - head,
+    // windows, balance, decode - rides the live lane of the key gate,
+    // so a walking retrofit can never starve it into a timeout.
+    return fetchEtherscanRecent(
+      { call: (params) => client.call(params, "live") },
+      {
       address,
       chainId: global.chainId ?? 1,
       fromBlock,

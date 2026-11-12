@@ -27,6 +27,31 @@ describe("SnapshotOperations", () => {
     expect(document.state.global.snapshots[0].totalValue).toBe("1000");
   });
 
+  it("replaces the stored snapshot when a re-run retakes its id", () => {
+    let document = reducer(utils.createDocument(), takeSnapshot(validInput()));
+    document = reducer(
+      document,
+      takeSnapshot(validInput({ totalValue: "1100" })),
+    );
+
+    expect(document.operations.global[1].error).toBeUndefined();
+    expect(document.state.global.snapshots).toHaveLength(1);
+    expect(document.state.global.snapshots[0].totalValue).toBe("1100");
+  });
+
+  it("keeps other snapshots when one id is retaken", () => {
+    let document = reducer(utils.createDocument(), takeSnapshot(validInput()));
+    document = reducer(
+      document,
+      takeSnapshot(validInput({ id: "snap-2", timestamp: "2026-11-12T00:00:00.000Z" })),
+    );
+    document = reducer(document, takeSnapshot(validInput({ totalValue: "1100" })));
+
+    expect(document.state.global.snapshots).toHaveLength(2);
+    expect(document.state.global.snapshots[0].totalValue).toBe("1100");
+    expect(document.state.global.snapshots[1].id).toBe("snap-2");
+  });
+
   it("should handle deleteSnapshot operation", () => {
     let document = reducer(utils.createDocument(), takeSnapshot(validInput()));
     document = reducer(document, deleteSnapshot({ id: "snap-1" }));
@@ -75,7 +100,8 @@ describe("SnapshotOperations", () => {
           totalValue: "-7.5",
           perAsset: [
             {
-              asset: "eip155:1/erc20:0xc12d1c73ee7dc3615ba4e37e4ab7e05f8f4e1e3b",
+              asset:
+                "eip155:1/erc20:0xc12d1c73ee7dc3615ba4e37e4ab7e05f8f4e1e3b",
               amount: "-4.543350290722074076",
               value: "-7.5",
             },
@@ -85,9 +111,9 @@ describe("SnapshotOperations", () => {
     );
 
     expect(document.operations.global[0].error).toBeUndefined();
-    expect(
-      document.state.global.snapshots[0].perAsset[0].amount,
-    ).toBe("-4.543350290722074076");
+    expect(document.state.global.snapshots[0].perAsset[0].amount).toBe(
+      "-4.543350290722074076",
+    );
   });
 
   it("should store liabilities and net worth", () => {

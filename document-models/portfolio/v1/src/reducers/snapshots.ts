@@ -46,7 +46,11 @@ export const portfolioSnapshotsOperations: PortfolioSnapshotsOperations = {
         `${action.input.netWorth} is not a decimal amount`,
       );
     }
-    state.snapshots.push({
+    // The id is the snapshot's identity: a re-run of a timed step re-takes
+    // the same timestamp, and that replaces the stored snapshot instead of
+    // appending a second row with one id - the read model upserts by id and
+    // two rows for one id break the insert.
+    const snapshot = {
       id: action.input.id,
       timestamp: action.input.timestamp,
       totalValue: action.input.totalValue,
@@ -54,7 +58,10 @@ export const portfolioSnapshotsOperations: PortfolioSnapshotsOperations = {
       liabilities: action.input.liabilities ?? [],
       perLocation: action.input.perLocation,
       perAsset: action.input.perAsset,
-    });
+    };
+    const at = state.snapshots.findIndex((s) => s.id === action.input.id);
+    if (at === -1) state.snapshots.push(snapshot);
+    else state.snapshots[at] = snapshot;
   },
   deleteSnapshotOperation(state, action) {
     const index = state.snapshots.findIndex((s) => s.id === action.input.id);

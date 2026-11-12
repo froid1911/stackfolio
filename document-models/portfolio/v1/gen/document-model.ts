@@ -233,7 +233,7 @@ export const documentModel: DocumentModelGlobalState = {
               schema:
                 "input TakeSnapshotInput {\n  id: OID!\n  timestamp: DateTime!\n  totalValue: String!\n  netWorth: String\n  liabilities: [SnapshotLiabilityInput!]\n  perLocation: [LocationValueInput!]!\n  perAsset: [AssetValueInput!]!\n}\n\ninput SnapshotLiabilityInput {\n  asset: String!\n  amount: String!\n}\n\ninput LocationValueInput {\n  location: String!\n  value: String!\n}\n\ninput AssetValueInput {\n  asset: String!\n  amount: String!\n  value: String!\n}",
               reducer:
-                'const isDecimal = (value: string) => /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\n// Ledger-derived holdings can net negative when a wallet\'s history\n// cannot account every inflow (internal transfers are invisible\n// without traces); the snapshot records that honestly instead of\n// losing the asset.\nconst isSignedDecimal = (value: string) => /^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nif (action.input.perLocation.length === 0 && action.input.perAsset.length === 0) {\n  throw new SnapshotEmptyError("A snapshot needs at least one location or asset value");\n}\nconst signedAmounts = [\n  action.input.totalValue,\n  ...action.input.perLocation.map((l) => l.value),\n  ...action.input.perAsset.flatMap((a) => [a.amount, a.value]),\n];\nfor (const amount of signedAmounts) {\n  if (!isSignedDecimal(amount)) throw new InvalidAmountError(`${amount} is not a decimal amount`);\n}\nfor (const liability of action.input.liabilities ?? []) {\n  if (!isDecimal(liability.amount)) throw new InvalidAmountError(`${liability.amount} is not a decimal amount`);\n}\nif (action.input.netWorth != null && !/^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(action.input.netWorth)) {\n  throw new InvalidAmountError(`${action.input.netWorth} is not a decimal amount`);\n}\nstate.snapshots.push({\n  id: action.input.id,\n  timestamp: action.input.timestamp,\n  totalValue: action.input.totalValue,\n  netWorth: action.input.netWorth ?? null,\n  liabilities: action.input.liabilities ?? [],\n  perLocation: action.input.perLocation,\n  perAsset: action.input.perAsset,\n});',
+                "const isDecimal = (value) =>\n  /^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\n// Ledger-derived holdings can net negative when a wallet's history\n// cannot account every inflow (internal transfers are invisible\n// without traces); the snapshot records that honestly instead of\n// losing the asset.\nconst isSignedDecimal = (value) =>\n  /^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(value);\nif (\n  action.input.perLocation.length === 0 &&\n  action.input.perAsset.length === 0\n) {\n  throw new SnapshotEmptyError(\n    \"A snapshot needs at least one location or asset value\",\n  );\n}\nconst signedAmounts = [\n  action.input.totalValue,\n  ...action.input.perLocation.map((l) => l.value),\n  ...action.input.perAsset.flatMap((a) => [a.amount, a.value]),\n];\nfor (const amount of signedAmounts) {\n  if (!isSignedDecimal(amount))\n    throw new InvalidAmountError(`${amount} is not a decimal amount`);\n}\nfor (const liability of action.input.liabilities ?? []) {\n  if (!isDecimal(liability.amount))\n    throw new InvalidAmountError(\n      `${liability.amount} is not a decimal amount`,\n    );\n}\nif (\n  action.input.netWorth != null &&\n  !/^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(action.input.netWorth)\n) {\n  throw new InvalidAmountError(\n    `${action.input.netWorth} is not a decimal amount`,\n  );\n}\n// The id is the snapshot's identity: a re-run of a timed step re-takes\n// the same timestamp, and that replaces the stored snapshot instead of\n// appending a second row with one id - the read model upserts by id and\n// two rows for one id break the insert.\nconst snapshot = {\n  id: action.input.id,\n  timestamp: action.input.timestamp,\n  totalValue: action.input.totalValue,\n  netWorth: action.input.netWorth ?? null,\n  liabilities: action.input.liabilities ?? [],\n  perLocation: action.input.perLocation,\n  perAsset: action.input.perAsset,\n};\nconst at = state.snapshots.findIndex((s) => s.id === action.input.id);\nif (at === -1) state.snapshots.push(snapshot);\nelse state.snapshots[at] = snapshot;",
               examples: [],
               template: "",
               description: "",
@@ -321,22 +321,22 @@ export const documentModel: DocumentModelGlobalState = {
         {
           id: "a08bbd13-0901-4007-8b3b-55ea20f649a7",
           name: "positions",
+          description: "On-chain DeFi positions per wallet and chain",
           operations: [
             {
               id: "16fbc77b-6071-41d7-a0d5-641af3cbf5e3",
               name: "SET_POSITIONS",
-              scope: "global",
-              errors: [],
+              description: "",
               schema:
                 "input SetPositionsInput {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionInput!]!\n}\n\ninput PositionInput {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAssetInput!]!\n  note: String\n}\n\ninput PositionAssetInput {\n  asset: String!\n  amount: String!\n}",
+              template: "",
               reducer:
                 "const entry = {\n  wallet: action.input.wallet,\n  chainId: action.input.chainId,\n  fetchedAt: action.input.fetchedAt,\n  positions: action.input.positions,\n};\nconst index = state.positions.findIndex(\n  (p) => p.wallet === action.input.wallet && p.chainId === action.input.chainId,\n);\nif (index === -1) {\n  state.positions.push(entry);\n} else {\n  state.positions[index] = entry;\n};",
+              errors: [],
               examples: [],
-              template: "",
-              description: "",
+              scope: "global",
             },
           ],
-          description: "On-chain DeFi positions per wallet and chain",
         },
       ],
       version: 1,

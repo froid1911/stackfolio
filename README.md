@@ -87,3 +87,23 @@ npm run lint:fix        # oxlint (type-aware) with fixes
 npm run test:coverage   # vitest; reducers held to 95%+ coverage
 npm run build           # build the library
 ```
+
+## Access from the tailnet (flank)
+
+`https://flank.tail45cd22.ts.net/` serves Connect on this machine's
+tailnet address; `…/graphql` (and `/mcp`, `/attachments`) reach the
+Switchboard. Two pieces:
+
+- `scripts/host-reverse-proxy.mjs` on `127.0.0.1:2845` — Connect and
+  Switchboard are dev servers with a host guard (they 403 foreign
+  `Host:` headers) and the studio dev server refuses non-localhost
+  hosts outright. The proxy rewrites `Host` to the upstream origin,
+  routes `/graphql`, `/mcp`, `/attachments`, `/api/` and websocket
+  fetches to the Switchboard, HTML navigations (including `/d/…` drive
+  routes) to the studio, and passes HMR upgrades through. Start it:
+  `bun scripts/host-reverse-proxy.mjs 2845 127.0.0.1 2844 7844`.
+- `tailscale serve --bg --tls-terminated-tcp=443 tcp://127.0.0.1:2845`
+  — TLS (Let's Encrypt cert, tailscale-managed) terminated by tailscaled,
+  decrypted stream forwarded with a PROXYv2 header (ignored by the
+  proxy). Both the serve config and `tailscaled` persist across reboots;
+  the proxy must be restarted with the dev environment.

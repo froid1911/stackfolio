@@ -30,18 +30,17 @@ const PERIODS: { id: string; label: string; months?: number; ytd?: boolean }[] =
 ];
 
 /** [from, to) for a preset; "all" spans more than the chain has lived. */
-function windowOf(period: (typeof PERIODS)[number]): {
+function windowOf(period: (typeof PERIODS)[number], now: string): {
   from: string;
   to: string;
 } {
-  const to = new Date().toISOString();
   if (period.ytd) {
-    return { from: `${new Date().getUTCFullYear()}-01-01T00:00:00.000Z`, to };
+    return { from: `${now.slice(0, 4)}-01-01T00:00:00.000Z`, to: now };
   }
   if (period.months) {
-    const start = new Date();
+    const start = new Date(now);
     start.setUTCMonth(start.getUTCMonth() - period.months);
-    return { from: start.toISOString(), to };
+    return { from: start.toISOString(), to: now };
   }
   return { from: "1970-01-01T00:00:00.000Z", to: "2999-12-31T23:59:59.000Z" };
 }
@@ -66,8 +65,12 @@ export function Pnl({
   const [wallet, setWallet] = useState<string | undefined>(undefined);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showLots, setShowLots] = useState(false);
+  // One clock per mount: the query window must not move when a response
+  // re-renders the component, or every answer would trigger the next
+  // request with fresh `to` variables - an endless refetch loop.
+  const [now] = useState(() => new Date().toISOString());
   const period = PERIODS.find((p) => p.id === periodId) ?? PERIODS[4];
-  const window = windowOf(period);
+  const window = windowOf(period, now);
 
   const report = usePnlReport(driveId, { ...window, wallet });
   const realized = useRealizedEvents(driveId, { ...window, wallet });

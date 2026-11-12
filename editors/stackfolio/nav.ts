@@ -54,7 +54,7 @@ export function navSections(): { section: NavSection; entries: NavEntry[] }[] {
 
 /** Legacy `?tab=` values from the drive app's old tab strip, mapped onto
  * the page model: bookmarks and external links keep landing right. */
-const LEGACY_TABS: Record<string, Page> = {
+export const LEGACY_TABS: Record<string, Page> = {
   dashboard: "dashboard",
   transactions: "history",
   accounts: "balances",

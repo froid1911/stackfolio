@@ -245,7 +245,15 @@ export function BalancesSection({
   );
 }
 
-export function TransactionsSection({ driveId }: { driveId: string }) {
+export function TransactionsSection({
+  driveId,
+  onOpenEvent,
+  onOpenAccount,
+}: {
+  driveId: string;
+  onOpenEvent: (eventId: string) => void;
+  onOpenAccount: (address: string) => void;
+}) {
   const accounts = useAccounts(driveId);
   const assets = useAssets(driveId);
   // A P&L row can pin the view to particular ledger events: ?ids=…
@@ -271,6 +279,8 @@ export function TransactionsSection({ driveId }: { driveId: string }) {
       page={page}
       sub={sub === "issues" ? "issues" : "events"}
       issues={issues}
+      onOpenEvent={onOpenEvent}
+      onOpenAccount={onOpenAccount}
       onSub={(next) =>
         setSearchParams(
           (prev) => ({ ...prev, ...(next === "issues" ? { sub: "issues" } : { sub: undefined }) }),

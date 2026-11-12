@@ -77,4 +77,10 @@ export function useDetail(
   );
 }
 
+/** The raw `?detail=` value (not page-gated): for hosts that resolve
+ * against their own live data and fall back per-kind. */
+export function useRawDetail(): string | undefined {
+  return useSearchParams().detail;
+}
+
 export { slugMatches, resolveNodeSlug };

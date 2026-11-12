@@ -335,6 +335,21 @@ export function usePortfolioAddresses(portfolioDocumentId: string | undefined): 
   return useMemo(() => (key ? key.split("\u0000") : []), [key]);
 }
 
+/**
+ * The event ids the history page shows — the candidate set for
+ * `event:` slugs. A deep link to an event outside the current page
+ * resolves against the FIRST page widened through `ids`: the resolver
+ * matches event ids exactly, so fetching with the candidate as an id
+ * filter resolves a real id even off-page (see EventDetail's own fetch);
+ * the list here covers the common case (rows on screen).
+ */
+export function useEventIds(driveId: string, enabled: boolean): string[] {
+  const page = useEventsPage(driveId, enabled ? { first: 200, ignored: undefined } : { first: 0 });
+  const ids = (page.data?.rows ?? []).map((r) => r.eventId);
+  const key = ids.join("\u0000");
+  return useMemo(() => (key ? key.split("\u0000") : []), [key]);
+}
+
 /** Just the registry's identifiers: the candidate set for `asset:` slugs. */
 export function useAssetIds(driveId: string): string[] {
   const assets = useAssets(driveId);

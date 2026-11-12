@@ -29,12 +29,13 @@ import {
 } from "./components/sections.js";
 import { AddressBookSection } from "./components/sections.js";
 import { AssetDetail } from "./components/AssetDetail.js";
+import { EventDetail } from "./components/EventDetail.js";
 import { CommandPalette, paletteKeyHandler } from "./components/CommandPalette.js";
 import { DetailNotFound } from "./components/DetailNotFound.js";
 import { useDetail } from "./lib/detail.js";
 import { useAssetIds } from "./lib/graphql.js";
 import { usePortfolioActions } from "./lib/mutations.js";
-import { usePortfolioAddresses } from "./lib/graphql.js";
+import { useEventIds, usePortfolioAddresses } from "./lib/graphql.js";
 import type { SearchHit } from "./lib/search.js";
 import { Setup } from "./components/Setup.js";
 import { DriveContents } from "./components/DriveContents.js";
@@ -87,6 +88,12 @@ export default function Editor({ children }: EditorProps) {
   }
 
   const go = (target: Page | "files") => setSearchParams({ page: target });
+  // Cutover: `?page=` is canonical now (it addresses drawer pages the
+  // old tab strip never had). A legacy `?tab=` link lands on the right
+  // page and the URL is rewritten to ?page= once, so shared links
+  // converge on the canonical form; the legacy mapping in nav.ts keeps
+  // old bookmarks resolving.
+
   // The asset detail names a registered asset; match the URL slug
   // against the drive's registry ids (the only candidate set that can
   // resolve it - balances rows are a subset).
@@ -97,6 +104,11 @@ export default function Editor({ children }: EditorProps) {
   const portfolioBook = usePortfolioAddresses(portfolioId);
   const portfolioIds = portfolioBook;
   const portfolioActions = usePortfolioActions(portfolioId);
+  const eventPageIds = useEventIds(driveId, active === "history");
+  const eventDetail = useDetail(
+    active === "history" ? "history" : "dashboard",
+    eventPageIds,
+  );
   const accountBookDetail = useDetail(
     active === "address-book" ? "address-book" : "dashboard",
     portfolioIds,
@@ -155,7 +167,46 @@ export default function Editor({ children }: EditorProps) {
           {active === "dashboard" && (
             <DashboardSection driveId={driveId} portfolioNodeId={portfolioNodeId(list)} />
           )}
-          {active === "history" && <TransactionsSection driveId={driveId} />}
+          {active === "history" && (
+            <TransactionsSection
+              driveId={driveId}
+              onOpenEvent={(eventId) =>
+                setSearchParams(
+                  { page: "history", detail: `event:${slug(eventId)}` },
+                  { replace: false },
+                )
+              }
+              onOpenAccount={(address) =>
+                setSearchParams(
+                  { page: "address-book", detail: `account:${slug(address)}` },
+                  { replace: false },
+                )
+              }
+            />
+          )}
+          {active === "history" && eventDetail && (
+            <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-h-[70vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-border bg-background p-2 shadow-2xl">
+              {eventDetail.id ? (
+                <EventDetail
+                  driveId={driveId}
+                  eventId={eventDetail.id}
+                  onClose={closeDetail}
+                  onOpenAccount={(address) =>
+                    setSearchParams(
+                      { page: "address-book", detail: `account:${slug(address)}` },
+                      { replace: false },
+                    )
+                  }
+                  onOpenHistory={(ids) =>
+                    setSearchParams({ page: "history", ids: ids.join(","), detail: undefined })
+                  }
+                  onOpenPnl={() => setSearchParams({ page: "pnl", detail: undefined })}
+                />
+              ) : (
+                <DetailNotFound label={eventDetail.slug} onClose={closeDetail} />
+              )}
+            </div>
+          )}
           {active === "balances" && (
             <BalancesSection
               driveId={driveId}

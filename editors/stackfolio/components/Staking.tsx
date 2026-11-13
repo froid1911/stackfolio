@@ -2,11 +2,13 @@
  * ETH staking: the drive's validators, their daily balances and the
  * withdrawals that reached the portfolio.
  *
- * Each validator gets a summary card — balance now, 7d and 30d delta, an APR
- * estimate from the observed balance growth and the total withdrawn — so the
+ * Each validator gets a summary card — balance now, 7d and 30d rewards, an
+ * APR estimate over the observed window and the total withdrawn — so the
  * page answers "how did my validators behave" without opening a table.
+ * Rewards count swept withdrawals (lib/staking.ts), not balance growth alone.
  */
 import type { QueryState, StakingBalance, Validator, Withdrawal } from "../lib/graphql.js";
+import { validatorSummary } from "../lib/staking.js";
 import { useState } from "react";
 import { fmtAmount } from "../lib/format.js";
 import { short } from "./Dashboard.js";
@@ -26,55 +28,6 @@ const gwei = (v: string) => Number(v) / 1e9;
 const eth = (v: number) => `${v.toFixed(4)} ETH`;
 const signed = (v: number | null) =>
   v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(4)} ETH`;
-
-interface Summary {
-  now: number;
-  delta7d: number | null;
-  delta30d: number | null;
-  apr: number | null;
-  withdrawn: number;
-  rows: number;
-}
-
-function summaryFor(
-  index: number,
-  balances: StakingBalance[],
-  withdrawals: Withdrawal[],
-): Summary {
-  const rows = balances
-    .filter((b) => b.validatorIndex === index)
-    .sort((a, b) => a.day.localeCompare(b.day));
-  if (rows.length === 0)
-    return { now: 0, delta7d: null, delta30d: null, apr: null, withdrawn: 0, rows: 0 };
-  const last = rows.at(-1)!;
-  const first = rows[0]!;
-  const lastTime = new Date(last.day).getTime();
-  const firstTime = new Date(first.day).getTime();
-  const days = Math.max(1, Math.round((lastTime - firstTime) / 86_400_000));
-  const at = (daysAgo: number): number | null => {
-    const target = lastTime - daysAgo * 86_400_000;
-    let found: StakingBalance | null = null;
-    for (const row of rows) {
-      if (new Date(row.day).getTime() <= target) found = row;
-      else break;
-    }
-    return found ? gwei(found.balanceGwei) : null;
-  };
-  const now = gwei(last.balanceGwei);
-  const start = gwei(first.balanceGwei);
-  const seven = at(7);
-  const thirty = at(30);
-  return {
-    now,
-    delta7d: seven === null ? null : now - seven,
-    delta30d: thirty === null ? null : now - thirty,
-    apr: start > 0 ? ((now - start) / start) * (365 / days) : null,
-    withdrawn: withdrawals
-      .filter((w) => w.validatorIndex === index)
-      .reduce((sum, w) => sum + gwei(w.amountGwei), 0),
-    rows: rows.length,
-  };
-}
 
 export function Staking({
   validators,
@@ -108,7 +61,7 @@ export function Staking({
   const vs = validators.data;
   const summaries = vs.map((v) => ({
     v,
-    ...summaryFor(v.validatorIndex, balances.data ?? [], wds.data ?? []),
+    ...validatorSummary(v.validatorIndex, balances.data ?? [], wds.data ?? []),
   }));
   const history = picked !== undefined
     ? (balances.data ?? [])
@@ -183,10 +136,12 @@ export function Staking({
                 </div>
                 <p className="mt-1 text-lg font-semibold">{eth(s.now)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  7d {signed(s.delta7d)} · 30d {signed(s.delta30d)}
+                  rewards 7d {signed(s.delta7d)} · 30d {signed(s.delta30d)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  APR {s.apr === null ? "—" : `${(s.apr * 100).toFixed(2)}%`} (estimate)
+                  {s.apr === null
+                    ? "APR needs two days of balances"
+                    : `APR ≈ ${(s.apr * 100).toFixed(2)}% over ${s.days} day${s.days === 1 ? "" : "s"}`}
                   {" · "}withdrawn {eth(s.withdrawn)}
                 </p>
                 {s.rows === 0 && (
@@ -207,8 +162,8 @@ export function Staking({
               <th className="px-3 py-2">Validator</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2 text-right">Balance</th>
-              <th className="px-3 py-2 text-right">7d</th>
-              <th className="px-3 py-2 text-right">30d</th>
+              <th className="px-3 py-2 text-right">Rewards 7d</th>
+              <th className="px-3 py-2 text-right">Rewards 30d</th>
               <th className="px-3 py-2">Activated</th>
               <th className="px-3 py-2">Exited</th>
               <th className="px-3 py-2">Withdrawal address</th>

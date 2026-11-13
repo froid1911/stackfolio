@@ -142,8 +142,14 @@ export function Staking({
                   {s.apr === null
                     ? "APR needs two days of balances"
                     : `APR ≈ ${(s.apr * 100).toFixed(2)}% over ${s.days} day${s.days === 1 ? "" : "s"}`}
-                  {" · "}withdrawn {eth(s.withdrawn)}
+                  {" · "}
+                  {s.withdrawn > 0 ? `withdrawn ${eth(s.withdrawn)}` : "no withdrawals recorded"}
                 </p>
+                {s.apr !== null && s.withdrawn === 0 && (
+                  <p className="mt-1 text-[10px] text-warning">
+                    Swept rewards are not ingested yet, so this APR is likely understated.
+                  </p>
+                )}
                 {s.rows === 0 && (
                   <p className="mt-1 text-[10px] text-muted-foreground">
                     No daily balances yet — the staking read fills them in.
@@ -273,7 +279,7 @@ export function Staking({
                 </li>
               ))}
             {(wds.data ?? []).filter((w) => picked === undefined || w.validatorIndex === picked).length === 0 && (
-              <li className="text-muted-foreground">Nothing withdrawn yet.</li>
+              <li className="text-muted-foreground">No withdrawals recorded yet.</li>
             )}
           </ul>
         </div>

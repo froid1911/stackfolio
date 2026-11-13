@@ -47,13 +47,41 @@
  *
  * Idempotent; repairs half-applied states; no-ops when packages are absent.
  */
-import { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 
 // Overridable for tests: point the faces at a patch dir or a probe tree.
 const store = process.env.STACKFOLIO_MODULE_STORE ?? join(process.cwd(), "node_modules", ".pnpm");
 
 const SHIM_MARK = "Vite dev-interop shim v2";
+
+/**
+ * pnpm hard-links identical files from its global store into every copy
+ * and every project that shares them; an in-place write edits all of them
+ * (another version's copy gets a shim without its `.cjs`, and the global
+ * store is changed). Every write here replaces the path with a new inode.
+ */
+function writeOwn(path, content) {
+  const tmp = path + ".stackfolio-tmp";
+  writeFileSync(tmp, content);
+  renameSync(tmp, path);
+}
+
+const inodeOf = (path) => {
+  try {
+    return statSync(path).ino;
+  } catch {
+    return null;
+  }
+};
 const restore = process.argv.includes("--restore");
 
 /** Package dirs for a package name: pnpm store layout (`<name>@*` dirs)
@@ -332,17 +360,31 @@ function shimSource(face, stem, implSource) {
   );
 }
 
+// Files sharing an inode had byte-identical pristine content, so a copy
+// shimmed by an earlier write-through (shim present, `.cjs` missing) takes
+// its pristine CommonJS from any copy of the same inode that saved one.
+// Collected before any write gives a copy its own inode.
+const pristineByInode = new Map();
+for (const face of FACES) {
+  for (const dir of pkgCopies(face.name)) {
+    const file = join(dir, face.file);
+    const ino = inodeOf(file);
+    if (ino !== null && existsSync(file + ".cjs")) pristineByInode.set(ino, file + ".cjs");
+  }
+}
+
 for (const face of FACES) {
   for (const dir of pkgCopies(face.name)) {
     const file = join(dir, face.file);
     const cjs = file + ".cjs";
     if (!existsSync(file)) continue;
+    const orphanSource = existsSync(cjs) ? null : pristineByInode.get(inodeOf(file));
 
     if (restore) {
       if (existsSync(cjs)) {
         try {
           chmodSync(dirname(file), 0o755);
-          writeFileSync(file, readFileSync(cjs, "utf8"));
+          writeOwn(file, readFileSync(cjs, "utf8"));
           console.log(`[stackfolio] restored ${face.name} ${face.file}: ${dir}`);
         } catch {
           /* read-only leftover; skip */
@@ -360,7 +402,10 @@ for (const face of FACES) {
     // Mark-versioned repair: an entry carrying an older shim mark is
     // stale (the generator moved on) — restore the saved CommonJS and
     // re-patch from pristine, whatever else the entry looks like.
-    if (cur.includes(SHIM_MARK)) continue; // current shim already installed
+    if (cur.includes(SHIM_MARK)) {
+      if (!orphanSource) continue; // current shim already installed
+      cur = readFileSync(orphanSource, "utf8"); // repair a write-through orphan
+    }
     if (cur.includes("stackfolio postinstall")) {
       if (existsSync(cjs)) cur = readFileSync(cjs, "utf8");
       else continue; // stale shim whose pristine copy is gone; leave it
@@ -373,11 +418,10 @@ for (const face of FACES) {
     const devRel = devImplOf(cur, dirname(file));
     try {
       chmodSync(dir, 0o755);
-      chmodSync(file, 0o644);
-      writeFileSync(cjs, cur); // pristine dispatcher for require() consumers
+      writeOwn(cjs, cur); // pristine dispatcher for require() consumers
       const stem = face.file.split("/").pop().replace(/\.js$/, "");
       const implSource = devRel ? readFileSync(join(dirname(file), devRel), "utf8") : cur;
-      writeFileSync(file, shimSource(face, stem, implSource));
+      writeOwn(file, shimSource(face, stem, implSource));
       console.log(`[stackfolio] ESM face for ${face.name} ${face.file}: ${dir}`);
     } catch (err) {
       console.warn(`[stackfolio] ${face.name} ${face.file} failed in ${dir}: ${err.message}`);
@@ -395,9 +439,11 @@ if (restore) process.exit(0);
 // wagmi imports `use-sync-external-store/shim/with-selector.js`).
 // Conditions per subpath: `import`/`default`/`browser` → the shim,
 // `require` → the pristine CommonJS saved beside it.
-const conditionsFor = (file) => ({
+// `require` takes the saved CommonJS only where it exists; an unpatched
+// entry is still CommonJS itself.
+const conditionsFor = (dir, file) => ({
   import: "./" + file,
-  require: "./" + file + ".cjs",
+  require: "./" + file + (existsSync(join(dir, file + ".cjs")) ? ".cjs" : ""),
   default: "./" + file,
   browser: "./" + file,
 });
@@ -419,11 +465,12 @@ for (const [name, faces] of facesByName) {
         const conditionStyle = Object.keys(exp).every((k) => !k.startsWith("."));
         if (conditionStyle) map["."] = { ...exp };
         else Object.assign(map, exp);
-      } else {
-        map["."] = conditionsFor("index.js");
+      } else if (existsSync(join(dir, "index.js"))) {
+        map["."] = conditionsFor(dir, "index.js");
       }
       for (const face of faces) {
-        const cond = conditionsFor(face.file);
+        if (!existsSync(join(dir, face.file))) continue;
+        const cond = conditionsFor(dir, face.file);
         const base = face.file.replace(/\.js$/, "");
         if (base === "index" || base === "") {
           map["."] = cond;
@@ -441,11 +488,10 @@ for (const [name, faces] of facesByName) {
           JSON.stringify({ exports: map, main: "./index.js", module: "./index.js" })) {
         continue;
       }
-      chmodSync(pjPath, 0o644);
       pj.exports = map;
       pj.main = "./index.js";
       pj.module = "./index.js";
-      writeFileSync(pjPath, JSON.stringify(pj, null, 2) + "\n");
+      writeOwn(pjPath, JSON.stringify(pj, null, 2) + "\n");
     } catch {
       /* package absent */
     }

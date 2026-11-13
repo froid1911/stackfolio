@@ -130,7 +130,9 @@ const FACES = [
       ["react", "react"],
       ["use-sync-external-store/shim", "./shim/index.js"],
     ],
-    tail: NAMED(["useSyncExternalStoreWithSelector"]),
+    // zustand's ESM build default-imports this entry and reads
+    // `.useSyncExternalStoreWithSelector`, as CJS interop would.
+    tail: NAMED(["useSyncExternalStoreWithSelector"]) + "export default exports;\n",
   },
   {
     name: "use-sync-external-store",
@@ -139,7 +141,9 @@ const FACES = [
       ["react", "react"],
       ["use-sync-external-store/shim", "./index.js"],
     ],
-    tail: NAMED(["useSyncExternalStoreWithSelector"]),
+    // zustand's ESM build default-imports this entry and reads
+    // `.useSyncExternalStoreWithSelector`, as CJS interop would.
+    tail: NAMED(["useSyncExternalStoreWithSelector"]) + "export default exports;\n",
   },
 ];
 
@@ -384,41 +388,61 @@ for (const face of FACES) {
 if (restore) process.exit(0);
 
 // package.json faces: ESM consumers must resolve through the shim; Node
-// keeps taking the CommonJS via main/require/default conditions. Only
-// packages whose `exports` are condition-style (safe-stable-stringify,
-// void-elements) get the rewrite — packages with subpath-key `exports`
-// (use-sync-external-store) must stay untouched: mixing the key styles is
-// an invalid package config, and their subpath resolution reaches the
-// patched entry files directly.
-for (const name of new Set(FACES.filter((f) => f.file === "index.js").map((f) => f.name))) {
+// keeps taking the CommonJS via `require`. The rewrite must ALSO cover
+// every subpath the patched files live at: turning an entry into ESM and
+// adding an `exports` field hides subpaths that previously resolved
+// implicitly (use-sync-external-store 1.4.0 has no `exports` at all, and
+// wagmi imports `use-sync-external-store/shim/with-selector.js`).
+// Conditions per subpath: `import`/`default`/`browser` → the shim,
+// `require` → the pristine CommonJS saved beside it.
+const conditionsFor = (file) => ({
+  import: "./" + file,
+  require: "./" + file + ".cjs",
+  default: "./" + file,
+  browser: "./" + file,
+});
+
+const facesByName = new Map();
+for (const face of FACES) {
+  if (!facesByName.has(face.name)) facesByName.set(face.name, []);
+  facesByName.get(face.name).push(face);
+}
+
+for (const [name, faces] of facesByName) {
   for (const dir of pkgCopies(name)) {
     const pjPath = join(dir, "package.json");
     try {
       const pj = JSON.parse(readFileSync(pjPath, "utf8"));
       const exp = pj.exports;
-      const isConditionStyle =
-        exp && typeof exp === "object" && !Array.isArray(exp) &&
-        Object.keys(exp).every((k) => !k.startsWith("."));
-      if (exp && typeof exp === "object" && !Array.isArray(exp) && !isConditionStyle) continue;
-      const already =
-        pj.main === "./index.js" &&
-        exp &&
-        exp.import === "./index.js" &&
-        exp.require === "./index.js.cjs";
-      if (already) continue;
+      const map = {};
+      if (exp && typeof exp === "object" && !Array.isArray(exp)) {
+        const conditionStyle = Object.keys(exp).every((k) => !k.startsWith("."));
+        if (conditionStyle) map["."] = { ...exp };
+        else Object.assign(map, exp);
+      } else {
+        map["."] = conditionsFor("index.js");
+      }
+      for (const face of faces) {
+        const cond = conditionsFor(face.file);
+        const base = face.file.replace(/\.js$/, "");
+        if (base === "index" || base === "") {
+          map["."] = cond;
+          continue;
+        }
+        const dirOf = base.includes("/") ? base.slice(0, base.lastIndexOf("/")) : "";
+        map["./" + base] = cond;
+        map["./" + face.file] = cond;
+        // `shim/index.js` also answers `use-sync-external-store/shim`.
+        if (base.endsWith("/index")) map["./" + dirOf] = cond;
+      }
+      map["./package.json"] = "./package.json";
+
+      if (JSON.stringify({ exports: pj.exports, main: pj.main, module: pj.module }) ===
+          JSON.stringify({ exports: map, main: "./index.js", module: "./index.js" })) {
+        continue;
+      }
       chmodSync(pjPath, 0o644);
-      // The saved CommonJS sits beside the entry as `<entry>.cjs` (a `.js`
-      // sibling is ESM under `type: module`). `main` points at the shim so
-      // bundlers without an `exports`-aware resolver still land on valid
-      // ESM; the `exports.require` condition keeps Node's require() on the
-      // pristine CommonJS.
-      pj.exports = {
-        ...(exp && typeof exp === "object" ? exp : {}),
-        import: "./index.js",
-        require: "./index.js.cjs",
-        default: "./index.js",
-        browser: "./index.js",
-      };
+      pj.exports = map;
       pj.main = "./index.js";
       pj.module = "./index.js";
       writeFileSync(pjPath, JSON.stringify(pj, null, 2) + "\n");

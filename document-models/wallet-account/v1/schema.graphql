@@ -121,6 +121,7 @@ enum EventSource {
 
 enum ValuationSource {
   COINGECKO
+  DEFILLAMA
   MANUAL
   UNPRICED
 }

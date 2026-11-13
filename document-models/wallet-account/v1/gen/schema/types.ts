@@ -260,7 +260,7 @@ export type ValuationInput = {
   unit: Scalars["String"]["input"];
 };
 
-export type ValuationSource = "COINGECKO" | "MANUAL" | "UNPRICED";
+export type ValuationSource = "COINGECKO" | "DEFILLAMA" | "MANUAL" | "UNPRICED";
 
 export type WalletAccountState = {
   address: Scalars["String"]["output"];

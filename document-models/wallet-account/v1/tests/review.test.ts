@@ -79,6 +79,26 @@ describe("ReviewOperations", () => {
     }
   });
 
+  it("lets a DefiLlama price replace an UNPRICED pin, but never a manual one", () => {
+    const pin = (price: string, source: "DEFILLAMA" | "UNPRICED" | "MANUAL") =>
+      pinValuations({
+        events: [
+          {
+            id: "evt-1",
+            sequenceIndex: 0,
+            valuation: { unit: "EUR", price, source, granularity: "DAY", pinnedAt: "2026-11-13T00:00:00.000Z" },
+          },
+        ],
+      });
+    let document = reducer(seeded(), pin("0", "UNPRICED"));
+    document = reducer(document, pin("1672.51", "DEFILLAMA"));
+    expect(document.state.global.ledger[0]?.valuation).toMatchObject({ price: "1672.51", source: "DEFILLAMA" });
+
+    document = reducer(document, pin("1700", "MANUAL"));
+    document = reducer(document, pin("1672.51", "DEFILLAMA"));
+    expect(document.state.global.ledger[0]?.valuation).toMatchObject({ price: "1700", source: "MANUAL" });
+  });
+
   it("should handle pinValuations operation", () => {
     const document = utils.createDocument();
     // A concrete valuation, not a random mock: the operation validates

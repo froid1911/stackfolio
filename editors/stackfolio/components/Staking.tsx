@@ -8,7 +8,7 @@
  * Rewards count swept withdrawals (lib/staking.ts), not balance growth alone.
  */
 import type { QueryState, StakingBalance, Validator, Withdrawal } from "../lib/graphql.js";
-import { validatorSummary } from "../lib/staking.js";
+import { stakingProfit, validatorSummary } from "../lib/staking.js";
 import { useState } from "react";
 import { fmtAmount } from "../lib/format.js";
 import { short } from "./Dashboard.js";
@@ -63,6 +63,12 @@ export function Staking({
     v,
     ...validatorSummary(v.validatorIndex, balances.data ?? [], wds.data ?? []),
   }));
+  const profit = stakingProfit(
+    vs,
+    new Map(summaries.filter((s) => s.rows > 0).map((s) => [s.v.validatorIndex, s.now])),
+    wds.data ?? [],
+    now,
+  );
   const history = picked !== undefined
     ? (balances.data ?? [])
         .filter((b) => b.validatorIndex === picked)
@@ -114,6 +120,24 @@ export function Staking({
           No ETH staking document in this drive yet — the setup wizard creates one;
           then validators can be watched and synced.
         </p>
+      )}
+
+      {summaries.length > 0 && (
+        <section aria-label="Profit by source" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <ProfitCard label="Outstanding consensus rewards" value={eth(profit.outstanding)} hint="balance above 32 ETH, still on the beacon chain" />
+          <ProfitCard
+            label="Skimmed withdrawals"
+            value={profit.skimmed === null ? "not imported" : eth(profit.skimmed)}
+            hint={profit.skimmed === null ? "the staking read does not fetch withdrawals yet" : "rewards swept to the withdrawal address"}
+            missing={profit.skimmed === null}
+          />
+          <ProfitCard label="Block & MEV rewards" value="not tracked" hint="proposals and fee recipient are not ingested" missing />
+          <ProfitCard
+            label="Exits"
+            value={profit.exits === 0 ? "none" : String(profit.exits)}
+            hint={profit.validators.map((v) => `#${v.index} ${v.status.toLowerCase()}`).join(" · ")}
+          />
+        </section>
       )}
 
       {summaries.length > 0 && (
@@ -284,6 +308,16 @@ export function Staking({
           </ul>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ProfitCard({ label, value, hint, missing = false }: { label: string; value: string; hint: string; missing?: boolean }) {
+  return (
+    <div className={`rounded-xl border bg-card p-4 ${missing ? "border-dashed border-border" : "border-border"}`}>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`mt-1 text-lg font-semibold ${missing ? "text-muted-foreground" : ""}`}>{value}</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
     </div>
   );
 }

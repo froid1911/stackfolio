@@ -80,3 +80,59 @@ export function validatorSummary(
     days,
   };
 }
+
+export type ValidatorStatus = "PENDING" | "ACTIVE" | "EXITING" | "EXITED";
+
+/**
+ * A withdrawal this large is principal coming home (an exit sweeps the
+ * whole balance); smaller ones are the automatic skim of rewards above 32.
+ */
+const EXIT_THRESHOLD_ETH = 16;
+
+export interface StakingProfit {
+  /** Rewards still on the beacon chain: balance above 32 ETH, summed. */
+  outstanding: number;
+  /** Skimmed rewards withdrawn; null when no withdrawal is imported. */
+  skimmed: number | null;
+  /** Block-proposal and MEV rewards: not tracked yet, so always null. */
+  blocks: number | null;
+  /** Validators whose exit has happened. */
+  exits: number;
+  validators: { index: number; status: ValidatorStatus; balance: number | null; skimmed: number }[];
+}
+
+/** Rewards by source, rotki-style; a source with no data is null, never 0. */
+export function stakingProfit(
+  validators: { validatorIndex: number; activationTs: number | null; exitedTs: number | null; withdrawableTs: number | null }[],
+  balances: Map<number, number>,
+  withdrawals: Withdrawal[],
+  now: number,
+): StakingProfit {
+  const status = (v: (typeof validators)[number]): ValidatorStatus => {
+    if (v.exitedTs !== null) return v.exitedTs * 1000 <= now ? "EXITED" : "EXITING";
+    if (v.activationTs !== null && v.activationTs * 1000 <= now) return "ACTIVE";
+    return "PENDING";
+  };
+  const skimOf = new Map<number, number>();
+  for (const w of withdrawals) {
+    const eth = gwei(w.amountGwei);
+    if (eth >= EXIT_THRESHOLD_ETH) continue;
+    skimOf.set(w.validatorIndex, (skimOf.get(w.validatorIndex) ?? 0) + eth);
+  }
+  const rows = validators.map((v) => ({
+    index: v.validatorIndex,
+    status: status(v),
+    balance: balances.get(v.validatorIndex) ?? null,
+    skimmed: skimOf.get(v.validatorIndex) ?? 0,
+  }));
+  return {
+    outstanding: rows.reduce(
+      (sum, r) => sum + (r.balance !== null && r.status !== "EXITED" ? Math.max(0, r.balance - 32) : 0),
+      0,
+    ),
+    skimmed: withdrawals.length === 0 ? null : rows.reduce((sum, r) => sum + r.skimmed, 0),
+    blocks: null,
+    exits: rows.filter((r) => r.status === "EXITED").length,
+    validators: rows,
+  };
+}

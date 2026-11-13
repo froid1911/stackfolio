@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StakingBalance, Withdrawal } from "./graphql.js";
-import { validatorSummary } from "./staking.js";
+import { stakingProfit, validatorSummary } from "./staking.js";
 
 const ETH = 1_000_000_000; // gwei
 
@@ -77,5 +77,50 @@ describe("validatorSummary", () => {
     const withdrawals = [wd("2026-10-30T00:00:00Z", 32.0)];
     const s = validatorSummary(7, balances, withdrawals);
     expect(s.apr).toBeCloseTo(0, 6);
+  });
+});
+
+describe("stakingProfit", () => {
+  const now = Date.parse("2026-11-13T12:00:00Z");
+  const sec = (iso: string) => Date.parse(iso) / 1000;
+  const v = (validatorIndex: number, over: Partial<{ activationTs: number | null; exitedTs: number | null; withdrawableTs: number | null }> = {}) => ({
+    validatorIndex,
+    activationTs: sec("2020-12-08T00:00:00Z"),
+    exitedTs: null,
+    withdrawableTs: null,
+    ...over,
+  });
+
+  it("splits profit by source and never shows an unimported source as zero", () => {
+    const profit = stakingProfit(
+      [v(26871), v(52483)],
+      new Map([[26871, 32.0035], [52483, 32.0034]]),
+      [],
+      now,
+    );
+    expect(profit.outstanding).toBeCloseTo(0.0069);
+    expect(profit.skimmed).toBeNull();
+    expect(profit.blocks).toBeNull();
+    expect(profit.exits).toBe(0);
+    expect(profit.validators.map((x) => x.status)).toEqual(["ACTIVE", "ACTIVE"]);
+  });
+
+  it("sums imported withdrawals and reads statuses from the timestamps", () => {
+    const profit = stakingProfit(
+      [
+        v(1),
+        v(2, { exitedTs: sec("2026-12-01T00:00:00Z") }),
+        v(3, { exitedTs: sec("2026-01-01T00:00:00Z") }),
+        v(4, { activationTs: sec("2027-01-01T00:00:00Z") }),
+      ],
+      new Map([[1, 32.01], [2, 32], [3, 0], [4, 32]]),
+      [wd("2026-10-10T00:00:00Z", 0.04, 1), wd("2026-01-02T00:00:00Z", 32, 3)],
+      now,
+    );
+    expect(profit.validators.map((x) => x.status)).toEqual(["ACTIVE", "EXITING", "EXITED", "PENDING"]);
+    expect(profit.skimmed).toBeCloseTo(0.04);
+    expect(profit.exits).toBe(1);
+    // An exit's principal is not profit; outstanding counts only what sits above 32.
+    expect(profit.outstanding).toBeCloseTo(0.01);
   });
 });

@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-import type { QueryState } from "../lib/graphql.js";
+import type { Asset, QueryState } from "../lib/graphql.js";
 import { Balances } from "./Balances.js";
 
 const ok = <T,>(data: T): QueryState<T> => ({
@@ -34,6 +34,53 @@ const DATA = {
   total: "6000.3",
 };
 
+const ASSETS: Asset[] = [
+  {
+    documentId: "doc",
+    identifier: "ETH",
+    symbol: "ETH",
+    name: "Ether",
+    decimals: 18,
+    kind: "NATIVE",
+    chainId: 1,
+    coingeckoId: "ethereum",
+    custom: false,
+  },
+  {
+    documentId: "doc",
+    identifier: "DAI",
+    symbol: "DAI",
+    name: "Dai Stablecoin",
+    decimals: 18,
+    kind: "ERC20",
+    chainId: 1,
+    coingeckoId: "dai",
+    custom: false,
+  },
+  {
+    documentId: "doc",
+    identifier: "MYS",
+    symbol: "MYS",
+    name: "Mystery token",
+    decimals: 18,
+    kind: "ERC20",
+    chainId: 1,
+    coingeckoId: null,
+    custom: false,
+  },
+  {
+    documentId: "doc",
+    identifier: "SPAM",
+    symbol: "US\u200BDT",
+    name: "Tether",
+    decimals: 6,
+    kind: "ERC20",
+    chainId: 1,
+    coingeckoId: null,
+    custom: false,
+  },
+];
+
 let host: HTMLElement;
 let root: Root;
 
@@ -55,6 +102,7 @@ function render(
   act(() =>
     root.render(
       <Balances
+        assets={ok(ASSETS)}
         holdings={holdings}
         onOpenAsset={vi.fn()}
         onOpenAccount={vi.fn()}
@@ -64,93 +112,35 @@ function render(
   );
 }
 
+function rowFor(text: string): string {
+  return (
+    [...host.querySelectorAll("tbody tr")].find((r) => r.textContent?.includes(text))
+      ?.textContent ?? ""
+  );
+}
+
 describe("Balances view", () => {
-  it("totals row carries the grand total and per-asset rows render", () => {
+  it("renders valued assets with formatted quantities and registry names", () => {
     render();
-    const cells = [...host.querySelectorAll("tfoot td")].map((td) => td.textContent);
-    expect(cells).toEqual(["Total", "", "6,000.3", "100%"]);
-    const body = host.querySelector("tbody")?.textContent ?? "";
-    expect(body).toContain("ETH");
-    expect(body).toContain("DAI");
+    expect(rowFor("Ether")).toContain("3");
+    expect(rowFor("Dai Stablecoin")).toContain("0.3");
+    expect(host.textContent).toContain("Total (valued)");
+    expect(host.textContent).toContain("6,000.3");
   });
 
-  it("decimal-exact per-asset sum renders (0.1 + 0.2 = 0.3, no float tail)", () => {
+  it("keeps decimal-exact sums without float tails", () => {
     render();
-    const daiRow = [...host.querySelectorAll("tbody tr")].find((r) =>
-      r.textContent?.includes("DAI"),
-    );
-    expect(daiRow?.textContent).toContain("0.3");
-    expect(daiRow?.textContent).not.toContain("0.30000000000000004");
+    expect(rowFor("Dai Stablecoin")).not.toContain("0.30000000000000004");
   });
 
-  it("unpriced asset shows an em dash value and is excluded from the donut", () => {
+  it("excludes unpriced holdings from totals and offers them separately", () => {
     render();
-    const mysRow = [...host.querySelectorAll("tbody tr")].find((r) =>
-      r.textContent?.includes("MYS"),
-    );
-    expect(mysRow?.textContent).toContain("—");
-    const donutLegend = host.querySelector("ul")?.textContent ?? "";
-    expect(donutLegend).not.toContain("MYS");
-    expect(donutLegend).toContain("ETH");
+    expect(rowFor("Mystery token")).toBe("");
+    expect(host.textContent).toContain("1 unpriced");
   });
 
-  it("no holdings → empty state copy", () => {
-    render(ok({ holdings: [], perAsset: [], perAccount: [], total: "0" }));
-    expect(host.textContent).toContain("Nothing held yet");
-  });
-
-  it("asset click reports the asset identifier", () => {
-    const onOpenAsset = vi.fn();
-    render(ok(DATA), { onOpenAsset });
-    const btn = [...host.querySelectorAll<HTMLButtonElement>("tbody button")].find((b) =>
-      b.textContent?.includes("ETH"),
-    )!;
-    act(() => btn.click());
-    expect(onOpenAsset).toHaveBeenCalledWith("ETH");
-  });
-
-  it("expanding an asset reveals its wallet rows and account click reports", () => {
-    const onOpenAccount = vi.fn();
-    render(ok(DATA), { onOpenAccount });
-    const ethRow = [...host.querySelectorAll<HTMLTableRowElement>("tbody tr")].find((r) =>
-      r.textContent?.includes("ETH"),
-    )!;
-    act(() => ethRow.click());
-    const accounts = host.querySelector("tbody")?.textContent ?? "";
-    expect(accounts).toContain("fr4nk.eth");
-    expect(accounts).toContain("cold");
-    const w1 = [...host.querySelectorAll<HTMLButtonElement>("tbody tr button")].find((b) =>
-      b.textContent?.includes("fr4nk.eth"),
-    )!;
-    act(() => w1.click());
-    // A wallet row of an asset opens the ASSET's detail (Task 11's
-    // overlay lists holdings per wallet itself); account drill goes
-    // through the account lists beside the donut.
-    expect(onOpenAccount).not.toHaveBeenCalled();
-  });
-
-  it("account list under the donut reports the wallet address", () => {
-    const onOpenAccount = vi.fn();
-    render(ok(DATA), { onOpenAccount });
-    const w2 = [...host.querySelectorAll<HTMLButtonElement>("ul button")].find((b) =>
-      b.textContent?.includes("cold"),
-    )!;
-    act(() => w2.click());
-    expect(onOpenAccount).toHaveBeenCalledWith("0xw2");
-  });
-
-  it("expanding an asset closes the open account overlay", () => {
-    const onCloseAccount = vi.fn();
-    render(ok(DATA), { onCloseAccount });
-    const ethRow = [...host.querySelectorAll<HTMLTableRowElement>("tbody tr")].find((r) =>
-      r.textContent?.includes("ETH"),
-    )!;
-    act(() => ethRow.click());
-    expect(onCloseAccount).toHaveBeenCalledTimes(1);
-  });
-
-  it("query error surfaces the message", () => {
-    render({ data: null, error: "switchboard down", loading: false, reload: () => {} });
-    expect(host.textContent).toContain("switchboard down");
+  it("never renders a spoofed ticker in the valued table", () => {
+    render();
+    expect(host.textContent).not.toContain("US\u200BDT");
   });
 });

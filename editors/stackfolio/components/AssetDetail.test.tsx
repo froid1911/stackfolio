@@ -45,6 +45,16 @@ vi.mock("../lib/mutations.js", () => ({
   usePortfolioActions: () => actions,
 }));
 
+// ECharts needs a canvas context, which jsdom does not implement; the chart's
+// data and ARIA contract are asserted through the wrapper instead.
+vi.mock("echarts", () => ({
+  init: () => ({
+    setOption: () => {},
+    resize: () => {},
+    dispose: () => {},
+  }),
+}));
+
 const HOLDINGS = {
   holdings: [
     { asset: "ETH", symbol: "ETH", wallet: "0xw1", quantity: "2", value: "4000" },

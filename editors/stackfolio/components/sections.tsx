@@ -167,6 +167,7 @@ export function DashboardSection({
   const snapshots = useSnapshots(driveId);
   const issues = useIssues(driveId);
   const assets = useAssets(driveId);
+  const holdings = useHoldings(driveId);
   const recent = useEventsPage(driveId, { first: 6 });
   return (
     <Dashboard
@@ -176,6 +177,7 @@ export function DashboardSection({
       recent={recent}
       issues={issues}
       assets={assets}
+      holdings={holdings}
     />
   );
 }
@@ -192,8 +194,10 @@ export function BalancesSection({
   onCloseAccount?: () => void;
 }) {
   const holdings = useHoldings(driveId);
+  const assets = useAssets(driveId);
   return (
     <Balances
+      assets={assets}
       holdings={holdings}
       onOpenAsset={onOpenAsset}
       onOpenAccount={onOpenAccount}

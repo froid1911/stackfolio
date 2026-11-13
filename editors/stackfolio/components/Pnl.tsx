@@ -119,41 +119,89 @@ export function Pnl({
   if (error) return <p className="p-6 text-red-700">{error}</p>;
   if (!report.data) return <p className="p-6 text-muted-foreground">Loading the books…</p>;
 
+  const controls = (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex overflow-hidden rounded-lg border border-border text-xs">
+        {PERIODS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => setPeriodId(p.id)}
+            className={`px-3 py-1.5 ${periodId === p.id ? "bg-primary font-medium text-primary-foreground" : "hover:bg-muted"}`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <select
+        className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+        value={wallet ?? ""}
+        onChange={(e) => setWallet(e.target.value || undefined)}
+      >
+        <option value="">All wallets</option>
+        {(accounts.data ?? []).map((a) => (
+          <option key={a.documentId} value={a.address}>
+            {a.label || short(a.address)}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => setShowLots((v) => !v)}
+        className="ml-auto rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-muted"
+      >
+        {showLots ? "Hide open lots" : `Open lots (${(lots.data ?? []).length})`}
+      </button>
+    </div>
+  );
+
+  // Coverage first: an empty window is a data problem, not a zero result.
+  if (months.length === 0) {
+    const missingBasis = unpricedIn > 0;
+    const missingValue = unpricedOut > 0;
+    return (
+      <div className="grid gap-4 p-6">
+        {controls}
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+          <p className="text-sm font-medium">No P&L in this window</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {missingBasis
+              ? `${unpricedIn} disposal${unpricedIn === 1 ? "" : "s"} without a cost basis. `
+              : ""}
+            {missingValue
+              ? `${unpricedOut} disposal${unpricedOut === 1 ? "" : "s"} without a value. `
+              : ""}
+            {missingBasis || missingValue
+              ? "The events are booked; the books cannot price them yet."
+              : "No disposals, income or expenses are settled in this window."}
+          </p>
+          {(missingBasis || missingValue) && (
+            <>
+              <p className="mt-2 text-xs font-medium text-muted-foreground">How to fix</p>
+              <ul className="mt-1 list-disc pl-4 text-xs text-muted-foreground">
+                {missingBasis && (
+                  <li>Price the acquisitions so the disposal cost is known.</li>
+                )}
+                {missingValue && (
+                  <li>Price the disposals so the proceeds are known.</li>
+                )}
+                <li>Link transfers so cost basis follows the asset across wallets.</li>
+              </ul>
+              {oldestUnpriced && (
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  Oldest unpriced activity: {oldestUnpriced.month}.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4 p-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex overflow-hidden rounded-lg border border-border text-xs">
-          {PERIODS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setPeriodId(p.id)}
-              className={`px-3 py-1.5 ${periodId === p.id ? "bg-primary font-medium text-primary-foreground" : "hover:bg-muted"}`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <select
-          className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
-          value={wallet ?? ""}
-          onChange={(e) => setWallet(e.target.value || undefined)}
-        >
-          <option value="">All wallets</option>
-          {(accounts.data ?? []).map((a) => (
-            <option key={a.documentId} value={a.address}>
-              {a.label || short(a.address)}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={() => setShowLots((v) => !v)}
-          className="ml-auto rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-muted"
-        >
-          {showLots ? "Hide open lots" : `Open lots (${(lots.data ?? []).length})`}
-        </button>
-      </div>
+      {controls}
 
       {(unpricedIn > 0 || unpricedOut > 0) && (
         <Banner tone="warning">

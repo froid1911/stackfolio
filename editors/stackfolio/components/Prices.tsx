@@ -1,10 +1,11 @@
 /**
  * The price book: hourly history per asset, the latest answers with their
- * source, and the manual overrides that win over both.
+ * source, and the manual overrides that win over both. Rows resolve symbols
+ * through the registry so no raw identifier reaches the screen.
  */
 import type { Asset, Override, Price, PricePoint, QueryState } from "../lib/graphql.js";
-import { fmtFiat } from "../lib/format.js";
-import { Sparkline } from "../lib/charts.js";
+import { assetBook, formatUnitPrice, symbolOf } from "../lib/assets.js";
+import { ValueHistory } from "../lib/echart.js";
 
 export function Prices({
   assets,
@@ -24,11 +25,13 @@ export function Prices({
   currency: string;
 }) {
   const priced = (latest.data ?? []).map((p) => p.asset);
-  const symbols = new Map((assets.data ?? []).map((a) => [a.identifier, a.symbol]));
+  const book = assetBook(assets.data ?? [], priced);
+  const symbol = (id: string) => symbolOf(book.byId, id);
   const asset = picked ?? priced.at(0) ?? null;
   const series = (points.data ?? [])
-    .filter((p) => !picked || p.asset === picked)
+    .filter((p) => !asset || p.asset === asset)
     .sort((a, b) => a.hour.localeCompare(b.hour));
+  const history = series.map((p) => ({ at: p.hour, value: Number(p.price) || 0 }));
 
   return (
     <div className="grid gap-4 p-6">
@@ -42,7 +45,7 @@ export function Prices({
               asset === id ? "bg-primary font-medium text-primary-foreground" : "hover:bg-muted"
             }`}
           >
-            {symbols.get(id) ?? id}
+            {symbol(id)}
           </button>
         ))}
         {priced.length === 0 && (
@@ -54,19 +57,24 @@ export function Prices({
 
       {asset && (
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-sm font-medium">
-            {symbols.get(asset) ?? asset} / {currency}
-          </p>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm font-medium">
+              {symbol(asset)} / {currency}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {series.length === 0
+                ? "no history yet"
+                : `${series.length} hourly point${series.length === 1 ? "" : "s"} · ${new Date(
+                    series[0]!.hour,
+                  ).toLocaleString()} → ${new Date(series.at(-1)!.hour).toLocaleString()}`}
+            </p>
+          </div>
           <div className="mt-3">
-            <Sparkline points={series.map((p) => Number(p.price) || 0)} strokeClass="text-sky-500" />
-            <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-              <span>{series[0] ? new Date(series[0].hour).toLocaleString() : ""}</span>
-              <span>
-                {series[series.length - 1]
-                  ? new Date(series[series.length - 1].hour).toLocaleString()
-                  : ""}
-              </span>
-            </div>
+            <ValueHistory
+              points={history}
+              formatValue={(v) => formatUnitPrice(String(v))}
+              ariaLabel={`${symbol(asset)} price history`}
+            />
           </div>
         </div>
       )}
@@ -85,14 +93,21 @@ export function Prices({
             <tbody>
               {(latest.data ?? []).map((p) => (
                 <tr key={p.asset} className="border-t border-border">
-                  <td className="px-3 py-2 font-medium">{symbols.get(p.asset) ?? p.asset}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmtFiat(p.price, 6)}</td>
+                  <td className="px-3 py-2 font-medium">{symbol(p.asset)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatUnitPrice(p.price)}</td>
                   <td className="px-3 py-2 text-muted-foreground">{p.source.toLowerCase()}</td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {new Date(p.fetchedAt).toLocaleString()}
                   </td>
                 </tr>
               ))}
+              {(latest.data ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
+                    No prices yet.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -108,8 +123,8 @@ export function Prices({
             <tbody>
               {(overrides.data ?? []).map((o) => (
                 <tr key={`${o.documentId}/${o.asset}`} className="border-t border-border">
-                  <td className="px-3 py-2 font-medium">{symbols.get(o.asset) ?? o.asset}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmtFiat(o.price, 6)}</td>
+                  <td className="px-3 py-2 font-medium">{symbol(o.asset)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatUnitPrice(o.price)}</td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {new Date(o.setAt).toLocaleString()}
                   </td>

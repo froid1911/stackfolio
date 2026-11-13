@@ -11,9 +11,12 @@ import type {
   Totals,
   Issue,
   EventRow,
+  HoldingRow,
 } from "../lib/graphql.js";
 import { fmtAmount, fmtFiat } from "../lib/format.js";
-import { Donut, Sparkline } from "../lib/charts.js";
+import { Donut } from "../lib/charts.js";
+import { ValueHistory } from "../lib/echart.js";
+import { coverage, formatQuantity } from "../lib/assets.js";
 
 const CURRENCY_SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
 
@@ -31,6 +34,7 @@ export function Dashboard({
   recent,
   issues,
   assets,
+  holdings,
 }: {
   portfolioDocumentId: string | undefined;
   totals: QueryState<Totals>;
@@ -38,6 +42,7 @@ export function Dashboard({
   recent: QueryState<{ rows: EventRow[]; total: number }>;
   issues: QueryState<Issue[]>;
   assets: QueryState<Asset[]>;
+  holdings?: QueryState<{ holdings: HoldingRow[]; total: string } | null>;
 }) {
   const [portfolio] = useDocumentById(portfolioDocumentId ?? "");
   const currency =
@@ -48,9 +53,10 @@ export function Dashboard({
 
   const t = totals.data;
   const series = [...(snapshots.data ?? [])].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  const first = series.at(0);
   const latest = series.at(-1);
   const open = (issues.data ?? []).filter((i) => i.severity !== "RESOLVED").slice(0, 5);
+  const cov = coverage(holdings?.data?.holdings ?? [], holdings?.data?.total ?? null);
+  const history = series.map((s) => ({ at: s.timestamp, value: Number(s.totalValue) || 0 }));
 
   return (
     <div className="grid gap-4 p-6">
@@ -74,6 +80,17 @@ export function Dashboard({
         />
       </div>
 
+      {cov.unpricedAssets > 0 && (
+        <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
+          <p className="text-sm font-medium">Unpriced holdings</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {cov.unpricedAssets} of {cov.assets} tracked assets carry a quantity but
+            no price, so they sit outside the total. Open Balances to review them;
+            the {formatQuantity(String(cov.unpricedRows))} rows are kept, not dropped.
+          </p>
+        </div>
+      )}
+
       {open.length > 0 && (
         <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
           <p className="text-sm font-medium">Needs attention</p>
@@ -95,16 +112,22 @@ export function Dashboard({
       )}
 
       <div className="rounded-xl border border-border bg-card p-4">
-        <p className="text-sm font-medium">Total value over time</p>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-sm font-medium">Total value over time</p>
+          <p className="text-[10px] text-muted-foreground">
+            {series.length === 0
+              ? "no snapshots yet"
+              : `${series.length} snapshot${series.length === 1 ? "" : "s"} · ${new Date(
+                  series[0]!.timestamp,
+                ).toLocaleString()} → ${new Date(series.at(-1)!.timestamp).toLocaleString()}`}
+          </p>
+        </div>
         <div className="mt-3">
-          <Sparkline
-            points={series.map((s) => Number(s.totalValue) || 0)}
-            strokeClass="text-violet-500"
+          <ValueHistory
+            points={history}
+            formatValue={(v) => money(String(v), currency)}
+            ariaLabel="Total portfolio value over time"
           />
-          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-            <span>{first ? new Date(first.timestamp).toLocaleDateString() : ""}</span>
-            <span>{latest ? new Date(latest.timestamp).toLocaleDateString() : ""}</span>
-          </div>
         </div>
       </div>
 

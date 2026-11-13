@@ -30,6 +30,30 @@ function asset(over: Partial<Asset> & Pick<Asset, "identifier">): Asset {
   };
 }
 
+describe("looksSpoofed: URL-bait airdrops", () => {
+  it("flags lures, links and scam-domain tickers seen in the registry", () => {
+    expect(looksSpoofed({ symbol: "880$ Visit unibonus.site to claim", name: "unibonus.site" })).toBe(true);
+    expect(looksSpoofed({ symbol: "BalancerLP.com", name: "$" })).toBe(true);
+    expect(looksSpoofed({ symbol: "BPrize", name: "BirdsPrize.club" })).toBe(true);
+    expect(looksSpoofed({ symbol: "RWD", name: "Claim your reward at t.me/x" })).toBe(true);
+    expect(looksSpoofed({ symbol: "GIFT", name: "www.gift.io" })).toBe(true);
+  });
+
+  it("keeps real tokens, including .finance project names", () => {
+    for (const asset of [
+      { symbol: "FAM", name: "yefam.finance" },
+      { symbol: "DIXT", name: "DIXT.FINANCE" },
+      { symbol: "YFIB", name: "YFIBALANCER.FINANCE" },
+      { symbol: "rETH", name: "Rocket Pool ETH" },
+      { symbol: "crvPlain3andSUSD", name: "Curve.fi DAI/USDC/USDT/sUSD" },
+      { symbol: "aEthWBTC", name: "Aave Ethereum WBTC" },
+      { symbol: "BAL", name: "Balancer" },
+    ]) {
+      expect(looksSpoofed(asset), asset.symbol).toBe(false);
+    }
+  });
+});
+
 describe("looksSpoofed", () => {
   it("refuses mixed-script and invisible tickers", () => {
     expect(looksSpoofed({ symbol: "DAI", name: "Dai Stablecoin" })).toBe(false);

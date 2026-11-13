@@ -49,23 +49,32 @@ export function chainOf(book: Map<string, Asset>, identifier: string): string {
   return "unknown chain";
 }
 
-/** A symbol/name carrying characters a ticker never has: a spoof. */
-const TICKER = /^[A-Za-z0-9$._\- ]+$/;
+/** Characters a ticker may carry: "UNI-V2", "MD+", "yveCRV-DAO", "ETH2x-FLI". */
+const TICKER = /^[A-Za-z0-9$._\-+/()]+$/;
+/** Printable ASCII: names carry punctuation ("Curve.fi DAI/USDC/USDT/sUSD"). */
+const PRINTABLE = /^[\x20-\x7E]+$/;
 const INVISIBLE = /[\u200B-\u200D\u2060\uFEFF]/;
 const COMBINING = /[\u0300-\u036F]/;
+/** Airdrop lures: a link, a call to action, or a domain on a throwaway TLD. */
+const LINK = /https?:|www\.|t\.me\//i;
+const LURE = /\b(visit|claim|reward|airdrop|voucher|gift)s?\b/i;
+const SCAM_DOMAIN = /[a-z0-9-]+\.(com|site|club|xyz|org|net|app|live|top|link|online|vip|cc|info)\b/i;
 
 /**
- * Mixed-script and invisible-character tickers are the cheap impersonation
- * trick seen in the wild ("DAІ" with a Cyrillic І, "USDТ" with a Cyrillic Т,
- * bidi/zero-width padding). A ticker with a non-ASCII letter is refused.
+ * Two impersonation tricks seen in the wild. Look-alikes: mixed-script and
+ * invisible characters ("DAІ" with a Cyrillic І, "USDТ" with a Cyrillic Т,
+ * zero-width padding). Bait: tickers and names that are adverts ("880$ Visit
+ * unibonus.site to claim", "BalancerLP.com"). Project names on .finance and
+ * .fi stay legitimate ("yefam.finance", "Curve.fi …").
  */
 export function looksSpoofed(asset: Pick<Asset, "symbol" | "name">): boolean {
-  for (const text of [asset.symbol, asset.name]) {
+  const { symbol, name } = asset;
+  for (const text of [symbol, name]) {
     if (!text) continue;
-    if (INVISIBLE.test(text) || COMBINING.test(text)) return true;
-    if (!TICKER.test(text)) return true;
+    if (INVISIBLE.test(text) || COMBINING.test(text) || !PRINTABLE.test(text)) return true;
+    if (LINK.test(text) || LURE.test(text) || SCAM_DOMAIN.test(text)) return true;
   }
-  return false;
+  return Boolean(symbol) && !TICKER.test(symbol);
 }
 
 /** Native coins, curated entries and CoinGecko-mapped assets are vouched for. */

@@ -40,6 +40,10 @@ export interface EventRow {
   address: string;
   chainId: number;
   label: string | null;
+  /** The books' price per whole unit for this leg; null when it has none. */
+  price: string | null;
+  priceUnit: string | null;
+  priceSource: string | null;
 }
 
 export interface EventsPage {
@@ -57,6 +61,8 @@ export interface EventsFilter {
   from?: string;
   to?: string;
   query?: string;
+  /** Only events the books cannot value yet. */
+  needsPrice?: boolean;
   first?: number;
   offset?: number;
 }
@@ -204,7 +210,7 @@ export function useIndexQuery<T>(
 const EVENTS_ROWS = `
   documentId eventId eventIdentifier sequenceIndex timestamp type subtype
   asset amount counterparty counterpartyLabel notes ignored source address
-  chainId label
+  chainId label price priceUnit priceSource
 `;
 
 /** Everything `portfolioApi` answers, so a hook is one field name. */
@@ -274,9 +280,9 @@ export function useEventsPage(
   filter: EventsFilter,
 ): QueryState<EventsPage> {
   return usePortfolioField(
-    `query ($driveId: String! $ids: [String!] $address: String $asset: String $types: [String!] $ignored: Boolean $from: String $to: String $query: String $first: Int $offset: Int) {
+    `query ($driveId: String! $ids: [String!] $address: String $asset: String $types: [String!] $ignored: Boolean $from: String $to: String $query: String $needsPrice: Boolean $first: Int $offset: Int) {
       portfolioApi {
-        events(driveId: $driveId ids: $ids address: $address asset: $asset types: $types ignored: $ignored from: $from to: $to query: $query first: $first offset: $offset) {
+        events(driveId: $driveId ids: $ids address: $address asset: $asset types: $types ignored: $ignored from: $from to: $to query: $query needsPrice: $needsPrice first: $first offset: $offset) {
           total
           rows { ${EVENTS_ROWS} }
         }

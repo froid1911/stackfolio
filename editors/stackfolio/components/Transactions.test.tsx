@@ -32,6 +32,9 @@ const EVENT = {
   address: "0xfrank",
   chainId: 1,
   label: null,
+  price: null as string | null,
+  priceUnit: null as string | null,
+  priceSource: null as string | null,
 };
 
 const ASSETS = ok([

@@ -237,6 +237,8 @@ describe("negative nets", () => {
     expect(a.total).toBe("-73059.16");
     expect(a.negative.map((r) => r.asset)).toEqual(["wst", "dai"]);
     expect(a.slices.map((x) => x.label)).toEqual(["ETH"]);
+    // Shares are of what is held, not of a net a gap pulls down: never over 100%.
+    expect(a.share("eth")).toBe(1);
     expect(a.valued.map((r) => r.asset)).toEqual(["eth"]);
     expect(a.unpriced).toEqual([]);
     expect(a.share("wst")).toBeNull();

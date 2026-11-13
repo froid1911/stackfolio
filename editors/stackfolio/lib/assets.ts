@@ -237,7 +237,7 @@ export interface Allocation<T extends AssetHolding> {
   negative: T[];
   /** Sum of `valued` and the priced `negative` rows, exact decimal. */
   total: string;
-  /** A valued asset's fraction of `total`; null for anything else. */
+  /** A valued asset's fraction of the valued rows' gross; null for anything else. */
   share: (identifier: string) => number | null;
   /** Donut slices from the same total: the top `top` plus "Other". */
   slices: { label: string; value: number }[];
@@ -269,7 +269,9 @@ export function allocate<T extends AssetHolding>(
   const total = sumDecimals(
     [...valued, ...negative].flatMap((a) => (a.value === null ? [] : [a.value])),
   );
-  const totalNumber = Number(total);
+  // Shares are of what is held: the gross of the valued rows, so a ledger
+  // gap pulling the net down never pushes a share past 100%.
+  const gross = valued.reduce((sum, a) => sum + Number(a.value), 0);
   const byId = new Map(valued.map((a) => [a.asset, Number(a.value)]));
   const head = valued.slice(0, top);
   const rest = valued.slice(top).reduce((acc, a) => acc + Number(a.value), 0);
@@ -282,7 +284,7 @@ export function allocate<T extends AssetHolding>(
     total,
     share: (identifier) => {
       const value = byId.get(identifier);
-      return value === undefined || totalNumber <= 0 ? null : value / totalNumber;
+      return value === undefined || gross <= 0 ? null : value / gross;
     },
     slices: [
       ...head.map((a) => ({ label: symbolOf(book.byId, a.asset), value: Number(a.value) })),

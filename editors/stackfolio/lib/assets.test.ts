@@ -213,3 +213,29 @@ describe("debt tokens", () => {
     expect(a.total).toBe("10");
   });
 });
+
+describe("negative nets", () => {
+  it("keeps an impossible negative holding out of the total and lists it", () => {
+    const book = assetBook(
+      [
+        asset({ identifier: "eth", symbol: "ETH", kind: "NATIVE" }),
+        asset({ identifier: "wst", symbol: "wstETH", coingeckoId: "wsteth" }),
+        asset({ identifier: "dai", symbol: "DAI", coingeckoId: "dai" }),
+      ],
+      ["eth", "wst", "dai"],
+    );
+    const a = allocate(
+      [
+        { asset: "eth", quantity: "1", value: "1754.28" },
+        { asset: "wst", quantity: "-34.134", value: "-74813.44" },
+        { asset: "dai", quantity: "-12", value: null },
+      ],
+      book,
+    );
+    expect(a.total).toBe("1754.28");
+    expect(a.negative.map((r) => r.asset)).toEqual(["wst", "dai"]);
+    expect(a.valued.map((r) => r.asset)).toEqual(["eth"]);
+    expect(a.unpriced).toEqual([]);
+    expect(a.share("wst")).toBeNull();
+  });
+});

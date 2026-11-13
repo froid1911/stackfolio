@@ -227,6 +227,12 @@ export interface Allocation<T extends AssetHolding> {
    * kept out and listed, and the page says the total is gross of them.
    */
   debt: T[];
+  /**
+   * Holdings whose ledger nets below zero — impossible for a balance, so
+   * an inflow the ledger never recorded (a wrap, a bridge). Kept out of the
+   * total and listed rather than subtracted.
+   */
+  negative: T[];
   /** Sum of `valued`, exact decimal. */
   total: string;
   /** A valued asset's fraction of `total`; null for anything else. */
@@ -249,12 +255,14 @@ export function allocate<T extends AssetHolding>(
   const isSpam = (identifier: string) => tiers.get(identifier) === "spam";
   const isDebt = (identifier: string) =>
     !isSpam(identifier) && isDebtToken(symbolOf(book.byId, identifier));
-  const counted = (identifier: string) => !isSpam(identifier) && !isDebt(identifier);
+  const isNegative = (a: T) => a.quantity.startsWith("-");
+  const counted = (a: T) => !isSpam(a.asset) && !isDebt(a.asset) && !isNegative(a);
   const spam = perAsset.filter((a) => isSpam(a.asset));
   const debt = perAsset.filter((a) => isDebt(a.asset));
-  const unpriced = perAsset.filter((a) => a.value === null && counted(a.asset));
+  const negative = perAsset.filter((a) => isNegative(a) && !isSpam(a.asset) && !isDebt(a.asset));
+  const unpriced = perAsset.filter((a) => a.value === null && counted(a));
   const valued = perAsset
-    .filter((a) => a.value !== null && counted(a.asset))
+    .filter((a) => a.value !== null && counted(a))
     .sort((a, b) => Number(b.value) - Number(a.value));
   const total = sumDecimals(valued.map((a) => a.value!));
   const totalNumber = Number(total);
@@ -266,6 +274,7 @@ export function allocate<T extends AssetHolding>(
     unpriced,
     spam,
     debt,
+    negative,
     total,
     share: (identifier) => {
       const value = byId.get(identifier);

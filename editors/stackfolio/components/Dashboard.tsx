@@ -79,6 +79,7 @@ export function Dashboard({
                   "valued holdings now",
                   alloc.unpriced.length > 0 ? `${alloc.unpriced.length} unpriced not counted` : "",
                   alloc.debt.length > 0 ? `gross of ${alloc.debt.length} debt position${alloc.debt.length === 1 ? "" : "s"}` : "",
+                  alloc.negative.length > 0 ? `${alloc.negative.length} incomplete` : "",
                 ]
                   .filter(Boolean)
                   .join(" · ")
@@ -105,6 +106,23 @@ export function Dashboard({
           <p className="mt-1 text-xs text-muted-foreground">
             Borrowed positions are listed, not subtracted, so the total above is
             what you hold before repaying them. The DeFi page shows each loan.
+          </p>
+        </div>
+      )}
+
+      {alloc.negative.length > 0 && (
+        <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
+          <p className="text-sm font-medium">
+            Ledger incomplete: {alloc.negative.length} holding
+            {alloc.negative.length === 1 ? "" : "s"} net below zero
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {[...new Set(alloc.negative.map((n) => symbolOf(assets.data, n.asset)))]
+              .slice(0, 8)
+              .join(", ")}
+            {alloc.negative.length > 8 ? ", …" : ""} — more went out than the ledger saw come
+            in (a wrap, a bridge or an unscanned path). They are left out of the total, not
+            subtracted.
           </p>
         </div>
       )}

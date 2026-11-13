@@ -84,7 +84,7 @@ export function Balances({
     book.rows.find((r) => r.asset.identifier === identifier);
 
   const alloc = allocate(totals?.perAsset ?? [], book);
-  const { valued: sorted, unpriced, spam, debt, slices } = alloc;
+  const { valued: sorted, unpriced, spam, debt, negative, slices } = alloc;
   const walletName = new Map(
     (data.perAccount ?? []).map((a) => [a.wallet, a.ensName || a.label || short(a.wallet)]),
   );
@@ -108,6 +108,11 @@ export function Balances({
           {debt.length > 0 && (
             <span className="rounded-full border border-red-500/40 bg-red-500/5 px-2 py-0.5 text-red-700">
               {debt.length} debt position{debt.length === 1 ? "" : "s"} · not netted
+            </span>
+          )}
+          {negative.length > 0 && (
+            <span className="rounded-full border border-warning/40 bg-warning/5 px-2 py-0.5 text-warning">
+              {negative.length} below zero · ledger incomplete
             </span>
           )}
           {spam.length > 0 && (
@@ -199,6 +204,38 @@ export function Balances({
                     </td>
                     <td className="px-3 py-1.5 text-right tabular-nums">
                       {formatQuantity(asset.quantity)} owed
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {negative.length > 0 && (
+          <div className="mt-4 overflow-x-auto rounded-xl border border-warning/30 bg-warning/5">
+            <p className="px-3 pt-3 text-xs font-medium text-warning">
+              Below zero — the ledger missed an inflow; left out of the total
+            </p>
+            <table className="mt-2 w-full text-left text-xs">
+              <tbody>
+                {negative.map((asset) => (
+                  <tr key={asset.asset} className="border-t border-warning/20">
+                    <td className="px-3 py-1.5">
+                      <button
+                        type="button"
+                        className="font-medium text-primary underline-offset-2 hover:underline"
+                        onClick={() => onOpenAsset(asset.asset)}
+                      >
+                        {symbolOf(book.byId, asset.asset)}
+                      </button>{" "}
+                      <span className="text-muted-foreground">{nameOf(book.byId, asset.asset)}</span>
+                    </td>
+                    <td className="px-3 py-1.5 text-muted-foreground">
+                      {chainOf(book.byId, asset.asset)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {formatQuantity(asset.quantity)}
                     </td>
                   </tr>
                 ))}

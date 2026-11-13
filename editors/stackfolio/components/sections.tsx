@@ -309,8 +309,10 @@ export function AddressBookSection({
 export function StakingSection({ driveId }: { driveId: string }) {
   const [picked, setPicked] = useState<number | undefined>(undefined);
   const validators = useValidators(driveId);
-  const balances = useStakingBalances(driveId, picked);
-  const withdrawals = useWithdrawals(driveId, picked);
+  // Every validator's rows: the summary cards need them all; the page
+  // narrows the chart and the withdrawals list to the picked one itself.
+  const balances = useStakingBalances(driveId);
+  const withdrawals = useWithdrawals(driveId);
   // One clock per mount; statuses compare against it, not per-render now.
   const [now] = useState(() => Date.now());
   const nodes = useNodesInSelectedDrive();

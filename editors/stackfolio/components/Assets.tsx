@@ -1,13 +1,15 @@
 /**
- * The asset book: what the registry knows, what the newest snapshot holds and
- * what the price book says each is worth — with the trust layer applied.
+ * The asset book: what the registry knows, what the drive holds now (the
+ * same live fold Balances and the Dashboard read) and what the price book
+ * says each is worth — with the trust layer applied.
  *
  * Filters keep the four populations separate: valued assets, unpriced assets
  * (quantity but no price), suspected spam and everything else. Spam never
  * counts toward totals and is hidden unless asked for.
  */
 import { useState } from "react";
-import type { Asset, Price, QueryState, Snapshot } from "../lib/graphql.js";
+import type { Asset, HoldingRow, Price, QueryState } from "../lib/graphql.js";
+import { buildBalances } from "../../../subgraphs/portfolio-api/lib.js";
 import { fmtFiat } from "../lib/format.js";
 import {
   ambiguousTicker,
@@ -38,13 +40,13 @@ function inFilter(tier: AssetTier, priced: boolean, filter: Filter): boolean {
 export function Assets({
   assets,
   prices,
-  snapshots,
+  holdings,
   currency,
   onOpenAsset,
 }: {
   assets: QueryState<Asset[]>;
   prices: QueryState<Price[]>;
-  snapshots: QueryState<Snapshot[]>;
+  holdings: QueryState<{ holdings: HoldingRow[] } | null>;
   currency: string;
   onOpenAsset: (identifier: string) => void;
 }) {
@@ -54,9 +56,9 @@ export function Assets({
 
   const priceOf = new Map((prices.data ?? []).map((p) => [p.asset, p]));
   const book = assetBook(assets.data, priceOf.keys());
-  const series = [...(snapshots.data ?? [])].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  const latest = series.at(-1);
-  const held = new Map((latest ? latest.assets : []).map((a) => [a.asset, a]));
+  const held = new Map(
+    buildBalances(holdings.data?.holdings ?? []).perAsset.map((a) => [a.asset, a]),
+  );
 
   const counts = { all: 0, valued: 0, unpriced: 0, spam: 0 };
   for (const row of book.rows) {
@@ -69,7 +71,15 @@ export function Assets({
     else counts.unpriced += 1;
   }
 
-  const rows = book.rows.filter((row) => inFilter(row.tier, row.priced, filter));
+  // Biggest valued holdings first, then everything else by ticker.
+  const valueOf = (identifier: string) => Number(held.get(identifier)?.value ?? -1);
+  const rows = book.rows
+    .filter((row) => inFilter(row.tier, row.priced, filter))
+    .sort(
+      (a, b) =>
+        valueOf(b.asset.identifier) - valueOf(a.asset.identifier) ||
+        a.asset.symbol.localeCompare(b.asset.symbol),
+    );
 
   return (
     <div className="grid gap-4 p-6">
@@ -148,13 +158,13 @@ export function Assets({
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{chainLabel(asset.chainId)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {h ? formatQuantity(h.amount) : "—"}
+                    {h ? formatQuantity(h.quantity) : "—"}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {p ? formatUnitPrice(p.price) : "—"}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {p && h ? fmtFiat(h.value) : "—"}
+                    {p && h?.value ? fmtFiat(h.value) : "—"}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {p ? `${p.source.toLowerCase()} · ${new Date(p.fetchedAt).toLocaleTimeString()}` : "—"}
@@ -173,7 +183,7 @@ export function Assets({
         </table>
       </div>
       <p className="text-[10px] text-muted-foreground">
-        Held and value read the newest snapshot (all locations together) in {currency}.
+        Held and value are live holdings across all wallets, in {currency}.
         Values without a price stay "—" rather than zero.
       </p>
     </div>

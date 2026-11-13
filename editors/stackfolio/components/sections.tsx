@@ -395,7 +395,7 @@ export function AssetsSection({
 }) {
   const assets = useAssets(driveId);
   const prices = useLatestPrices(driveId);
-  const snapshots = useSnapshots(driveId);
+  const holdings = useHoldings(driveId);
   const { data: doc } = useDocumentSafe(portfolioNodeId(list));
   const currency =
     (doc as { state?: { global?: { baseCurrency?: string } } } | undefined)?.state?.global
@@ -403,7 +403,7 @@ export function AssetsSection({
   const book = usePortfolioBook(list);
   return (
     <div className="grid gap-4">
-      <Assets assets={assets} prices={prices} snapshots={snapshots} currency={currency}
+      <Assets assets={assets} prices={prices} holdings={holdings} currency={currency}
       onOpenAsset={onOpenAsset} />
       {book.positions.length > 0 && (
         <div className="px-6 pb-6">

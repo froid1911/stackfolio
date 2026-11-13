@@ -1,12 +1,18 @@
 /**
  * ETH staking: the drive's validators, their daily balances and the
  * withdrawals that reached the portfolio.
+ *
+ * Each validator gets a summary card — balance now, 7d and 30d rewards, an
+ * APR estimate over the observed window and the total withdrawn — so the
+ * page answers "how did my validators behave" without opening a table.
+ * Rewards count swept withdrawals (lib/staking.ts), not balance growth alone.
  */
 import type { QueryState, StakingBalance, Validator, Withdrawal } from "../lib/graphql.js";
+import { stakingProfit, validatorSummary } from "../lib/staking.js";
 import { useState } from "react";
 import { fmtAmount } from "../lib/format.js";
 import { short } from "./Dashboard.js";
-import { Bars } from "../lib/charts.js";
+import { ValueHistory } from "../lib/echart.js";
 
 function status(v: Validator, now: number): { text: string; tone: string } {
   if (v.withdrawableTs !== null && v.withdrawableTs * 1000 <= now)
@@ -18,9 +24,14 @@ function status(v: Validator, now: number): { text: string; tone: string } {
   return { text: "pending", tone: "text-sky-600" };
 }
 
+const gwei = (v: string) => Number(v) / 1e9;
+const eth = (v: number) => `${v.toFixed(4)} ETH`;
+const signed = (v: number | null) =>
+  v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(4)} ETH`;
+
 export function Staking({
   validators,
-  balances: history,
+  balances,
   withdrawals: wds,
   picked,
   setPicked,
@@ -48,6 +59,22 @@ export function Staking({
   if (validators.error) return <p className="p-6 text-red-700">{validators.error}</p>;
   if (!validators.data) return <p className="p-6 text-muted-foreground">Loading validators…</p>;
   const vs = validators.data;
+  const summaries = vs.map((v) => ({
+    v,
+    ...validatorSummary(v.validatorIndex, balances.data ?? [], wds.data ?? []),
+  }));
+  const profit = stakingProfit(
+    vs,
+    new Map(summaries.filter((s) => s.rows > 0).map((s) => [s.v.validatorIndex, s.now])),
+    wds.data ?? [],
+    now,
+  );
+  const history = picked !== undefined
+    ? (balances.data ?? [])
+        .filter((b) => b.validatorIndex === picked)
+        .sort((a, b) => a.day.localeCompare(b.day))
+    : [];
+  const points = history.map((b) => ({ at: b.day, value: gwei(b.balanceGwei) }));
 
   return (
     <div className="grid gap-4 p-6">
@@ -94,12 +121,79 @@ export function Staking({
           then validators can be watched and synced.
         </p>
       )}
+
+      {summaries.length > 0 && (
+        <section aria-label="Profit by source" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <ProfitCard label="Outstanding consensus rewards" value={eth(profit.outstanding)} hint="balance above 32 ETH, still on the beacon chain" />
+          <ProfitCard
+            label="Skimmed withdrawals"
+            value={profit.skimmed === null ? "not imported" : eth(profit.skimmed)}
+            hint={profit.skimmed === null ? "the staking read does not fetch withdrawals yet" : "rewards swept to the withdrawal address"}
+            missing={profit.skimmed === null}
+          />
+          <ProfitCard label="Block & MEV rewards" value="not tracked" hint="proposals and fee recipient are not ingested" missing />
+          <ProfitCard
+            label="Exits"
+            value={profit.exits === 0 ? "none" : String(profit.exits)}
+            hint={profit.validators.map((v) => `#${v.index} ${v.status.toLowerCase()}`).join(" · ")}
+          />
+        </section>
+      )}
+
+      {summaries.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {summaries.map((s) => {
+            const st = status(s.v, now);
+            const active = picked === s.v.validatorIndex;
+            return (
+              <button
+                key={`${s.v.documentId}/${s.v.validatorIndex}`}
+                type="button"
+                onClick={() => setPicked(active ? undefined : s.v.validatorIndex)}
+                className={`rounded-xl border p-4 text-left ${
+                  active ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted/40"
+                }`}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium">#{s.v.validatorIndex}</p>
+                  <p className={`text-xs ${st.tone}`}>{st.text}</p>
+                </div>
+                <p className="mt-1 text-lg font-semibold">{eth(s.now)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  rewards 7d {signed(s.delta7d)} · 30d {signed(s.delta30d)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {s.apr === null
+                    ? "APR needs two days of balances"
+                    : `APR ≈ ${(s.apr * 100).toFixed(2)}% over ${s.days} day${s.days === 1 ? "" : "s"}`}
+                  {" · "}
+                  {s.withdrawn > 0 ? `withdrawn ${eth(s.withdrawn)}` : "no withdrawals recorded"}
+                </p>
+                {s.apr !== null && s.withdrawn === 0 && (
+                  <p className="mt-1 text-[10px] text-warning">
+                    Swept rewards are not ingested yet, so this APR is likely understated.
+                  </p>
+                )}
+                {s.rows === 0 && (
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    No daily balances yet — the staking read fills them in.
+                  </p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-left text-xs">
           <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Validator</th>
               <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2 text-right">Balance</th>
+              <th className="px-3 py-2 text-right">Rewards 7d</th>
+              <th className="px-3 py-2 text-right">Rewards 30d</th>
               <th className="px-3 py-2">Activated</th>
               <th className="px-3 py-2">Exited</th>
               <th className="px-3 py-2">Withdrawal address</th>
@@ -107,29 +201,34 @@ export function Staking({
             </tr>
           </thead>
           <tbody>
-            {vs.map((v) => {
-              const st = status(v, now);
+            {summaries.map((s) => {
+              const st = status(s.v, now);
               return (
                 <tr
-                  key={`${v.documentId}/${v.validatorIndex}`}
-                  onClick={() => setPicked(picked === v.validatorIndex ? undefined : v.validatorIndex)}
-                  className={`cursor-pointer border-t border-border ${picked === v.validatorIndex ? "bg-muted/40" : ""}`}
+                  key={`${s.v.documentId}/${s.v.validatorIndex}`}
+                  onClick={() => setPicked(picked === s.v.validatorIndex ? undefined : s.v.validatorIndex)}
+                  className={`cursor-pointer border-t border-border ${picked === s.v.validatorIndex ? "bg-muted/40" : ""}`}
                 >
                   <td className="whitespace-nowrap px-3 py-2 font-medium">
-                    #{v.validatorIndex}{" "}
-                    <span className="font-normal text-muted-foreground">
-                      {short(v.publicKey)}…
-                    </span>
+                    #{s.v.validatorIndex}{" "}
+                    <span className="font-normal text-muted-foreground">{short(s.v.publicKey)}…</span>
                   </td>
                   <td className={`px-3 py-2 ${st.tone}`}>{st.text}</td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {v.activationTs ? new Date(v.activationTs * 1000).toLocaleDateString() : "—"}
+                  <td className="px-3 py-2 text-right tabular-nums">{eth(s.now)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${s.delta7d !== null && s.delta7d < 0 ? "text-red-600" : ""}`}>
+                    {signed(s.delta7d)}
+                  </td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${s.delta30d !== null && s.delta30d < 0 ? "text-red-600" : ""}`}>
+                    {signed(s.delta30d)}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
-                    {v.exitedTs ? new Date(v.exitedTs * 1000).toLocaleDateString() : "—"}
+                    {s.v.activationTs ? new Date(s.v.activationTs * 1000).toLocaleDateString() : "—"}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
-                    {v.withdrawalAddress ? short(v.withdrawalAddress) : "—"}
+                    {s.v.exitedTs ? new Date(s.v.exitedTs * 1000).toLocaleDateString() : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {s.v.withdrawalAddress ? short(s.v.withdrawalAddress) : "—"}
                   </td>
                   <td className="px-3 py-2 text-right">
                     {watchEnabled && (
@@ -138,7 +237,7 @@ export function Staking({
                         className="text-xs text-muted-foreground underline hover:text-red-700"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onRemove(v.validatorIndex);
+                          onRemove(s.v.validatorIndex);
                         }}
                       >
                         remove
@@ -150,34 +249,39 @@ export function Staking({
             })}
             {vs.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
                   No validators watched — add an index above, or the daily staking
-                  read fills this in for any validator withdrawing to a tracked
-                  wallet.
+                  read fills this in for any validator withdrawing to a tracked wallet.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-      {vs.length > 0 && (
-        <p className="text-[10px] text-muted-foreground">
-          {picked === undefined ? "Click a validator to focus its history." : `Focused on #${picked} — click again to clear.`}
-        </p>
-      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-sm font-medium">
-            Daily balances {picked !== undefined ? `· validator #${picked}` : ""}
-          </p>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm font-medium">
+              Daily balances {picked !== undefined ? `· validator #${picked}` : ""}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {points.length === 0
+                ? "pick a validator"
+                : `${points.length} day${points.length === 1 ? "" : "s"} observed`}
+            </p>
+          </div>
           <div className="mt-3">
-            <Bars
-              values={(history.data ?? []).map((b) => Number(b.balanceGwei) / 1e9)}
-              labels={(history.data ?? []).map((b) => b.day)}
-            />
-            {(history.data ?? []).length === 0 && (
-              <p className="text-sm text-muted-foreground">No balance history yet.</p>
+            {picked === undefined ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Pick a validator above to see its balance history.
+              </p>
+            ) : (
+              <ValueHistory
+                points={points}
+                formatValue={eth}
+                ariaLabel={`validator #${picked} balance history`}
+              />
             )}
           </div>
         </div>
@@ -186,21 +290,34 @@ export function Staking({
             Withdrawals {picked !== undefined ? `· validator #${picked}` : ""}
           </p>
           <ul className="mt-2 grid gap-2 text-xs">
-            {(wds.data ?? []).slice(0, 12).map((w) => (
-              <li key={`${w.documentId}/${w.withdrawalRef}`} className="flex justify-between border-b border-border pb-1.5">
-                <span className="text-muted-foreground">
-                  #{w.validatorIndex} · block {w.blockNumber} ·{" "}
-                  {new Date(w.timestamp).toLocaleDateString()}
-                </span>
-                <span className="tabular-nums">{fmtAmount(w.amountGwei, 9, 5)} ETH</span>
-              </li>
-            ))}
-            {(wds.data ?? []).length === 0 && (
-              <li className="text-muted-foreground">Nothing withdrawn yet.</li>
+            {(wds.data ?? [])
+              .filter((w) => picked === undefined || w.validatorIndex === picked)
+              .slice(0, 12)
+              .map((w) => (
+                <li key={`${w.documentId}/${w.withdrawalRef}`} className="flex justify-between border-b border-border pb-1.5">
+                  <span className="text-muted-foreground">
+                    #{w.validatorIndex} · block {w.blockNumber} ·{" "}
+                    {new Date(w.timestamp).toLocaleDateString()}
+                  </span>
+                  <span className="tabular-nums">{fmtAmount(w.amountGwei, 9, 5)} ETH</span>
+                </li>
+              ))}
+            {(wds.data ?? []).filter((w) => picked === undefined || w.validatorIndex === picked).length === 0 && (
+              <li className="text-muted-foreground">No withdrawals recorded yet.</li>
             )}
           </ul>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ProfitCard({ label, value, hint, missing = false }: { label: string; value: string; hint: string; missing?: boolean }) {
+  return (
+    <div className={`rounded-xl border bg-card p-4 ${missing ? "border-dashed border-border" : "border-border"}`}>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`mt-1 text-lg font-semibold ${missing ? "text-muted-foreground" : ""}`}>{value}</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
     </div>
   );
 }

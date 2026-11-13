@@ -3,6 +3,7 @@
  * Manage (reference data), plus drive chrome in the header. Entries come
  * from nav.ts; the active entry is a prop, derived by the route.
  */
+import { Logo } from "./Logo.js";
 import { NAV_ENTRIES, navSections, type Page } from "../nav.js";
 
 export interface ShellProps {
@@ -27,7 +28,7 @@ export function Shell({
   return (
     <div className="flex h-full w-full">
       <nav className="flex w-52 shrink-0 flex-col border-r border-border md:w-14 xl:w-52">
-        <div className="truncate px-3 py-3 text-sm font-semibold">{driveName}</div>
+        <Logo subtitle={driveName} />
         {navSections().map(({ section, entries }) => (
           <div key={section} className="mt-2">
             <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-muted-foreground max-xl:hidden">

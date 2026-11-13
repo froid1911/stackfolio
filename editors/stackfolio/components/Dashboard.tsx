@@ -11,9 +11,13 @@ import type {
   Totals,
   Issue,
   EventRow,
+  HoldingRow,
 } from "../lib/graphql.js";
 import { fmtAmount, fmtFiat } from "../lib/format.js";
-import { Donut, Sparkline } from "../lib/charts.js";
+import { Donut, ValueHistory } from "../lib/echart.js";
+import { allocate, assetBook, coverage, symbolOf as bookSymbol } from "../lib/assets.js";
+import { buildBalances } from "../../../subgraphs/portfolio-api/lib.js";
+import type { Stack } from "../lib/stack.js";
 
 const CURRENCY_SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
 
@@ -31,6 +35,8 @@ export function Dashboard({
   recent,
   issues,
   assets,
+  holdings,
+  stack,
 }: {
   portfolioDocumentId: string | undefined;
   totals: QueryState<Totals>;
@@ -38,6 +44,9 @@ export function Dashboard({
   recent: QueryState<{ rows: EventRow[]; total: number }>;
   issues: QueryState<Issue[]>;
   assets: QueryState<Asset[]>;
+  holdings?: QueryState<{ holdings: HoldingRow[]; total: string } | null>;
+  /** Where the money sits; its total is the headline when present. */
+  stack?: Stack | null;
 }) {
   const [portfolio] = useDocumentById(portfolioDocumentId ?? "");
   const currency =
@@ -48,9 +57,17 @@ export function Dashboard({
 
   const t = totals.data;
   const series = [...(snapshots.data ?? [])].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  const first = series.at(0);
-  const latest = series.at(-1);
   const open = (issues.data ?? []).filter((i) => i.severity !== "RESOLVED").slice(0, 5);
+  const held = holdings?.data?.holdings ?? [];
+  const cov = coverage(held, holdings?.data?.total ?? null);
+  // The same allocation Balances draws: spoofs out, unpriced listed apart.
+  const book = assetBook(
+    assets.data ?? [],
+    held.filter((r) => r.value !== null).map((r) => r.asset),
+  );
+  const alloc = allocate(buildBalances(held).perAsset, book, 6);
+  const pricedShare = cov.assets > 0 ? Math.round((cov.pricedAssets / cov.assets) * 100) : null;
+  const history = series.map((s) => ({ at: s.timestamp, value: Number(s.totalValue) || 0 }));
 
   return (
     <div className="grid gap-4 p-6">
@@ -58,10 +75,26 @@ export function Dashboard({
         <div className="rounded-xl border border-border bg-card p-4 sm:col-span-2">
           <p className="text-xs uppercase text-muted-foreground">Total value</p>
           <p className="mt-1 text-3xl font-semibold">
-            {money(t.totalValue, currency)}
+            {money(
+              stack ? stack.total.toFixed(2) : held.length > 0 ? alloc.total : t.totalValue,
+              currency,
+            )}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {t.snapshotAt ? `as of ${new Date(t.snapshotAt).toLocaleString()}` : "no snapshot yet"}
+            {held.length > 0
+              ? [
+                  stack
+                    ? stack.groups.map((g) => `${g.label} ${money(g.net.toFixed(2), currency)}`).join(" + ")
+                    : "valued holdings now",
+                  alloc.unpriced.length > 0 ? `${alloc.unpriced.length} unpriced not counted` : "",
+                  alloc.debt.length > 0 ? `gross of ${alloc.debt.length} debt position${alloc.debt.length === 1 ? "" : "s"}` : "",
+                  alloc.negative.length > 0 ? `${alloc.negative.length} incomplete` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : t.snapshotAt
+                ? `as of ${new Date(t.snapshotAt).toLocaleString()}`
+                : "no snapshot yet"}
           </p>
         </div>
         <Stat label="Transactions" value={String(t.events)} />
@@ -73,6 +106,47 @@ export function Dashboard({
           tone={t.openIssues > 0 ? "text-warning" : "text-success"}
         />
       </div>
+
+      {alloc.debt.length > 0 && (
+        <div className="rounded-xl border border-red-500/40 bg-red-500/5 p-4">
+          <p className="text-sm font-medium">
+            Debt not netted: {alloc.debt.map((d) => bookSymbol(book.byId, d.asset)).join(", ")}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Borrowed positions are listed, not subtracted, so the total above is
+            what you hold before repaying them. The DeFi page shows each loan.
+          </p>
+        </div>
+      )}
+
+      {alloc.negative.length > 0 && (
+        <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
+          <p className="text-sm font-medium">
+            Ledger incomplete: {alloc.negative.length} holding
+            {alloc.negative.length === 1 ? "" : "s"} net below zero
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {[...new Set(alloc.negative.map((n) => bookSymbol(book.byId, n.asset)))]
+              .slice(0, 8)
+              .join(", ")}
+            {alloc.negative.length > 8 ? ", …" : ""} — more went out than the ledger saw come
+            in (a wrap, a bridge or an unscanned path). They count in the total as the ledger
+            has them, so it errs low rather than high.
+          </p>
+        </div>
+      )}
+
+      {alloc.unpriced.length > 0 && (
+        <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
+          <p className="text-sm font-medium">
+            Unpriced holdings: {alloc.unpriced.length}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            They carry a quantity but no price, so they sit outside the total
+            rather than counting as zero. Open Balances to review them.
+          </p>
+        </div>
+      )}
 
       {open.length > 0 && (
         <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
@@ -95,32 +169,50 @@ export function Dashboard({
       )}
 
       <div className="rounded-xl border border-border bg-card p-4">
-        <p className="text-sm font-medium">Total value over time</p>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-sm font-medium">Total value over time</p>
+          <p className="text-[10px] text-muted-foreground">
+            {series.length === 0
+              ? "no snapshots yet"
+              : `${series.length} snapshot${series.length === 1 ? "" : "s"} · ${new Date(
+                  series[0].timestamp,
+                ).toLocaleString()} → ${new Date(series.at(-1)!.timestamp).toLocaleString()}`}
+          </p>
+        </div>
         <div className="mt-3">
-          <Sparkline
-            points={series.map((s) => Number(s.totalValue) || 0)}
-            strokeClass="text-violet-500"
+          <ValueHistory
+            points={history}
+            formatValue={(v) => money(v.toFixed(2), currency)}
+            ariaLabel="Total portfolio value over time"
           />
-          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-            <span>{first ? new Date(first.timestamp).toLocaleDateString() : ""}</span>
-            <span>{latest ? new Date(latest.timestamp).toLocaleDateString() : ""}</span>
-          </div>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-sm font-medium">Allocation</p>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm font-medium">Allocation</p>
+            {pricedShare !== null && (
+              <p className="text-[10px] text-muted-foreground">
+                price coverage {pricedShare}% of {cov.assets} tracked asset
+                {cov.assets === 1 ? "" : "s"}
+                {alloc.spam.length > 0 ? ` · ${alloc.spam.length} suspected spam excluded` : ""}
+              </p>
+            )}
+          </div>
           <div className="mt-3">
-            {latest && latest.assets.length > 0 ? (
+            {held.length > 0 ? (
               <Donut
-                slices={topAssets(latest, (id) => symbolOf(assets.data, id))}
-                center={money(latest.totalValue, currency)}
-                sub="top holdings"
+                slices={alloc.slices}
+                center={money(alloc.total, currency)}
+                sub="valued holdings"
+                formatValue={(v) => money(v.toFixed(2), currency)}
               />
             ) : (
               <p className="text-sm text-muted-foreground">
-                No holdings in a snapshot yet — they land with the first scan.
+                {holdings?.loading || !holdings?.data
+                  ? "Loading holdings…"
+                  : "No holdings yet — they land with the first scan."}
               </p>
             )}
           </div>
@@ -142,7 +234,7 @@ export function Dashboard({
                     className={`shrink-0 tabular-nums ${e.type === "RECEIVE" ? "text-success" : e.type === "SPEND" ? "text-red-700" : ""}`}
                   >
                     {fmtAmount(e.amount, decimalsOf(assets.data, e.asset), 4)}{" "}
-                    {symbolOf(assets.data, e.asset)}
+                    {bookSymbol(book.byId, e.asset)}
                   </span>
                 </li>
               ))}
@@ -173,23 +265,5 @@ export function short(address: string): string {
 
 function decimalsOf(assets: Asset[] | null, identifier: string): number {
   return assets?.find((a) => a.identifier === identifier)?.decimals ?? 18;
-}
-
-function symbolOf(assets: Asset[] | null, identifier: string): string {
-  return assets?.find((a) => a.identifier === identifier)?.symbol ?? identifier;
-}
-
-/** The snapshot's assets, biggest first, folded into top 6 + Other. */
-export function topAssets(
-  snapshot: Snapshot,
-  labelOf: (identifier: string) => string,
-): { label: string; value: number }[] {
-  const rows = snapshot.assets
-    .map((a) => ({ label: labelOf(a.asset), value: Number(a.value) || 0 }))
-    .sort((x, y) => y.value - x.value);
-  if (rows.length <= 7) return rows;
-  const head = rows.slice(0, 6);
-  const rest = rows.slice(6).reduce((s, r) => s + r.value, 0);
-  return [...head, { label: "Other", value: rest }];
 }
 

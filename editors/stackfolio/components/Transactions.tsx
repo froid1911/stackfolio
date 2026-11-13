@@ -14,6 +14,8 @@ import type {
   QueryState,
 } from "../lib/graphql.js";
 import { fmtAmount } from "../lib/format.js";
+import { formatUnitPrice } from "../lib/assets.js";
+import { direction } from "../lib/review.js";
 import { toCsv } from "../lib/csv.js";
 import { short } from "./Dashboard.js";
 
@@ -68,6 +70,7 @@ export function Transactions({
   onSub,
   onOpenEvent,
   onOpenAccount,
+  needsPriceCount,
 }: {
   accounts: QueryState<AccountRow[]>;
   assets: QueryState<Asset[]>;
@@ -79,6 +82,8 @@ export function Transactions({
   onSub?: (sub: HistorySub) => void;
   onOpenEvent?: (eventId: string) => void;
   onOpenAccount?: (address: string) => void;
+  /** Events the books cannot value yet, across the drive. */
+  needsPriceCount?: number;
 }) {
   const [search, setSearch] = useState("");
   const [showIgnored, setShowIgnored] = useState(false);
@@ -170,6 +175,16 @@ export function Transactions({
               />
               show ignored
             </label>
+            <label className="flex items-center gap-1 text-xs text-warning">
+              <input
+                type="checkbox"
+                checked={Boolean(filter.needsPrice)}
+                onChange={(e) =>
+                  setFilter({ ...filter, needsPrice: e.target.checked || undefined, offset: 0 })
+                }
+              />
+              needs a price{needsPriceCount !== undefined ? ` (${needsPriceCount})` : ""}
+            </label>
             <button
               type="button"
               onClick={() => {
@@ -228,7 +243,7 @@ export function Transactions({
                     {issue.accountId ? (
                       <button
                         type="button"
-                        className="text-accent underline-offset-2 hover:underline"
+                        className="text-primary underline-offset-2 hover:underline"
                         onClick={() => {
                           setFilter({
                             ...filter,
@@ -270,7 +285,7 @@ export function Transactions({
               </span>
               <button
                 type="button"
-                className="text-accent underline-offset-2 hover:underline"
+                className="text-primary underline-offset-2 hover:underline"
                 onClick={() => setFilter({ ...filter, ids: undefined, offset: 0 })}
               >
                 Show all
@@ -287,6 +302,7 @@ export function Transactions({
                   <th className="px-3 py-2">When</th>
                   <th className="px-3 py-2">Kind</th>
                   <th className="px-3 py-2 text-right">Amount</th>
+                  <th className="px-3 py-2 text-right">Price</th>
                   <th className="px-3 py-2">Counterparty</th>
                   <th className="px-3 py-2">Account</th>
                   <th className="px-3 py-2">Notes</th>
@@ -295,10 +311,11 @@ export function Transactions({
               <tbody>
                 {rows.map((e) => {
                   const asset = decimals.get(e.asset);
-                  const signed = e.type === "RECEIVE" ? "+" : e.type === "SPEND" ? "−" : "";
+                  const dir = direction(e.type);
+                  const signed = dir === "in" ? "+" : dir === "out" ? "−" : "";
                   return (
                     <tr
-                      key={`${e.documentId}/${e.eventId}`}
+                      key={`${e.documentId}/${e.eventId}/${e.sequenceIndex}`}
                       className="cursor-pointer border-t border-border hover:bg-muted/30"
                       onClick={() => onOpenEvent?.(e.eventId)}
                     >
@@ -306,6 +323,17 @@ export function Transactions({
                         {new Date(e.timestamp).toLocaleString()}
                       </td>
                       <td className="px-3 py-2">
+                        <span
+                          className={`mr-1 inline-block w-9 rounded px-1 py-0.5 text-center text-[10px] font-semibold ${
+                            dir === "in"
+                              ? "bg-success/10 text-success"
+                              : dir === "out"
+                                ? "bg-red-500/10 text-red-700"
+                                : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {dir === "in" ? "IN" : dir === "out" ? "OUT" : "⇄"}
+                        </span>
                         <span className="rounded-full border border-border px-2 py-0.5 text-[10px]">
                           {e.type.toLowerCase()}
                           {e.subtype !== "NONE" ? ` · ${e.subtype.toLowerCase().replace("_", " ")}` : ""}
@@ -322,6 +350,32 @@ export function Transactions({
                         {signed}
                         {fmtAmount(e.amount, asset?.decimals ?? 18, 6)}{" "}
                         <span className="text-muted-foreground">{asset?.symbol ?? e.asset}</span>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                        {e.price !== null ? (
+                          <>
+                            {formatUnitPrice(e.price)}
+                            {e.priceSource === "MANUAL" && (
+                              <span className="ml-1 rounded-full border border-primary/40 px-1.5 text-[10px] text-primary">
+                                manual
+                              </span>
+                            )}
+                          </>
+                        ) : e.priceGap === "value" ? (
+                          <span className="rounded-full border border-warning/50 px-1.5 text-[10px] text-warning">
+                            needs a price
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                        {e.priceGap === "basis" && (
+                          <span
+                            className="ml-1 rounded-full border border-warning/50 px-1.5 text-[10px] text-warning"
+                            title="No cost basis: an earlier acquisition of this asset has no price"
+                          >
+                            no cost basis
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         {e.counterpartyLabel ?? (e.counterparty ? short(e.counterparty) : "—")}
@@ -346,7 +400,7 @@ export function Transactions({
                 })}
                 {rows.length === 0 && !page.loading && (
                   <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                    <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                       No events match these filters yet.
                     </td>
                   </tr>

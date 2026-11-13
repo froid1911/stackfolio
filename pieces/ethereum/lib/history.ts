@@ -45,15 +45,19 @@ export async function getDailyClose(
   if (!year || !month || !day) return null;
   try {
     const response = await doFetch(
-      `${base}/coins/${encodeURIComponent(coinGeckoId)}/history?date=${day}-${month}-${year}&vs_currency=${currency}`,
+      `${base}/coins/${encodeURIComponent(coinGeckoId)}/history?date=${day}-${month}-${year}&localization=false`,
       {
         signal: AbortSignal.timeout(15_000),
         ...(apiKey ? { headers: { "x-cg-demo-api-key": apiKey } } : {}),
       },
     );
     if (!response.ok) return null;
-    const body = (await response.json()) as Record<string, unknown>;
-    const price = body[currency];
+    // The close sits at market_data.current_price.<currency>, not at the
+    // top level; reading the top level answered null for every day.
+    const body = (await response.json()) as {
+      market_data?: { current_price?: Record<string, unknown> };
+    };
+    const price = body.market_data?.current_price?.[currency];
     if (typeof price !== "number" || !Number.isFinite(price) || price < 0) {
       return null;
     }

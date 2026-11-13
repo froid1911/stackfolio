@@ -2,11 +2,40 @@
      adds it after style.css; ph build leaves it out of the package's stylesheet. */
 /* Colours: a semantic token (--primary, --background, ...) takes a light value
      on :root and a dark one on :root.dark; on :root alone it wins in dark mode too. */
+
+/* Stackfolio "Honest Stack" brand: ink and paper, Stack Violet for the brand
+   and primary actions; status colours carry meaning (verified, gap, debt).
+   Text colours pass WCAG AA on their grounds. */
 :root {
+  --background: #f7f6f2; /* Paper */
+  --foreground: #111827; /* Ink */
+  --card: #ffffff;
+  --border: #e5e3dc;
+  --primary: #5b47e0; /* Stack Violet */
+  --primary-foreground: #ffffff;
+  --accent: #ece9fd;
+  --muted-foreground: #4b5563;
+  --ring: #5b47e0;
+  --success: #1f7a4d; /* Verified */
+  --warning: #b45309; /* Gap */
 }
 :root.dark {
+  --background: #0e1320;
+  --foreground: #f7f6f2;
+  --card: #161c2b;
+  --border: #2a3142;
+  --primary: #7c6cf0; /* Violet Light */
+  --primary-foreground: #111827;
+  --accent: #232a3d;
+  --muted-foreground: #a9aebb;
+  --ring: #7c6cf0;
+  --success: #5bc48a;
+  --warning: #f0a050;
+  --color-red-700: #f87171; /* Debt, readable on ink */
 }
 /* static: the page keeps these tokens even unused, as packages' classes read them. */
 @theme static {
-  /* Other theme values, e.g. --font-sans: https://tailwindcss.com/docs/theme */
+  /* Inter when installed; no web-font request from a self-hosted app. */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-red-700: #b42318; /* Debt */
 }

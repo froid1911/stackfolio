@@ -204,6 +204,31 @@ describe("accounting fold", () => {
     expect(agg?.realized).toBe(0n);
   });
 
+  it("records which legs it could not value, and why", () => {
+    const state = foldAll(
+      [
+        event({ id: "e1", type: "SPEND", counterparty: "0xfeed" }), // no lot: no cost basis
+        event({ id: "e2", timestamp: "2026-01-16T10:00:00.000Z", valuation: null }), // no value
+        event({ id: "e3", timestamp: "2026-01-17T10:00:00.000Z" }), // priced: not listed
+      ],
+      ctx,
+    );
+    expect(state.unpricedLegs).toEqual([
+      { wallet: W1, eventId: "e1", sequenceIndex: 0, asset: ETH, timestamp: "2026-01-15T10:00:00.000Z", reason: "basis" },
+      { wallet: W1, eventId: "e2", sequenceIndex: 0, asset: ETH, timestamp: "2026-01-16T10:00:00.000Z", reason: "value" },
+    ]);
+    // One leg per counted gap: the list and the counters agree.
+    expect(state.unpricedLegs).toHaveLength(state.unpriced.in + state.unpriced.out);
+  });
+
+  it("keeps the unpriced legs through the checkpoint, and reads an old one", () => {
+    const state = foldAll([event({ id: "e2", valuation: null })], ctx);
+    expect(deserializeFold(serializeFold(state)).unpricedLegs).toEqual(state.unpricedLegs);
+    const old = JSON.parse(serializeFold(state)) as Record<string, unknown>;
+    delete old.unpricedLegs;
+    expect(deserializeFold(JSON.stringify(old)).unpricedLegs).toEqual([]);
+  });
+
   it("prices income into the bucket and opens its lot at market", () => {
     const state = foldAll(
       [

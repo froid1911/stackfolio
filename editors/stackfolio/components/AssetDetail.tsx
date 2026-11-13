@@ -9,7 +9,8 @@ import { useMemo, useState } from "react";
 import { useHoldings, useOverrides, usePriceHistory } from "../lib/graphql.js";
 import { usePortfolioActions } from "../lib/mutations.js";
 import { fmtFiat } from "../lib/format.js";
-import { Sparkline } from "../lib/charts.js";
+import { formatUnitPrice } from "../lib/assets.js";
+import { ValueHistory } from "../lib/echart.js";
 import { short } from "./Dashboard.js";
 
 export function AssetDetail({
@@ -42,7 +43,8 @@ export function AssetDetail({
       a.ensName || a.label || short(a.wallet),
     ]),
   );
-  const points = (history.data ?? []).map((p) => Number(p.price));
+  const series = [...(history.data ?? [])].sort((a, b) => a.hour.localeCompare(b.hour));
+  const points = series.map((p) => ({ at: p.hour, value: Number(p.price) || 0 }));
   const override = (overrides.data ?? []).find((o) => o.asset === assetId);
 
   return (
@@ -99,7 +101,11 @@ export function AssetDetail({
       <div className="mt-4">
         <h3 className="text-xs font-semibold uppercase text-muted-foreground">Price history</h3>
         {points.length > 1 ? (
-          <Sparkline points={points} />
+          <ValueHistory
+            points={points}
+            formatValue={(v) => formatUnitPrice(String(v))}
+            ariaLabel="asset price history"
+          />
         ) : (
           <p className="py-4 text-center text-xs text-muted-foreground">
             No price history {asset ? "for this asset" : ""}.

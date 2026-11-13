@@ -161,13 +161,40 @@ export interface HoldingsEventRow {
   asset: string;
   /** The wallet (address as stored, lower-case). */
   address: string;
-  /** Raw token units, decimal string. */
+  /** Raw token units, unsigned decimal string; `type` carries direction. */
   amount: string;
   ignored: boolean;
+  /** The ledger event type (RECEIVE, SPEND, STAKING, TRADE, …). */
+  type: string;
+}
+
+/**
+ * How each event type moves a wallet's balance — the same table as
+ * pieces/ethereum's holdings-from-ledger, which folds the snapshot total.
+ * Types not listed (TRADE, TRANSFER, MIGRATE, INFORMATIONAL) do not.
+ */
+const SIGN: Partial<Record<string, 1n | -1n>> = {
+  RECEIVE: 1n,
+  STAKING: 1n, // beacon withdrawals land in the wallet
+  SPEND: -1n,
+};
+
+/** A balance read from the chain, not folded from events. */
+export interface ObservedBalance {
+  asset: string;
+  address: string;
+  /** Raw token units. */
+  amount: string;
 }
 
 export interface HoldingsInput {
   events: HoldingsEventRow[];
+  /**
+   * Observed balances (native coin per account). Each replaces the ledger
+   * net for its (asset, wallet): native transfers are in the ledger too,
+   * and counting both would double them.
+   */
+  balances?: ObservedBalance[];
   /** Registry decimals per asset; a missing entry leaves quantity raw. */
   decimals: Record<string, number>;
   /** Latest price per WHOLE unit, 8-decimal text. */
@@ -200,21 +227,39 @@ function pow10(n: number): bigint {
 
 /**
  * Fold the drive's ledger events into (asset, wallet) holdings: ignored
- * events drop, nets per pair fold exactly in raw units, zero nets drop,
+ * events drop, each type signs its unsigned amount (SIGN), nets per pair
+ * fold exactly in raw units, observed balances replace their pair's net,
+ * zero nets drop,
  * quantity renders at registry decimals, and value multiplies the priced
  * unit (override first). Unpriced or unregistered assets carry null
  * values — the view shows them, the totals do not count them.
  */
 export function holdingsFromRows(input: HoldingsInput): HoldingsRow[] {
   const nets = new Map<string, { raw: bigint; asset: string; wallet: string }>();
+  const keyOf = (asset: string, wallet: string) => `${asset}\u0000${wallet}`;
+  const observed = new Set(
+    (input.balances ?? []).map((b) => keyOf(b.asset, b.address)),
+  );
   for (const event of input.events) {
     if (event.ignored) continue;
+    const sign = SIGN[event.type];
+    if (!sign) continue;
+    const key = keyOf(event.asset, event.address);
+    if (observed.has(key)) continue;
     const amount = parseScaled(event.amount, 0);
     if (amount === null) continue;
-    const key = `${event.asset}\u0000${event.address}`;
     const net = nets.get(key);
-    if (net) net.raw += amount;
-    else nets.set(key, { raw: amount, asset: event.asset, wallet: event.address });
+    if (net) net.raw += amount * sign;
+    else nets.set(key, { raw: amount * sign, asset: event.asset, wallet: event.address });
+  }
+  for (const balance of input.balances ?? []) {
+    const amount = parseScaled(balance.amount, 0);
+    if (amount === null) continue;
+    nets.set(keyOf(balance.asset, balance.address), {
+      raw: amount,
+      asset: balance.asset,
+      wallet: balance.address,
+    });
   }
 
   const rows: HoldingsRow[] = [];
@@ -323,4 +368,73 @@ export function buildBalances(rows: HoldingsRow[]): BalancesTotals {
   const total =
     perAccount.length === 0 ? "0" : sum(perAccount.map((a) => a.value));
   return { perAsset, perAccount, total };
+}
+
+/**
+ * One answer per asset: the newest. A drive can hold more than one price
+ * document (a re-created book, a second portfolio), and `prices_latest` is
+ * keyed per document, so the same asset can carry several "latest" rows.
+ * Sorted by asset.
+ */
+export function newestPrices<T extends { asset: string; fetchedAt: string | Date }>(
+  rows: T[],
+): T[] {
+  const time = (row: T) => new Date(row.fetchedAt).getTime();
+  const newest = new Map<string, T>();
+  for (const row of rows) {
+    const held = newest.get(row.asset);
+    if (!held || time(row) > time(held)) newest.set(row.asset, row);
+  }
+  return [...newest.values()].sort((a, b) => a.asset.localeCompare(b.asset));
+}
+
+export interface EventValuation {
+  eventId: string;
+  sequenceIndex: number;
+  price: string | null;
+  priceUnit: string | null;
+  priceSource: string | null;
+}
+
+/**
+ * The books' price per event leg, merged onto ledger rows (the two live in
+ * different index namespaces, so this is a join in code). An UNPRICED
+ * marker or a missing price both read as "no price": null throughout.
+ */
+export function attachValuations<T extends { eventId: string; sequenceIndex: number }>(
+  rows: T[],
+  valuations: EventValuation[],
+): (T & Omit<EventValuation, "eventId" | "sequenceIndex">)[] {
+  const byLeg = new Map(valuations.map((v) => [`${v.eventId}\u0000${v.sequenceIndex}`, v]));
+  return rows.map((row) => {
+    const v = byLeg.get(`${row.eventId}\u0000${row.sequenceIndex}`);
+    const priced = v && v.price !== null && v.priceSource !== "UNPRICED";
+    return {
+      ...row,
+      price: priced ? v.price : null,
+      priceUnit: priced ? v.priceUnit : null,
+      priceSource: priced ? v.priceSource : null,
+    };
+  });
+}
+
+/**
+ * Why the books could not value a leg, merged onto ledger rows: "value"
+ * (the leg has no price; pricing it fixes it) wins over "basis" (no cost
+ * behind a disposal; an earlier acquisition needs a price). null: no gap.
+ */
+export function attachGaps<T extends { eventId: string; sequenceIndex: number }>(
+  rows: T[],
+  gaps: { eventId: string; sequenceIndex: number; reason: string }[],
+): (T & { priceGap: "value" | "basis" | null })[] {
+  const byLeg = new Map<string, "value" | "basis">();
+  for (const g of gaps) {
+    const key = `${g.eventId}\u0000${g.sequenceIndex}`;
+    if (g.reason === "value") byLeg.set(key, "value");
+    else if (g.reason === "basis" && !byLeg.has(key)) byLeg.set(key, "basis");
+  }
+  return rows.map((row) => ({
+    ...row,
+    priceGap: byLeg.get(`${row.eventId}\u0000${row.sequenceIndex}`) ?? null,
+  }));
 }

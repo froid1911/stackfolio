@@ -99,15 +99,13 @@ export function buildHits(
         starts(needle, a.label),
         starts(needle, a.address),
       );
-      return {
-        rank,
-        hit: {
-          kind: "account" as const,
-          label,
-          ...(subParts.length > 0 ? { sub: subParts.join(" · ") } : {}),
-          to: { page: "balances" as Page, detail: slug(a.address) },
-        },
+      const hit: SearchHit = {
+        kind: "account",
+        label,
+        ...(subParts.length > 0 ? { sub: subParts.join(" · ") } : {}),
+        to: { page: "balances", detail: slug(a.address) },
       };
+      return { rank, hit };
     })
     .filter((w): w is { rank: number; hit: SearchHit } => w !== null)
     .sort((a, b) => a.rank - b.rank)
@@ -122,8 +120,8 @@ export function buildHits(
         kind: "asset" as const,
         label: a.name,
         sub: a.symbol,
-        to: { page: "assets" as Page, detail: slug(a.identifier) },
-      },
+        to: { page: "assets", detail: slug(a.identifier) },
+      } satisfies SearchHit,
     }))
     .sort((x, y) => x.rank - y.rank)
     .slice(0, CAP_PER_KIND)
@@ -137,8 +135,8 @@ export function buildHits(
         kind: "event" as const,
         label: e.eventIdentifier,
         sub: e.type,
-        to: { page: "history" as Page, detail: slug(e.eventId) },
-      },
+        to: { page: "history", detail: slug(e.eventId) },
+      } satisfies SearchHit,
     }))
     .sort((x, y) => x.rank - y.rank)
     .slice(0, CAP_PER_KIND)

@@ -20,7 +20,9 @@ import {
   utils as walletUtils,
 } from "document-models/wallet-account/v1";
 import { AccountingIndex } from "processors/accounting-index";
+import { PortfolioIndex } from "processors/portfolio-index";
 import { up } from "../../processors/accounting-index/migrations.js";
+import { up as upPortfolio } from "../../processors/portfolio-index/migrations.js";
 import { describe, expect, it } from "vitest";
 import { getResolvers } from "./resolvers.js";
 
@@ -168,12 +170,26 @@ async function harness() {
     up,
   );
   const processor = new AccountingIndex(namespace, { branch: ["main"] }, store);
+  // The ledger rows the events query pages through come from the portfolio
+  // index; the books' valuations from the accounting index.
+  const portfolioNamespace = PortfolioIndex.getNamespace("drive-1");
+  const portfolioStore = await runProcessorMigrations<PortfolioIndex>(
+    relationalDb,
+    portfolioNamespace,
+    upPortfolio,
+  );
+  const portfolioIndex = new PortfolioIndex(
+    portfolioNamespace,
+    { branch: ["main"] },
+    portfolioStore,
+  );
 
   const wallet = walletDocument();
   const portfolio = portfolioDocument();
   const registry = registryDocument();
   for (const document of [registry, portfolio, wallet]) {
     await processor.onOperations(replay(document));
+    await portfolioIndex.onOperations(replay(document));
   }
 
   const nodes = [wallet, portfolio, registry].map((document) => ({
@@ -292,6 +308,26 @@ describe("portfolio-api accounting queries", () => {
     })) as Record<string, unknown>[];
     expect(windowed.every((r) => (r.month as string) >= "2026-03")).toBe(true);
     expect(windowed.some((r) => r.month === "2026-02")).toBe(false);
+  });
+
+  it("hands each event the books' price, and filters to the unpriced", async () => {
+    const { q } = await harness();
+    const page = (await q.events()) as {
+      rows: { eventId: string; price: string | null; priceSource: string | null }[];
+      total: number;
+    };
+    const byId = new Map(page.rows.map((r) => [r.eventId, r]));
+    expect(byId.get("ev-1")).toMatchObject({ price: "2000", priceSource: "COINGECKO" });
+    expect(byId.get("ev-4")).toMatchObject({ price: null, priceSource: null, priceGap: "value" });
+    // Priced and accounted: no gap.
+    expect(byId.get("ev-1")).toMatchObject({ priceGap: null });
+
+    const unpriced = (await q.events({ needsPrice: true })) as {
+      rows: { eventId: string }[];
+      total: number;
+    };
+    expect(unpriced.rows.map((r) => r.eventId)).toEqual(["ev-4"]);
+    expect(unpriced.total).toBe(1);
   });
 
   it("summarises unpriced events per month", async () => {

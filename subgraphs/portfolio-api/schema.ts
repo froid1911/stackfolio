@@ -17,6 +17,8 @@ export const schema: DocumentNode = gql`
       from: String
       to: String
       query: String
+      "Only the events P&L counted as unpriced: a leg without a price, or a disposal without cost basis."
+      needsPrice: Boolean
       first: Int
       offset: Int
     ): PortfolioApiEventPage!
@@ -112,6 +114,12 @@ export const schema: DocumentNode = gql`
     chainId: Int!
     "The wallet's own label."
     label: String
+    "The books' price per whole unit for this leg; null when it has none."
+    price: String
+    priceUnit: String
+    priceSource: String
+    "Why the books could not value this leg: value (it has no price) or basis (no cost behind a disposal); null when they could."
+    priceGap: String
   }
 
   type PortfolioApiAddressLabel {

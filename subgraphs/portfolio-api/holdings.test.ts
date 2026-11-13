@@ -6,10 +6,10 @@ const INPUT: HoldingsInput = {
   // ledger (events.amount), decimals from the registry, prices per WHOLE
   // unit at 8 decimals (prices_latest), overrides winning over latest.
   events: [
-    { asset: "ETH", address: "0xw1", amount: "2000000000000000000", ignored: false }, // 2 ETH
-    { asset: "ETH", address: "0xw2", amount: "1000000000000000000", ignored: false }, // 1 ETH
-    { asset: "DAI", address: "0xw1", amount: "1000000000000000000", ignored: false }, // 1 DAI
-    { asset: "ETH", address: "0xw1", amount: "500000000000000000", ignored: true }, // ignored: skipped
+    { asset: "ETH", address: "0xw1", amount: "2000000000000000000", ignored: false, type: "RECEIVE" }, // 2 ETH
+    { asset: "ETH", address: "0xw2", amount: "1000000000000000000", ignored: false, type: "RECEIVE" }, // 1 ETH
+    { asset: "DAI", address: "0xw1", amount: "1000000000000000000", ignored: false, type: "RECEIVE" }, // 1 DAI
+    { asset: "ETH", address: "0xw1", amount: "500000000000000000", ignored: true, type: "RECEIVE" }, // ignored: skipped
   ],
   decimals: { ETH: 18, DAI: 18 },
   prices: { ETH: "2000.00000000", DAI: "0.95000000" },
@@ -17,6 +17,63 @@ const INPUT: HoldingsInput = {
 };
 
 describe("holdingsFromRows", () => {
+  // The ledger stores unsigned amounts; the event type carries direction,
+  // as in pieces/ethereum's holdings-from-ledger (the snapshot's fold).
+  it("subtracts SPEND and adds RECEIVE and STAKING, from unsigned amounts", () => {
+    const rows = holdingsFromRows({
+      ...INPUT,
+      events: [
+        { asset: "ETH", address: "0xw1", amount: "3000000000000000000", ignored: false, type: "RECEIVE" },
+        { asset: "ETH", address: "0xw1", amount: "1000000000000000000", ignored: false, type: "SPEND" },
+        { asset: "ETH", address: "0xw1", amount: "500000000000000000", ignored: false, type: "STAKING" },
+      ],
+    });
+    expect(rows).toEqual([{ asset: "ETH", wallet: "0xw1", quantity: "2.5", value: "5000" }]);
+  });
+
+  it("skips types that do not move a balance", () => {
+    const rows = holdingsFromRows({
+      ...INPUT,
+      events: ["TRADE", "TRANSFER", "MIGRATE", "INFORMATIONAL"].map((type) => ({
+        asset: "ETH",
+        address: "0xw1",
+        amount: "1000000000000000000",
+        ignored: false,
+        type,
+      })),
+    });
+    expect(rows).toEqual([]);
+  });
+
+  it("nets an Aave debt token's borrows against its repayments", () => {
+    const e = (amount: string, type: string) => ({ asset: "DEBT", address: "0xw1", amount, ignored: false, type });
+    const rows = holdingsFromRows({
+      ...INPUT,
+      decimals: { DEBT: 6 },
+      prices: {},
+      events: [e("1333013000000", "RECEIVE"), e("111000000000", "RECEIVE"), e("1203334000000", "SPEND")],
+    });
+    // Summing unsigned amounts gave 2,647,347: the repayments added on.
+    expect(rows).toEqual([{ asset: "DEBT", wallet: "0xw1", quantity: "240679", value: null }]);
+  });
+
+  it("an observed balance replaces that wallet's ledger net for the asset", () => {
+    const rows = holdingsFromRows({
+      ...INPUT,
+      events: [
+        // Native transfers are in the ledger AND the account has a balance:
+        // counting both doubles the ETH.
+        { asset: "ETH", address: "0xw1", amount: "5000000000000000000", ignored: false, type: "RECEIVE" },
+        { asset: "ETH", address: "0xw2", amount: "1000000000000000000", ignored: false, type: "RECEIVE" },
+      ],
+      balances: [{ asset: "ETH", address: "0xw1", amount: "2000000000000000000" }],
+    });
+    expect(rows).toEqual([
+      { asset: "ETH", wallet: "0xw1", quantity: "2", value: "4000" },
+      { asset: "ETH", wallet: "0xw2", quantity: "1", value: "2000" },
+    ]);
+  });
+
   it("folds per wallet and asset, exact decimals", () => {
     const rows = holdingsFromRows(INPUT);
     expect(rows).toEqual([
@@ -30,8 +87,8 @@ describe("holdingsFromRows", () => {
     const rows = holdingsFromRows({
       ...INPUT,
       events: [
-        { asset: "ETH", address: "0xw1", amount: "2000000000000000000", ignored: false },
-        { asset: "ETH", address: "0xw1", amount: "-2000000000000000000", ignored: false },
+        { asset: "ETH", address: "0xw1", amount: "2000000000000000000", ignored: false, type: "RECEIVE" },
+        { asset: "ETH", address: "0xw1", amount: "2000000000000000000", ignored: false, type: "SPEND" },
       ],
     });
     expect(rows).toEqual([]);
@@ -42,8 +99,8 @@ describe("holdingsFromRows", () => {
       ...INPUT,
       decimals: { ETH: 18 }, // DAI unregistered
       events: [
-        { asset: "ETH", address: "0xw1", amount: "2000000000000000000", ignored: false },
-        { asset: "MYST", address: "0xw1", amount: "7000000", ignored: false },
+        { asset: "ETH", address: "0xw1", amount: "2000000000000000000", ignored: false, type: "RECEIVE" },
+        { asset: "MYST", address: "0xw1", amount: "7000000", ignored: false, type: "RECEIVE" },
       ],
       prices: { ETH: "2000.00000000" },
     });

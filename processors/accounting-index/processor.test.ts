@@ -375,5 +375,17 @@ describe("accounting-index", () => {
     });
     const realized = await db.selectFrom("realized").selectAll().execute();
     expect(realized).toHaveLength(0);
+    // The leg behind the count is listed, so History can show it.
+    const gaps = await db.selectFrom("acc_unpriced").selectAll().execute();
+    expect(gaps).toEqual([
+      {
+        wallet: W1,
+        event_id: "ev-x",
+        sequence_index: 0,
+        asset: ETH,
+        timestamp: "2026-03-01T10:00:00.000Z",
+        reason: "basis",
+      },
+    ]);
   });
 });

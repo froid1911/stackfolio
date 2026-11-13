@@ -14,9 +14,9 @@
   "packageRegistryUrl": "https://registry.vetra.io",
   "connect": {
     "branding": {
-      "appName": "Powerhouse Connect",
+      "appName": "Stackfolio",
       "icon": null,
-      "favicon": null,
+      "favicon": "hosts/connect/brand/favicon.svg",
       "loader": null
     },
     "home": {

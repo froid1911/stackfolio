@@ -121,11 +121,22 @@ class FakeIO {
           ...connectionOf(s, CONNECTIONS),
         })),
         managedBy: "p1",
+        ...wired(spec.steps.length),
         ...over,
       },
     };
   }
 }
+
+/** A built workflow's wiring: trigger → s0 → s1 → … */
+const wired = (stepCount: number) => ({
+  triggerId: "t",
+  edges: Array.from({ length: stepCount }, (_, i) => ({
+    id: `e${i}`,
+    from: i === 0 ? "t" : `s${i - 1}`,
+    to: `s${i}`,
+  })),
+});
 
 const emptyRecorded = (): Recorded => ({ connectionId: null, workflowIds: [] });
 
@@ -150,6 +161,7 @@ const retrofitFacts = (walletId: string, registryId: string) => {
         ...connectionOf(s, CONNECTIONS),
       })),
       managedBy: "p1",
+      ...wired(spec.steps.length),
     } satisfies WorkflowFacts,
   };
 };

@@ -82,6 +82,17 @@ export interface CheckpointRow {
   state: string;
 }
 
+/** A leg the fold could not value: "basis" (no cost behind a disposal) or
+ * "value" (no price for the leg). */
+export interface UnpricedRow {
+  wallet: string;
+  event_id: string;
+  sequence_index: number;
+  asset: string;
+  timestamp: string;
+  reason: string;
+}
+
 export interface DB {
   acc_events: EventRow;
   acc_addresses: AddressRow;
@@ -91,4 +102,5 @@ export interface DB {
   income: IncomeRow;
   pnl_month: PnlMonthRow;
   fold_checkpoint: CheckpointRow;
+  acc_unpriced: UnpricedRow;
 }

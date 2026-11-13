@@ -7,7 +7,7 @@ import { AssetDetail } from "./AssetDetail.js";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 // The overlay reads the index and the portfolio document; stub both.
-const holders = vi.fn();
+const holders = vi.fn<() => unknown>();
 const actions = {
   ready: true,
   setPriceOverride: vi.fn(),
@@ -43,6 +43,16 @@ vi.mock("../lib/graphql.js", () => ({
 }));
 vi.mock("../lib/mutations.js", () => ({
   usePortfolioActions: () => actions,
+}));
+
+// ECharts needs a canvas context, which jsdom does not implement; the chart's
+// data and ARIA contract are asserted through the wrapper instead.
+vi.mock("echarts", () => ({
+  init: () => ({
+    setOption: () => {},
+    resize: () => {},
+    dispose: () => {},
+  }),
 }));
 
 const HOLDINGS = {
@@ -128,8 +138,8 @@ describe("AssetDetail", () => {
     render();
     const input = host.querySelector<HTMLInputElement>("input[type=text]")!;
     act(() => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setter?.call(input, "2500.5");
+      // The native setter, so React sees a change it did not make itself.
+      Reflect.set(HTMLInputElement.prototype, "value", "2500.5", input);
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const button = [...host.querySelectorAll("button")].find((b) =>

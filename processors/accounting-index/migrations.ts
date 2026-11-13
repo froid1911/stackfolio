@@ -120,6 +120,21 @@ export async function up(db: Kysely<DB>): Promise<void> {
     .ifNotExists()
     .execute();
 
+  // The legs the fold could not value, and why ("basis": a disposal with
+  // no cost behind it; "value": a leg without a price). Rewritten on every
+  // refold with the other fold tables.
+  await db.schema
+    .createTable("acc_unpriced")
+    .addColumn("wallet", "varchar(128)", (col) => col.notNull())
+    .addColumn("event_id", text, (col) => col.notNull())
+    .addColumn("sequence_index", "integer", (col) => col.notNull())
+    .addColumn("asset", text, (col) => col.notNull())
+    .addColumn("timestamp", stamp, (col) => col.notNull())
+    .addColumn("reason", "varchar(8)", (col) => col.notNull())
+    .addPrimaryKeyConstraint("acc_unpriced_pk", ["wallet", "event_id", "sequence_index", "reason"])
+    .ifNotExists()
+    .execute();
+
   // Persisted namespaces keep the column types they were born with, and
   // the first ones were guessed too small for real chain data: tx-log
   // event identifiers ("0x<64 hex>:log:<block>") overrun varchar(64) and
@@ -153,6 +168,7 @@ export async function up(db: Kysely<DB>): Promise<void> {
 
 export async function down(db: Kysely<DB>): Promise<void> {
   for (const table of [
+    "acc_unpriced",
     "fold_checkpoint",
     "pnl_month",
     "income",

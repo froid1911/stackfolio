@@ -88,6 +88,7 @@ export const ValuationGranularitySchema = z.enum(["DAY", "NONE"]);
 
 export const ValuationSourceSchema = z.enum([
   "COINGECKO",
+  "DEFILLAMA",
   "MANUAL",
   "UNPRICED",
 ]);

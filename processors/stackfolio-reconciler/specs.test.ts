@@ -10,6 +10,7 @@ import {
   hyperliquidSpec,
   redecodeSpec,
   stakingSpec,
+  withdrawalsSpec,
   connectionOf,
   withPublish,
   type Connections,
@@ -155,6 +156,22 @@ describe("specs", () => {
     expect(bare.steps[1].config).not.toHaveProperty(
       "protocolRegistryDocumentId",
     );
+  });
+
+  it("withdrawals run daily as their own workflow, fetch then import", () => {
+    const spec = withdrawalsSpec("staking-1");
+    expect(spec.key).toBe("withdrawals-daily");
+    expect(spec.trigger).toEqual({ kind: "interval", seconds: 86_400 });
+    expect(spec.steps.map((s) => [s.name, s.action])).toEqual([
+      ["withdrawals", "fetch-withdrawals"],
+      ["import", "import-staking-to-doc"],
+    ]);
+    expect(spec.steps[1].config).toMatchObject({
+      stakingDocumentId: "staking-1",
+      validatorsJson: [],
+      balancesJson: [],
+      withdrawalsJson: "{{steps.withdrawals.output.withdrawals}}",
+    });
   });
 
   it("staking appends the snapshot pair only when enabled", () => {

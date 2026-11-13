@@ -5,7 +5,10 @@ import {
   buildBalances,
   driveFileIds,
   forwardEnsAddress,
+  attachGaps,
+  attachValuations,
   holdingsFromRows,
+  newestPrices,
   unitCostPerWhole,
   type HoldingsInput,
 } from "./lib.js";
@@ -63,9 +66,9 @@ export const getResolvers = (
       // total — kept in step by the same source. Values price the net at
       // prices_latest with the portfolio's overrides winning; unpriced or
       // unregistered assets cross with a null value and stay out of the
-      // totals, never guessed. Native ETH balances are indexed separately
-      // (accounts.native_balance); the ledger has no event for them, so
-      // they are folded in here as (chain's native asset, wallet) rows.
+      // totals, never guessed. Native balances are read from the chain
+      // (accounts.native_balance) and replace the ledger's native transfers
+      // for their wallet: both exist, and summing them doubled the ETH.
       holdings: async (_parent: unknown, args: { driveId: string }, ctx: Context) => {
         const ids = await driveFileIds(subgraph, args.driveId, ctx);
         if (!ids || ids.length === 0)
@@ -73,13 +76,13 @@ export const getResolvers = (
         const [events, assets, prices, overrides, accounts, labels] =
           await Promise.all([
             query(args.driveId).selectFrom("events").where("document_id", "in", ids)
-              .select(["asset", "address", "amount", "ignored", "chain_id"])
+              .select(["asset", "address", "amount", "ignored", "type", "chain_id"])
               .execute(),
             query(args.driveId).selectFrom("assets").where("document_id", "in", ids)
               .select(["identifier", "symbol", "decimals", "chain_id"])
               .execute(),
             query(args.driveId).selectFrom("prices_latest").where("document_id", "in", ids)
-              .select(["asset", "price"])
+              .select(["asset", "price", "fetched_at as fetchedAt"])
               .orderBy("fetched_at", "desc")
               .execute(),
             query(args.driveId).selectFrom("price_overrides").where("document_id", "in", ids)
@@ -115,24 +118,25 @@ export const getResolvers = (
           address: e.address,
           amount: e.amount,
           ignored: e.ignored,
+          type: e.type,
         }));
-        // Native balances come from the account rows, not the ledger;
-        // each account's balance belongs to its own chain's identifier.
-        const nativeEvents: HoldingsInput["events"] = accounts
-          .filter((a) => a.native_balance && BigInt(a.native_balance) !== 0n)
+        // Native balances are read from the chain onto the account rows;
+        // each replaces the ledger's native transfers for its own chain's
+        // identifier and wallet (the snapshot fold does the same).
+        const nativeBalances: HoldingsInput["balances"] = accounts
+          .filter((a) => a.native_balance !== null)
           .map((a) => ({
             asset: nativeOf(a.chain_id),
             address: a.address,
             amount: a.native_balance as string,
-            ignored: false,
           }));
 
-        // Prices: later (newer) rows win — fetched_at descending, so the
-        // last write per asset is the freshest.
+        // Prices: one newest answer per asset (newestPrices).
         const rows = holdingsFromRows({
-          events: [...ledgerEvents, ...nativeEvents],
+          events: ledgerEvents,
+          balances: nativeBalances,
           decimals,
-          prices: Object.fromEntries(prices.map((p) => [p.asset, p.price])),
+          prices: Object.fromEntries(newestPrices(prices).map((p) => [p.asset, p.price])),
           overrides: Object.fromEntries(overrides.map((o) => [o.asset, o.price])),
         });
 
@@ -170,6 +174,7 @@ export const getResolvers = (
           from?: string;
           to?: string;
           query?: string;
+          needsPrice?: boolean;
           first?: number;
           offset?: number;
         },
@@ -177,7 +182,33 @@ export const getResolvers = (
       ) => {
         const ids = await driveFileIds(subgraph, args.driveId, ctx);
         if (!ids || ids.length === 0) return { rows: [], total: 0 };
+        // Valuations live in the accounting namespace: the "needs a price"
+        // filter is resolved there first, then applied to the ledger page.
+        const acc = accountingQuery(args.driveId);
+        let unpricedIds: string[] | null = null;
+        // The drive's wallets, as the accounting index knows them: the
+        // gap table is keyed by wallet, not by document.
+        const wallets = acc
+          .selectFrom("acc_events")
+          .select("wallet")
+          .distinct()
+          .where("document_id", "in", ids);
+        if (args.needsPrice) {
+          // Exactly the legs P&L counted as unpriced, not every leg
+          // without a valuation (most of those never reach the books).
+          const unpriced = await acc
+            .selectFrom("acc_unpriced")
+            .where("wallet", "in", wallets)
+            .select("event_id")
+            .distinct()
+            .execute();
+          unpricedIds = unpriced.map((r) => r.event_id);
+          if (unpricedIds.length === 0) return { rows: [], total: 0 };
+        }
         const filtered = query(args.driveId).selectFrom("events").where("document_id", "in", ids)
+          .$if(unpricedIds !== null, (qb) =>
+            qb.where("event_id", "in", unpricedIds as string[]),
+          )
           .$if(Boolean(args.ids?.length), (qb) =>
             qb.where("event_id", "in", args.ids as string[]),
           )
@@ -240,7 +271,34 @@ export const getResolvers = (
           .limit(limit)
           .offset(args.offset ?? 0)
           .execute();
-        return { rows, total: Number(totalRow.total) };
+        const valuations =
+          rows.length === 0
+            ? []
+            : await acc
+                .selectFrom("acc_events")
+                .where("document_id", "in", ids)
+                .where("event_id", "in", rows.map((r) => r.eventId))
+                .select([
+                  "event_id as eventId",
+                  "sequence_index as sequenceIndex",
+                  "price",
+                  "price_unit as priceUnit",
+                  "price_source as priceSource",
+                ])
+                .execute();
+        const gaps =
+          rows.length === 0
+            ? []
+            : await acc
+                .selectFrom("acc_unpriced")
+                .where("wallet", "in", wallets)
+                .where("event_id", "in", rows.map((r) => r.eventId))
+                .select(["event_id as eventId", "sequence_index as sequenceIndex", "reason"])
+                .execute();
+        return {
+          rows: attachGaps(attachValuations(rows, valuations), gaps),
+          total: Number(totalRow.total),
+        };
       },
 
       addressLabels: async (
@@ -291,16 +349,17 @@ export const getResolvers = (
       ) => {
         const ids = await driveFileIds(subgraph, args.driveId, ctx);
         if (!ids || ids.length === 0) return [];
-        return query(args.driveId)
+        const rows = await query(args.driveId)
           .selectFrom("prices_latest")
+          .where("document_id", "in", ids)
           .select([
             "asset",
             "price",
             "source",
             "fetched_at as fetchedAt",
           ])
-          .orderBy("asset")
           .execute();
+        return newestPrices(rows);
       },
 
       priceHistory: async (

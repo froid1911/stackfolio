@@ -20,7 +20,11 @@ describe("toDecimal", () => {
 
 describe("getDailyClose", () => {
   it("reads the quote close for the day", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ eur: 2999.5 }));
+    // The real response nests the close: market_data.current_price.<currency>
+    // (the old fixture put it at the top level, matching a bug, not CoinGecko).
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({ id: "ethereum", market_data: { current_price: { eur: 2999.5 } } }),
+    );
     const price = await getDailyClose("ethereum", "2026-11-01", "eur", {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
@@ -28,7 +32,6 @@ describe("getDailyClose", () => {
     const url = String(fetchImpl.mock.calls[0][0]);
     expect(url).toContain("/coins/ethereum/history");
     expect(url).toContain("date=01-11-2026");
-    expect(url).toContain("vs_currency=eur");
   });
 
   it("answers null on a miss, an http failure or a bad body", async () => {

@@ -5,7 +5,7 @@
  * No radix: the listbox contract is small enough to own (roles and
  * arrows per WAI-ARIA), and the drive app must not grow UI deps.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { buildHits, type SearchHit } from "../lib/search.js";
 import { useAddressLabels, useAssets, useEventsPage } from "../lib/graphql.js";
 import { slug } from "../lib/slugs.js";
@@ -25,7 +25,6 @@ export function CommandPalette({
 }) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // Accounts for the palette are the address book's entries (every
   // labelled/ENS address), not just the chain-tracked wallets.
@@ -64,14 +63,18 @@ export function CommandPalette({
     [query, labels.data, assets.data, events.data],
   );
 
-  useEffect(() => {
+  // A fresh palette on every open: reset while rendering, not in an effect
+  // (an effect's setState renders twice). The input mounts on open, so
+  // focusing it is the ref callback's job.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) {
       setQuery("");
       setActive(0);
-      inputRef.current?.focus();
     }
-  }, [open]);
-  useEffect(() => setActive(0), [query]);
+  }
+  const focusOnMount = useCallback((input: HTMLInputElement | null) => input?.focus(), []);
 
   if (!open) return null;
 
@@ -90,7 +93,7 @@ export function CommandPalette({
     >
       <div className="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-background shadow-xl">
         <input
-          ref={inputRef}
+          ref={focusOnMount}
           role="combobox"
           aria-expanded
           aria-controls="stackfolio-palette-list"
@@ -98,7 +101,10 @@ export function CommandPalette({
           className="w-full border-b border-border bg-transparent px-4 py-3 text-sm outline-none"
           placeholder="Search pages, accounts, assets, events…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(0);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Escape") onClose();
             else if (e.key === "ArrowDown") {

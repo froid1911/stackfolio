@@ -32,6 +32,10 @@ const EVENT = {
   address: "0xfrank",
   chainId: 1,
   label: null,
+  price: null as string | null,
+  priceUnit: null as string | null,
+  priceSource: null as string | null,
+  priceGap: "value" as "value" | "basis" | null,
 };
 
 const ASSETS = ok([
@@ -102,6 +106,21 @@ describe("Transactions history page", () => {
     expect(body).toContain("0xfrank");
   });
 
+  it("marks direction and the books' price per row", () => {
+    const manual = { ...EVENT, eventId: "ev-2", sequenceIndex: 0, price: "0.95", priceUnit: "EUR", priceSource: "MANUAL" };
+    const setFilter = vi.fn();
+    render({ page: ok<EventsPage>({ rows: [EVENT, manual], total: 2 }), needsPriceCount: 330, setFilter });
+    const [unpriced, priced] = [...host.querySelectorAll("tbody tr")].map((r) => r.textContent ?? "");
+    expect(unpriced).toContain("OUT");
+    expect(unpriced).toContain("needs a price");
+    expect(priced).toContain("0.95");
+    expect(priced).toContain("manual");
+
+    const toggle = [...host.querySelectorAll("label")].find((l) => l.textContent?.includes("needs a price (330)"));
+    act(() => toggle?.querySelector("input")?.click());
+    expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ needsPrice: true, offset: 0 }));
+  });
+
   it("sub-tab click reports the intent", () => {
     const onSub = vi.fn();
     render({ sub: "events", issues: ISSUES, onSub });
@@ -136,7 +155,7 @@ describe("Transactions history page", () => {
     Object.defineProperty(URL, "revokeObjectURL", { value: revoke, configurable: true });
     const clicks: string[] = [];
     const realCreate = document.createElement.bind(document);
-    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+    const createElement = vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
       const el = realCreate(tag) as HTMLAnchorElement;
       if (tag === "a") el.click = () => clicks.push(el.download);
       return el;
@@ -149,7 +168,7 @@ describe("Transactions history page", () => {
     expect(clicks[0]).toMatch(/^stackfolio-events-\d{4}-\d{2}-\d{2}\.csv$/);
     expect(create).toHaveBeenCalled();
     expect(revoke).toHaveBeenCalledWith("blob:x");
-    vi.mocked(document.createElement).mockRestore();
+    createElement.mockRestore();
   });
 
   it("row click reports the event id", () => {

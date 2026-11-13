@@ -124,7 +124,7 @@ describe("buildHits", () => {
   it("page hits keep section order", () => {
     const hits = buildHits("a", DATA)
       .filter((h) => h.kind === "page")
-      .map((h) => h.to.page as Page);
+      .map((h) => h.to.page);
     // Word-initial letters ("Address", "Assets") rank above a letter
     // buried mid-word ("D-a-shboard"); the rest tie on mid-word and keep
     // nav table order.

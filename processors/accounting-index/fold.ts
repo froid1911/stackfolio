@@ -80,6 +80,17 @@ export interface MonthAgg {
   unpricedOut: number;
 }
 
+/** A leg the books could not value: no cost basis behind a disposal, or no
+ * price for the leg itself. The History page lists exactly these. */
+export interface UnpricedLeg {
+  wallet: string;
+  eventId: string;
+  sequenceIndex: number;
+  asset: string;
+  timestamp: string;
+  reason: "basis" | "value";
+}
+
 export interface FoldState {
   /** wallet|asset -> open lots in acquisition order. */
   lots: Map<string, Lot[]>;
@@ -89,6 +100,8 @@ export interface FoldState {
   /** wallet|YYYY-MM -> aggregates. */
   months: Map<string, MonthAgg>;
   unpriced: { in: number; out: number };
+  /** One entry per counted gap, in fold order. */
+  unpricedLegs: UnpricedLeg[];
 }
 
 export function emptyFoldState(): FoldState {
@@ -98,7 +111,27 @@ export function emptyFoldState(): FoldState {
     income: new Map(),
     months: new Map(),
     unpriced: { in: 0, out: 0 },
+    unpricedLegs: [],
   };
+}
+
+/** Count a gap in the month and the totals, and record the leg behind it. */
+function gap(state: FoldState, agg: MonthAgg, event: FoldEvent, reason: UnpricedLeg["reason"]): void {
+  if (reason === "basis") {
+    agg.unpricedIn += 1;
+    state.unpriced.in += 1;
+  } else {
+    agg.unpricedOut += 1;
+    state.unpriced.out += 1;
+  }
+  state.unpricedLegs.push({
+    wallet: event.wallet,
+    eventId: event.id,
+    sequenceIndex: event.sequenceIndex,
+    asset: event.asset,
+    timestamp: event.timestamp,
+    reason,
+  });
 }
 
 /** Protocol mechanics whose value the holdings view tracks and the
@@ -273,8 +306,7 @@ export function foldGroup(
 
     const basis = consumeFcfs(state, event.wallet, event.asset, quantity);
     if (basis.consumed < quantity) {
-      agg.unpricedIn += 1;
-      state.unpriced.in += 1;
+      gap(state, agg, event, "basis");
     }
 
     if (event.subtype === "FEE") {
@@ -283,8 +315,7 @@ export function foldGroup(
       if (priced) {
         agg.expense += priced.value;
       } else {
-        agg.unpricedOut += 1;
-        state.unpriced.out += 1;
+        gap(state, agg, event, "value");
       }
       continue;
     }
@@ -307,8 +338,7 @@ export function foldGroup(
     if (!priced) {
       // Quantity leaves at cost; the disposal value is unknown and is
       // counted, never guessed as zero.
-      agg.unpricedOut += 1;
-      state.unpriced.out += 1;
+      gap(state, agg, event, "value");
       continue;
     }
     const proceeds = (priced.value * basis.consumed) / quantity;
@@ -361,8 +391,7 @@ export function foldGroup(
         // Nothing carried it: an inflow from a known wallet with no
         // visible outflow opens at market like any other receipt.
         if (!priced) {
-          agg.unpricedOut += 1;
-          state.unpriced.out += 1;
+          gap(state, agg, event, "value");
           continue;
         }
         openLot(state, event, quantity, priced.value);
@@ -371,16 +400,14 @@ export function foldGroup(
         if (priced) {
           openLot(state, event, remaining, priced.value);
         } else {
-          agg.unpricedOut += 1;
-          state.unpriced.out += 1;
+          gap(state, agg, event, "value");
         }
       }
       continue;
     }
 
     if (!priced) {
-      agg.unpricedOut += 1;
-      state.unpriced.out += 1;
+      gap(state, agg, event, "value");
       continue;
     }
     const incomeBucket =
@@ -458,6 +485,7 @@ export function serializeFold(state: FoldState): string {
       },
     ]),
     unpriced: state.unpriced,
+    unpricedLegs: state.unpricedLegs,
   });
 }
 
@@ -486,6 +514,8 @@ interface SerializedFold {
     },
   ][];
   unpriced: { in: number; out: number };
+  /** Absent in checkpoints written before the list existed. */
+  unpricedLegs?: UnpricedLeg[];
 }
 
 export function deserializeFold(json: string): FoldState {
@@ -518,5 +548,6 @@ export function deserializeFold(json: string): FoldState {
     });
   }
   state.unpriced = parsed.unpriced;
+  state.unpricedLegs = parsed.unpricedLegs ?? [];
   return state;
 }

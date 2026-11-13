@@ -45,7 +45,9 @@ export const ACCOUNTING_DOCUMENT_TYPES = [
 ] as const;
 
 const FOLLOWED = new Set<string>(ACCOUNTING_DOCUMENT_TYPES);
-const FOLD_VERSION = 1;
+// 2: the fold lists its unpriced legs (acc_unpriced); a stored v1
+// checkpoint refolds once to fill the table.
+const FOLD_VERSION = 2;
 const CURRENCY = "EUR";
 const BATCH = 200;
 
@@ -347,7 +349,7 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
   }
 
   private async writeFoldTables(state: FoldState): Promise<void> {
-    for (const table of ["lots", "realized", "income", "pnl_month"] as const) {
+    for (const table of ["lots", "realized", "income", "pnl_month", "acc_unpriced"] as const) {
       await this.relationalDb.deleteFrom(table).execute();
     }
     for (const lots of state.lots.values()) {
@@ -411,6 +413,29 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       await this.relationalDb
         .insertInto("pnl_month")
         .values(months.slice(at, at + BATCH))
+        .execute();
+    }
+    // A leg can carry both gaps once each; the key keeps a re-listed one out.
+    const seen = new Set<string>();
+    const gaps = state.unpricedLegs
+      .filter((leg) => {
+        const key = `${leg.wallet}|${leg.eventId}|${leg.sequenceIndex}|${leg.reason}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((leg) => ({
+        wallet: leg.wallet,
+        event_id: leg.eventId,
+        sequence_index: leg.sequenceIndex,
+        asset: leg.asset,
+        timestamp: leg.timestamp,
+        reason: leg.reason,
+      }));
+    for (let at = 0; at < gaps.length; at += BATCH) {
+      await this.relationalDb
+        .insertInto("acc_unpriced")
+        .values(gaps.slice(at, at + BATCH))
         .execute();
     }
   }

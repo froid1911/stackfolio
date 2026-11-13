@@ -85,7 +85,8 @@ function pinStep(walletDocumentId: string): StepSpec {
     piece: "ethereum",
     action: "pin-prices",
     timeoutSeconds: 120,
-    config: { documentId: walletDocumentId, max: 50 },
+    // Batched DefiLlama reads make 500 rows about the cost 50 used to be.
+    config: { documentId: walletDocumentId, max: 500 },
   };
 }
 
@@ -490,6 +491,41 @@ export function stakingSpec(
     displayName: "Staking daily",
     trigger: { kind: "interval", seconds: 86_400 },
     steps,
+  };
+}
+
+/**
+ * The daily withdrawals round: beacon withdrawals (reward skims, exits)
+ * of the staking document's validators, filed onto the same document. Its
+ * own workflow, not steps on staking-daily: the reconciler only appends
+ * missing steps, and that chain grows conditionally (auto-snapshot).
+ */
+export function withdrawalsSpec(stakingDocumentId: string): WorkflowSpec {
+  return {
+    key: "withdrawals-daily",
+    displayName: "Withdrawals daily",
+    trigger: { kind: "interval", seconds: 86_400 },
+    steps: [
+      {
+        name: "withdrawals",
+        piece: "ethereum",
+        action: "fetch-withdrawals",
+        timeoutSeconds: 120,
+        config: { stakingDocumentId },
+      },
+      {
+        name: "import",
+        piece: "ethereum",
+        action: "import-staking-to-doc",
+        config: {
+          stakingDocumentId,
+          validatorsJson: [],
+          balancesJson: [],
+          withdrawalsJson: "{{steps.withdrawals.output.withdrawals}}",
+          ranAt: firedAt,
+        },
+      },
+    ],
   };
 }
 

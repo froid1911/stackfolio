@@ -26,6 +26,7 @@ import {
   pricesSpec,
   redecodeSpec,
   stakingSpec,
+  withdrawalsSpec,
 } from "./specs.js";
 
 import {
@@ -375,6 +376,7 @@ export async function reconcilePortfolio(
           .map((w) => w.state.address),
       }),
     );
+    specs.push(withdrawalsSpec(staking.id));
   }
   if (hyperliquid) {
     specs.push(hyperliquidSpec(hyperliquid.id));

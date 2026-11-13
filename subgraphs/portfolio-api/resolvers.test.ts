@@ -318,7 +318,9 @@ describe("portfolio-api accounting queries", () => {
     };
     const byId = new Map(page.rows.map((r) => [r.eventId, r]));
     expect(byId.get("ev-1")).toMatchObject({ price: "2000", priceSource: "COINGECKO" });
-    expect(byId.get("ev-4")).toMatchObject({ price: null, priceSource: null });
+    expect(byId.get("ev-4")).toMatchObject({ price: null, priceSource: null, priceGap: "value" });
+    // Priced and accounted: no gap.
+    expect(byId.get("ev-1")).toMatchObject({ priceGap: null });
 
     const unpriced = (await q.events({ needsPrice: true })) as {
       rows: { eventId: string }[];

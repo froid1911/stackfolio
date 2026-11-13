@@ -5,6 +5,7 @@ import {
   buildBalances,
   driveFileIds,
   forwardEnsAddress,
+  attachGaps,
   attachValuations,
   holdingsFromRows,
   newestPrices,
@@ -185,12 +186,19 @@ export const getResolvers = (
         // filter is resolved there first, then applied to the ledger page.
         const acc = accountingQuery(args.driveId);
         let unpricedIds: string[] | null = null;
+        // The drive's wallets, as the accounting index knows them: the
+        // gap table is keyed by wallet, not by document.
+        const wallets = acc
+          .selectFrom("acc_events")
+          .select("wallet")
+          .distinct()
+          .where("document_id", "in", ids);
         if (args.needsPrice) {
+          // Exactly the legs P&L counted as unpriced, not every leg
+          // without a valuation (most of those never reach the books).
           const unpriced = await acc
-            .selectFrom("acc_events")
-            .where("document_id", "in", ids)
-            .where("ignored", "=", false)
-            .where((eb) => eb.or([eb("price", "is", null), eb("price_source", "=", "UNPRICED")]))
+            .selectFrom("acc_unpriced")
+            .where("wallet", "in", wallets)
             .select("event_id")
             .distinct()
             .execute();
@@ -278,7 +286,19 @@ export const getResolvers = (
                   "price_source as priceSource",
                 ])
                 .execute();
-        return { rows: attachValuations(rows, valuations), total: Number(totalRow.total) };
+        const gaps =
+          rows.length === 0
+            ? []
+            : await acc
+                .selectFrom("acc_unpriced")
+                .where("wallet", "in", wallets)
+                .where("event_id", "in", rows.map((r) => r.eventId))
+                .select(["event_id as eventId", "sequence_index as sequenceIndex", "reason"])
+                .execute();
+        return {
+          rows: attachGaps(attachValuations(rows, valuations), gaps),
+          total: Number(totalRow.total),
+        };
       },
 
       addressLabels: async (

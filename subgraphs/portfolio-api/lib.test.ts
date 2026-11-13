@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { encodeFunctionResult } from "viem";
-import { attachValuations, forwardEnsAddress, newestPrices } from "./lib.js";
+import { attachGaps, attachValuations, forwardEnsAddress, newestPrices } from "./lib.js";
 
 const RESOLVER = "0x4976fb03c32e5b8cfe2b6ccb31c09ba78ebaba41";
 const ADDRESS = "5c647ca5e2bc5bd17c40410fcb8003d38879ae50";
@@ -161,5 +161,21 @@ describe("attachValuations", () => {
       // An UNPRICED marker is no price at all.
       { eventId: "b", sequenceIndex: 0, amount: "3", price: null, priceUnit: null, priceSource: null },
     ]);
+  });
+});
+
+describe("attachGaps", () => {
+  it("names the gap per leg, value over basis", () => {
+    const rows = [
+      { eventId: "a", sequenceIndex: 0 },
+      { eventId: "b", sequenceIndex: 0 },
+      { eventId: "c", sequenceIndex: 0 },
+    ];
+    const gaps = [
+      { eventId: "a", sequenceIndex: 0, reason: "basis" },
+      { eventId: "a", sequenceIndex: 0, reason: "value" },
+      { eventId: "b", sequenceIndex: 0, reason: "basis" },
+    ];
+    expect(attachGaps(rows, gaps).map((r) => r.priceGap)).toEqual(["value", "basis", null]);
   });
 });

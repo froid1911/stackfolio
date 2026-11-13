@@ -417,3 +417,24 @@ export function attachValuations<T extends { eventId: string; sequenceIndex: num
     };
   });
 }
+
+/**
+ * Why the books could not value a leg, merged onto ledger rows: "value"
+ * (the leg has no price; pricing it fixes it) wins over "basis" (no cost
+ * behind a disposal; an earlier acquisition needs a price). null: no gap.
+ */
+export function attachGaps<T extends { eventId: string; sequenceIndex: number }>(
+  rows: T[],
+  gaps: { eventId: string; sequenceIndex: number; reason: string }[],
+): (T & { priceGap: "value" | "basis" | null })[] {
+  const byLeg = new Map<string, "value" | "basis">();
+  for (const g of gaps) {
+    const key = `${g.eventId}\u0000${g.sequenceIndex}`;
+    if (g.reason === "value") byLeg.set(key, "value");
+    else if (g.reason === "basis" && !byLeg.has(key)) byLeg.set(key, "basis");
+  }
+  return rows.map((row) => ({
+    ...row,
+    priceGap: byLeg.get(`${row.eventId}\u0000${row.sequenceIndex}`) ?? null,
+  }));
+}

@@ -17,7 +17,7 @@ export const schema: DocumentNode = gql`
       from: String
       to: String
       query: String
-      "Only events the books cannot value yet: no price, or marked unpriced."
+      "Only the events P&L counted as unpriced: a leg without a price, or a disposal without cost basis."
       needsPrice: Boolean
       first: Int
       offset: Int
@@ -118,6 +118,8 @@ export const schema: DocumentNode = gql`
     price: String
     priceUnit: String
     priceSource: String
+    "Why the books could not value this leg: value (it has no price) or basis (no cost behind a disposal); null when they could."
+    priceGap: String
   }
 
   type PortfolioApiAddressLabel {

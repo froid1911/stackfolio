@@ -194,6 +194,11 @@ function sumDecimals(values: string[]): string {
   return `${negative ? "-" : ""}${whole}${frac ? `.${frac}` : ""}`;
 }
 
+/** Aave-style debt receipts ("variableDebtEthUSDT"): liabilities, not assets. */
+export function isDebtToken(symbol: string): boolean {
+  return /^(variable|stable)Debt[A-Z]/.test(symbol);
+}
+
 export interface AssetHolding {
   asset: string;
   quantity: string;
@@ -207,6 +212,12 @@ export interface Allocation<T extends AssetHolding> {
   unpriced: T[];
   /** Spoofed tickers, priced or not: never counted. */
   spam: T[];
+  /**
+   * Debt receipts. A holding's value is quantity × price, positive, so a
+   * debt would inflate the total; until the index nets liabilities they are
+   * kept out and listed, and the page says the total is gross of them.
+   */
+  debt: T[];
   /** Sum of `valued`, exact decimal. */
   total: string;
   /** A valued asset's fraction of `total`; null for anything else. */
@@ -227,10 +238,14 @@ export function allocate<T extends AssetHolding>(
 ): Allocation<T> {
   const tiers = new Map(book.rows.map((r) => [r.asset.identifier, r.tier]));
   const isSpam = (identifier: string) => tiers.get(identifier) === "spam";
+  const isDebt = (identifier: string) =>
+    !isSpam(identifier) && isDebtToken(symbolOf(book.byId, identifier));
+  const counted = (identifier: string) => !isSpam(identifier) && !isDebt(identifier);
   const spam = perAsset.filter((a) => isSpam(a.asset));
-  const unpriced = perAsset.filter((a) => a.value === null && !isSpam(a.asset));
+  const debt = perAsset.filter((a) => isDebt(a.asset));
+  const unpriced = perAsset.filter((a) => a.value === null && counted(a.asset));
   const valued = perAsset
-    .filter((a) => a.value !== null && !isSpam(a.asset))
+    .filter((a) => a.value !== null && counted(a.asset))
     .sort((a, b) => Number(b.value) - Number(a.value));
   const total = sumDecimals(valued.map((a) => a.value!));
   const totalNumber = Number(total);
@@ -241,6 +256,7 @@ export function allocate<T extends AssetHolding>(
     valued,
     unpriced,
     spam,
+    debt,
     total,
     share: (identifier) => {
       const value = byId.get(identifier);

@@ -75,7 +75,13 @@ export function Dashboard({
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {held.length > 0
-              ? `valued holdings now${alloc.unpriced.length > 0 ? ` · ${alloc.unpriced.length} unpriced not counted` : ""}`
+              ? [
+                  "valued holdings now",
+                  alloc.unpriced.length > 0 ? `${alloc.unpriced.length} unpriced not counted` : "",
+                  alloc.debt.length > 0 ? `gross of ${alloc.debt.length} debt position${alloc.debt.length === 1 ? "" : "s"}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
               : t.snapshotAt
                 ? `as of ${new Date(t.snapshotAt).toLocaleString()}`
                 : "no snapshot yet"}
@@ -90,6 +96,18 @@ export function Dashboard({
           tone={t.openIssues > 0 ? "text-warning" : "text-success"}
         />
       </div>
+
+      {alloc.debt.length > 0 && (
+        <div className="rounded-xl border border-red-500/40 bg-red-500/5 p-4">
+          <p className="text-sm font-medium">
+            Debt not netted: {alloc.debt.map((d) => symbolOf(assets.data, d.asset)).join(", ")}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Borrowed positions are listed, not subtracted, so the total above is
+            what you hold before repaying them. The DeFi page shows each loan.
+          </p>
+        </div>
+      )}
 
       {alloc.unpriced.length > 0 && (
         <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">

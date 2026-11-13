@@ -84,7 +84,7 @@ export function Balances({
     book.rows.find((r) => r.asset.identifier === identifier);
 
   const alloc = allocate(totals?.perAsset ?? [], book);
-  const { valued: sorted, unpriced, spam, slices } = alloc;
+  const { valued: sorted, unpriced, spam, debt, slices } = alloc;
   const walletName = new Map(
     (data.perAccount ?? []).map((a) => [a.wallet, a.ensName || a.label || short(a.wallet)]),
   );
@@ -96,14 +96,19 @@ export function Balances({
           <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">
             {cov.pricedAssets}/{cov.assets} assets priced
           </span>
-          {cov.unpricedAssets > 0 && (
+          {unpriced.length > 0 && (
             <button
               type="button"
               onClick={() => setShowUnpriced((v) => !v)}
               className="rounded-full border border-warning/40 bg-warning/5 px-2 py-0.5 text-warning hover:bg-warning/10"
             >
-              {cov.unpricedAssets} unpriced · {showUnpriced ? "hide" : "show"}
+              {unpriced.length} unpriced · {showUnpriced ? "hide" : "show"}
             </button>
+          )}
+          {debt.length > 0 && (
+            <span className="rounded-full border border-red-500/40 bg-red-500/5 px-2 py-0.5 text-red-700">
+              {debt.length} debt position{debt.length === 1 ? "" : "s"} · not netted
+            </span>
           )}
           {spam.length > 0 && (
             <button
@@ -178,6 +183,29 @@ export function Balances({
             </tfoot>
           </table>
         </div>
+
+        {debt.length > 0 && (
+          <div className="mt-4 overflow-x-auto rounded-xl border border-red-500/30 bg-red-500/5">
+            <p className="px-3 pt-3 text-xs font-medium text-red-700">
+              Debt — listed, not subtracted from the total
+            </p>
+            <table className="mt-2 w-full text-left text-xs">
+              <tbody>
+                {debt.map((asset) => (
+                  <tr key={asset.asset} className="border-t border-red-500/20">
+                    <td className="px-3 py-1.5 font-medium">{symbolOf(book.byId, asset.asset)}</td>
+                    <td className="px-3 py-1.5 text-muted-foreground">
+                      {chainOf(book.byId, asset.asset)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {formatQuantity(asset.quantity)} owed
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {showUnpriced && unpriced.length > 0 && (
           <div className="mt-4 overflow-x-auto rounded-xl border border-warning/30 bg-warning/5">

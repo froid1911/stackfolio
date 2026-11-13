@@ -7,6 +7,7 @@ import {
   assetBook,
   chainLabel,
   chainOf,
+  isDebtToken,
   coverage,
   formatQuantity,
   formatUnitPrice,
@@ -155,5 +156,36 @@ describe("chainOf", () => {
     expect(chainOf(book, "eip155:42161/erc20:0xabc")).toBe("Arbitrum");
     expect(chainOf(book, "bip122:000000000019d6689c085ae165831e93/slip44:0")).toBe("Bitcoin");
     expect(chainOf(book, "mystery")).toBe("unknown chain");
+  });
+});
+
+describe("debt tokens", () => {
+  it("recognises Aave-style debt tickers", () => {
+    expect(isDebtToken("variableDebtEthUSDT")).toBe(true);
+    expect(isDebtToken("stableDebtEthDAI")).toBe(true);
+    expect(isDebtToken("aEthUSDT")).toBe(false);
+    expect(isDebtToken("DEBT")).toBe(false);
+  });
+
+  it("keeps debt out of assets and the total, priced or not", () => {
+    const book = assetBook(
+      [
+        asset({ identifier: "usdt", symbol: "USDT", coingeckoId: "tether" }),
+        asset({ identifier: "debt", symbol: "variableDebtEthUSDT" }),
+        asset({ identifier: "dust", symbol: "DUST" }),
+      ],
+      ["usdt"],
+    );
+    const a = allocate(
+      [
+        { asset: "usdt", quantity: "10", value: "10" },
+        { asset: "debt", quantity: "4", value: null },
+        { asset: "dust", quantity: "1", value: null },
+      ],
+      book,
+    );
+    expect(a.debt.map((r) => r.asset)).toEqual(["debt"]);
+    expect(a.unpriced.map((r) => r.asset)).toEqual(["dust"]);
+    expect(a.total).toBe("10");
   });
 });

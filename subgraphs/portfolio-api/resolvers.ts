@@ -64,9 +64,9 @@ export const getResolvers = (
       // total — kept in step by the same source. Values price the net at
       // prices_latest with the portfolio's overrides winning; unpriced or
       // unregistered assets cross with a null value and stay out of the
-      // totals, never guessed. Native ETH balances are indexed separately
-      // (accounts.native_balance); the ledger has no event for them, so
-      // they are folded in here as (chain's native asset, wallet) rows.
+      // totals, never guessed. Native balances are read from the chain
+      // (accounts.native_balance) and replace the ledger's native transfers
+      // for their wallet: both exist, and summing them doubled the ETH.
       holdings: async (_parent: unknown, args: { driveId: string }, ctx: Context) => {
         const ids = await driveFileIds(subgraph, args.driveId, ctx);
         if (!ids || ids.length === 0)
@@ -74,7 +74,7 @@ export const getResolvers = (
         const [events, assets, prices, overrides, accounts, labels] =
           await Promise.all([
             query(args.driveId).selectFrom("events").where("document_id", "in", ids)
-              .select(["asset", "address", "amount", "ignored", "chain_id"])
+              .select(["asset", "address", "amount", "ignored", "type", "chain_id"])
               .execute(),
             query(args.driveId).selectFrom("assets").where("document_id", "in", ids)
               .select(["identifier", "symbol", "decimals", "chain_id"])
@@ -116,22 +116,23 @@ export const getResolvers = (
           address: e.address,
           amount: e.amount,
           ignored: e.ignored,
+          type: e.type,
         }));
-        // Native balances come from the account rows, not the ledger;
-        // each account's balance belongs to its own chain's identifier.
-        const nativeEvents: HoldingsInput["events"] = accounts
-          .filter((a) => a.native_balance && BigInt(a.native_balance) !== 0n)
+        // Native balances are read from the chain onto the account rows;
+        // each replaces the ledger's native transfers for its own chain's
+        // identifier and wallet (the snapshot fold does the same).
+        const nativeBalances: HoldingsInput["balances"] = accounts
+          .filter((a) => a.native_balance !== null && a.native_balance !== undefined)
           .map((a) => ({
             asset: nativeOf(a.chain_id),
             address: a.address,
             amount: a.native_balance as string,
-            ignored: false,
           }));
 
-        // Prices: later (newer) rows win — fetched_at descending, so the
-        // last write per asset is the freshest.
+        // Prices: one newest answer per asset (newestPrices).
         const rows = holdingsFromRows({
-          events: [...ledgerEvents, ...nativeEvents],
+          events: ledgerEvents,
+          balances: nativeBalances,
           decimals,
           prices: Object.fromEntries(newestPrices(prices).map((p) => [p.asset, p.price])),
           overrides: Object.fromEntries(overrides.map((o) => [o.asset, o.price])),

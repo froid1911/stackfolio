@@ -109,12 +109,20 @@ export function fmtAmount(
   return render(value, decimals, places, true);
 }
 
-/** A fiat decimal string, truncated at `places` (default 2). */
+/**
+ * A fiat decimal string, truncated at `places` (default 2). Money always
+ * shows cents (at least min(places, 2) fraction digits) so columns line up;
+ * sub-unit prices keep whatever extra precision they have.
+ */
 export function fmtFiat(
   value: string | null | undefined,
   places = 2,
 ): string {
-  return render(value, 0, places, false);
+  const shown = render(value, 0, places, false);
+  const cents = Math.min(places, 2);
+  if (cents === 0 || !/^-?[\d,]+(\.\d*)?$/.test(shown)) return shown; // "—", ">0"
+  const [whole, frac = ""] = shown.split(".");
+  return `${whole}.${frac.padEnd(cents, "0")}`;
 }
 
 /**

@@ -38,7 +38,16 @@ describe("fmtAmount", () => {
 describe("fmtFiat", () => {
   it("rounds values DOWN so a portfolio never claims more than it holds", () => {
     expect(fmtFiat("123.4599", 2)).toBe("123.45");
-    expect(fmtFiat("123", 2)).toBe("123");
+    expect(fmtFiat("123", 2)).toBe("123.00");
+  });
+
+  it("always shows cents, so a money column lines up", () => {
+    expect(fmtFiat("928656.1")).toBe("928,656.10");
+    expect(fmtFiat("-5")).toBe("-5.00");
+    expect(fmtFiat("0")).toBe("0.00");
+    // Sub-unit prices keep their own precision, never padded past it.
+    expect(fmtFiat("0.1234", 6)).toBe("0.1234");
+    expect(fmtFiat("12.5", 0)).toBe("12");
   });
 
   it("groups thousands and flags a positive-but-rounding-to-zero value", () => {

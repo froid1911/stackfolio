@@ -501,9 +501,8 @@ export interface HyperliquidAccount {
   documentId: string;
   address: string;
   label: string | null;
-  spotValue: string;
-  perpValue: string;
-  at: string;
+  accountValueUsd: string | null;
+  updatedAt: string | null;
 }
 
 export function useOpenLots(
@@ -565,7 +564,7 @@ export function useHyperliquidAccounts(
   driveId: string,
 ): QueryState<HyperliquidAccount[]> {
   return usePortfolioField(
-    `query ($driveId: String!) { portfolioApi { hyperliquidAccounts(driveId: $driveId) { documentId address label spotValue perpValue at } } }`,
+    `query ($driveId: String!) { portfolioApi { hyperliquidAccounts(driveId: $driveId) { documentId address label accountValueUsd updatedAt } } }`,
     { driveId },
     "hyperliquidAccounts",
   );

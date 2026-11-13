@@ -152,7 +152,7 @@ export function DeFi({
               {positions.flatMap((entry) =>
                 entry.positions.map((position) => (
                   <tr
-                    key={`${entry.wallet}|${entry.chainId}|${position.protocol}|${position.kind}|${position.note ?? ""}`}
+                    key={`${entry.wallet}|${entry.chainId}|${position.protocol}|${position.kind}|${position.note ?? ""}|${position.assets.map((a) => a.asset).join(",")}`}
                     className="border-t border-border"
                   >
                     <td className="px-4 py-2">

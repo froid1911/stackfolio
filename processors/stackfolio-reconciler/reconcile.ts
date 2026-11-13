@@ -490,15 +490,6 @@ export async function reconcilePortfolio(
       stallKeys.has(spec) &&
         io.progressFingerprint(spec.key, stallKeys.get(spec) as string),
     );
-    if (drift.differences.some((d) => d.includes("edited by hand"))) {
-      issues.push({
-        code: "WORKFLOW_STUCK",
-        severity: "WARNING",
-        subject: existing.id,
-        message: drift.differences[0],
-      });
-      continue;
-    }
     if (drift.actions.length === 0) continue;
     let actions = drift.actions;
     if (!granted) {

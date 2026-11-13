@@ -28,7 +28,7 @@ export type WorkflowFacts = {
   /** The published trigger's node id; null: none bound. */
   triggerId: string | null;
   /** The published "next" edges between trigger and steps. */
-  edges: Array<{ from: string; to: string }>;
+  edges: Array<{ id: string; from: string; to: string }>;
 };
 
 /** One checked boundary read: everything a reactor document carries is
@@ -126,7 +126,9 @@ export function readFacts(doc: { state: unknown }): WorkflowFacts {
       .flatMap((edge) => {
         const from = readString(edge?.from);
         const to = readString(edge?.to);
-        return from !== null && to !== null ? [{ from, to }] : [];
+        return from !== null && to !== null
+          ? [{ id: readString(edge?.id) ?? "", from, to }]
+          : [];
       }),
   };
 }

@@ -132,6 +132,7 @@ class FakeIO {
 const wired = (stepCount: number) => ({
   triggerId: "t",
   edges: Array.from({ length: stepCount }, (_, i) => ({
+    id: `e${i}`,
     from: i === 0 ? "t" : `s${i - 1}`,
     to: `s${i}`,
   })),

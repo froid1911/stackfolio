@@ -5,6 +5,7 @@ import { workflowDrift, sameJson } from "./drift.js";
 import {
   connectionOf,
   liveEtherscanSpec,
+  positionsSpec,
   pricesSpec,
   type Connections,
   type WorkflowSpec,
@@ -53,6 +54,7 @@ const specFacts = (
     // Wired as a build wires it: trigger → first step → … → last step.
     triggerId: triggerKind === "interval" ? "trigger" : null,
     edges: spec.steps.map((_, i) => ({
+      id: `edge-${i}`,
       from: i === 0 ? "trigger" : `step-${i - 1}`,
       to: `step-${i}`,
     })).filter((e) => triggerKind === "interval" || e.from !== "trigger"),
@@ -102,7 +104,7 @@ describe("readFacts", () => {
       }),
     );
     expect(facts.triggerId).toBe("t1");
-    expect(facts.edges).toEqual([{ from: "t1", to: "s1" }]);
+    expect(facts.edges).toEqual([{ id: "e1", from: "t1", to: "s1" }]);
   });
 
   it("reads an unpublished draft", () => {
@@ -155,15 +157,63 @@ describe("workflowDrift", () => {
     expect(drift.actions[0]?.input).toMatchObject({ from: "trigger", to: "step-0" });
   });
 
-  it("refuses to repair a hand-edited chain", () => {
-    const spec = liveEtherscanSpec("w1");
-    const scrambled = {
+  it("rebuilds a chain that no longer matches the spec, after its matching prefix", () => {
+    // The live positions sweep: an older spec ended in register steps; the
+    // current one has a sweep per wallet and no register steps.
+    const spec = positionsSpec("p1", "reg", [
+      { address: "0xa", chainId: 1 },
+      { address: "0xb", chainId: 1 },
+      { address: "0xc", chainId: 1 },
+      { address: "0xd", chainId: 137 },
+    ]);
+    const names = ["sweep-1", "sweep-2", "sweep-3", "register-1", "register-2", "register-3"];
+    const facts: WorkflowFacts = {
       ...specFacts(spec),
-      steps: specFacts(spec).steps.slice().reverse(),
+      steps: names.map((name, i) => ({
+        id: `step-${i}`,
+        name,
+        action: name.startsWith("sweep") ? "fetch-positions" : "register-protocols",
+        config: name.startsWith("sweep") ? spec.steps[i].config : {},
+        timeoutSeconds: name.startsWith("sweep") ? 240 : null,
+        connectionId: "eth-1",
+        reactorConnectionId: "reactor-1",
+      })),
+      triggerId: "trigger",
+      edges: names.map((_, i) => ({
+        id: `edge-${i}`,
+        from: i === 0 ? "trigger" : `step-${i - 1}`,
+        to: `step-${i}`,
+      })),
     };
+    const drift = workflowDrift(spec, facts, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
+    expect(drift.differences[0]).toMatch(/rebuilt after sweep-3/);
+    const types = drift.actions.map((a) => `${a.type}:${(a.input as { id?: string }).id ?? ""}`);
+    // The stale tail goes: its edges, then its steps.
+    expect(types.slice(0, 6)).toEqual([
+      "REMOVE_EDGE:edge-3",
+      "REMOVE_EDGE:edge-4",
+      "REMOVE_EDGE:edge-5",
+      "REMOVE_STEP:step-3",
+      "REMOVE_STEP:step-4",
+      "REMOVE_STEP:step-5",
+    ]);
+    // sweep-4 is appended and chained to sweep-3.
+    const added = drift.actions.find((a) => a.type === "ADD_STEP");
+    expect(added?.input).toMatchObject({ name: "sweep-4", actionName: "fetch-positions" });
+    const edge = drift.actions.find((a) => a.type === "ADD_EDGE");
+    const addedId = (added?.input as { id: string } | undefined)?.id;
+    expect(edge?.input).toMatchObject({ from: "step-2", to: addedId });
+  });
+
+  it("rebuilds from the trigger when not even the first step matches", () => {
+    const spec = liveEtherscanSpec("w1");
+    const scrambled = { ...specFacts(spec), steps: specFacts(spec).steps.slice().reverse() };
     const drift = workflowDrift(spec, scrambled, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
-    expect(drift.actions).toEqual([]);
-    expect(drift.differences[0]).toMatch(/edited by hand/);
+    expect(drift.differences[0]).toMatch(/rebuilt after the trigger/);
+    expect(drift.actions.filter((a) => a.type === "REMOVE_STEP")).toHaveLength(3);
+    expect(drift.actions.filter((a) => a.type === "ADD_STEP")).toHaveLength(3);
+    const first = drift.actions.find((a) => a.type === "ADD_EDGE");
+    expect(first?.input).toMatchObject({ from: "trigger" });
   });
 
   it("fixes a changed interval", () => {

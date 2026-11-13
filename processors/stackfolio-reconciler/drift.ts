@@ -53,25 +53,27 @@ function humanSeconds(seconds: number): string {
 }
 
 /**
- * The steps the spec ends with that the workflow lacks, in order - only a
- * missing tail is repairable; anything else means someone edited the chain
- * and the reconciler will not guess.
+ * How the published chain lines up with the spec: the longest prefix of
+ * published steps that reads as the spec's first steps is kept; published
+ * steps after it are `stale` (an older spec's, or a reorder), and the
+ * spec's steps after it are `steps` to append.
  */
 function missingSteps(
   spec: WorkflowSpec,
   facts: WorkflowFacts,
-): { after: string | null; steps: StepSpec[] } | "stuck" | null {
-  const have = facts.steps.map((s) => s.name);
-  const want = spec.steps.map((s) => s.name);
-  if (sameJson(want.slice(0, have.length), have)) {
-    const rest = spec.steps.slice(have.length);
-    return rest.length > 0
-      ? { after: have.length > 0 ? have[have.length - 1] : null, steps: rest }
-      : null;
+): { after: string | null; steps: StepSpec[]; stale: WorkflowFacts["steps"] } | null {
+  let kept = 0;
+  while (
+    kept < facts.steps.length &&
+    kept < spec.steps.length &&
+    facts.steps[kept].name === spec.steps[kept].name
+  ) {
+    kept += 1;
   }
-  // The published steps are not a prefix of the spec: a middle step was
-  // removed or reordered.
-  return "stuck";
+  const stale = facts.steps.slice(kept);
+  const rest = spec.steps.slice(kept);
+  if (stale.length === 0 && rest.length === 0) return null;
+  return { after: kept > 0 ? facts.steps[kept - 1].name : null, steps: rest, stale };
 }
 
 /**
@@ -92,20 +94,30 @@ export function workflowDrift(
   const actions: WorkflowAction[] = [];
 
   const missing = missingSteps(spec, facts);
-  if (missing === "stuck") {
+  // A chain that stopped matching (an older spec's steps, a reorder) is
+  // rebuilt after its matching prefix: the reconciler manages these
+  // workflows and wrote their chains, so leaving one stuck helps nobody.
+  const staleIds = new Set((missing?.stale ?? []).map((s) => s.id));
+  if (missing && missing.stale.length > 0) {
     differences.push(
-      `${spec.displayName}: the step chain was edited by hand and cannot be repaired automatically`,
+      `the step chain no longer matched the spec and was rebuilt after ${missing.after ?? "the trigger"}`,
     );
-    return { differences, actions };
-  }
-  if (missing) {
+    for (const edge of facts.edges) {
+      if (staleIds.has(edge.from) || staleIds.has(edge.to)) {
+        actions.push(wf.removeEdge({ id: edge.id }));
+      }
+    }
+    for (const step of missing.stale) actions.push(wf.removeStep({ id: step.id }));
+  } else if (missing) {
     for (const step of missing.steps) {
       differences.push(`the step ${step.name} was missing`);
     }
   }
-  // Ids of the spec's steps as they will stand: existing ones by name,
+  const liveSteps = facts.steps.filter((s) => !staleIds.has(s.id));
+  const liveEdges = facts.edges.filter((e) => !staleIds.has(e.from) && !staleIds.has(e.to));
+  // Ids of the spec's steps as they will stand: kept ones by name,
   // appended ones as they are minted below.
-  const stepIdByName = new Map(facts.steps.map((s) => [s.name, s.id]));
+  const stepIdByName = new Map(liveSteps.map((s) => [s.name, s.id]));
   for (const step of missing?.steps ?? []) {
     const id = newId();
     stepIdByName.set(step.name, id);
@@ -129,7 +141,7 @@ export function workflowDrift(
   // an interval workflow) or the step before; a step nothing leads to is
   // skipped on every run. Appending a step used to add no edge, so live
   // wallets' pin step never ran.
-  const reached = new Set(facts.edges.map((e) => e.to));
+  const reached = new Set(liveEdges.map((e) => e.to));
   spec.steps.forEach((step, i) => {
     const id = stepIdByName.get(step.name);
     if (!id || reached.has(id)) return;
@@ -145,8 +157,8 @@ export function workflowDrift(
     actions.push(wf.addEdge({ id: newId(), from, to: id, port: "next" }));
   });
 
-  // Steps the workflow already has: settings must read as the spec says.
-  const have = new Map(facts.steps.map((s) => [s.name, s]));
+  // Steps the workflow keeps: settings must read as the spec says.
+  const have = new Map(liveSteps.map((s) => [s.name, s]));
   for (const step of spec.steps) {
     const existing = have.get(step.name);
     if (!existing) continue;

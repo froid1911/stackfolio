@@ -18,6 +18,8 @@ export type WorkflowAction = ReturnType<
   | typeof wf.setTriggerConfig
   | typeof wf.addStep
   | typeof wf.addEdge
+  | typeof wf.removeEdge
+  | typeof wf.removeStep
   | typeof wf.updateStep
   | typeof wf.clearTrigger
   | typeof wf.publishWorkflow

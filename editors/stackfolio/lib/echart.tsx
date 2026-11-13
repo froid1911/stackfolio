@@ -108,23 +108,21 @@ function optionFor(
         return `${new Date(point.at).toLocaleString()}<br/><b>${formatValue(point.value)}</b>`;
       },
     },
+    // A time axis spaces samples by when they were taken: three snapshots
+    // over half an hour must not read like three days, and a gap in daily
+    // balances stays a gap. Its labels pick hours or days by the span.
     xAxis: {
-      type: "category",
-      boundaryGap: false,
-      data: points.map((p) => p.at),
+      type: "time",
       axisLine: { lineStyle: { color: GRID } },
       axisTick: { show: false },
       axisLabel: {
         color: TEXT,
         fontSize: 10,
         hideOverlap: true,
-        formatter: (value: string) => {
-          const date = new Date(value);
-          return Number.isNaN(date.getTime())
-            ? value
-            : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-        },
+        alignMinLabel: "left",
+        alignMaxLabel: "right",
       },
+      splitLine: { show: false },
     },
     yAxis: {
       type: "value",
@@ -139,11 +137,12 @@ function optionFor(
     series: [
       {
         type: "line",
-        smooth: true,
+        // Straight segments: a curve would invent values between samples.
+        smooth: false,
         symbol: "circle",
         symbolSize: 5,
         showSymbol: points.length <= 24,
-        data: points.map((p) => p.value),
+        data: points.map((p) => [new Date(p.at).getTime(), p.value]),
         lineStyle: { color: LINE, width: 2 },
         itemStyle: { color: LINE },
         areaStyle: { color: "rgba(139, 92, 246, 0.12)" },

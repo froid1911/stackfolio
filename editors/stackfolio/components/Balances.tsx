@@ -280,7 +280,7 @@ export function Balances({
               <li key={a.wallet} className="flex justify-between gap-4">
                 <button
                   type="button"
-                  className="text-left text-accent underline-offset-2 hover:underline"
+                  className="text-left text-primary underline-offset-2 hover:underline"
                   onClick={() => onOpenAccount(a.wallet)}
                 >
                   {walletName.get(a.wallet)}
@@ -365,7 +365,7 @@ function FragmentRows({
             <td className="px-3 py-1.5 pl-8">
               <button
                 type="button"
-                className="text-accent underline-offset-2 hover:underline"
+                className="text-primary underline-offset-2 hover:underline"
                 onClick={(e) => {
                   e.stopPropagation();
                   onOpenAsset();

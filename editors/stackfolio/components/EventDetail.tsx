@@ -80,7 +80,7 @@ export function EventDetail({
             <dd>
               <button
                 type="button"
-                className="text-accent underline-offset-2 hover:underline"
+                className="text-primary underline-offset-2 hover:underline"
                 onClick={() => onOpenAccount(event.address)}
               >
                 {event.label ?? labelOf.get(event.address)?.label ?? event.address}

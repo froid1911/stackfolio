@@ -228,7 +228,7 @@ export function Transactions({
                     {issue.accountId ? (
                       <button
                         type="button"
-                        className="text-accent underline-offset-2 hover:underline"
+                        className="text-primary underline-offset-2 hover:underline"
                         onClick={() => {
                           setFilter({
                             ...filter,
@@ -270,7 +270,7 @@ export function Transactions({
               </span>
               <button
                 type="button"
-                className="text-accent underline-offset-2 hover:underline"
+                className="text-primary underline-offset-2 hover:underline"
                 onClick={() => setFilter({ ...filter, ids: undefined, offset: 0 })}
               >
                 Show all

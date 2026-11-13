@@ -516,7 +516,7 @@ function EventLink({ onClick, children }: { onClick: () => void; children: strin
     <button
       type="button"
       onClick={onClick}
-      className="text-accent underline-offset-2 hover:underline"
+      className="text-primary underline-offset-2 hover:underline"
     >
       {children}
     </button>

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { noonOf } from "../llama.js";
 import { ethereumPinPricesAction } from "./pin-prices.js";
 
 const event = (
@@ -25,136 +26,120 @@ const event = (
   valuation,
 });
 
-const USDS = "eip155:1/erc20:0xdc035d45d973e3ec169d2276ddab16f1e407384f";
+const ETH = "eip155:1/slip44:60";
+const USDT = "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7";
+const SPAM = "eip155:1/erc20:0x1111111111111111111111111111111111111111";
+const manual = { unit: "EUR", price: "1", source: "MANUAL", granularity: "NONE", pinnedAt: "2026-11-01T00:00:00.000Z" };
+/** What the broken CoinGecko path pinned for every row. */
+const stuck = { unit: "EUR", price: "0", source: "UNPRICED", granularity: "DAY", pinnedAt: "2026-11-12T00:00:00.000Z" };
 
 const ledger = [
-  event("e1", "eip155:1/slip44:60", "2026-11-01T10:00:00.000Z", null),
-  event("e2", "eip155:1/slip44:60", "2026-11-01T11:00:00.000Z", null),
-  event("e3", "eip155:1/slip44:60", "2026-11-02T10:00:00.000Z", null),
-  event(
-    "e4",
-    "eip155:1/slip44:60",
-    "2026-11-03T10:00:00.000Z",
-    { unit: "EUR", price: "1", source: "MANUAL", granularity: "NONE", pinnedAt: "x" },
-  ),
-  event("e5", USDS, "2026-11-01T12:00:00.000Z", null),
-  event("e6", "eip155:1/erc20:0x1111111111111111111111111111111111111111", "2026-11-01T13:00:00.000Z", null),
+  event("e1", ETH, "2021-03-01T10:00:00.000Z", null),
+  event("e2", ETH, "2021-03-01T18:00:00.000Z", null),
+  event("e3", USDT, "2021-03-01T09:00:00.000Z", stuck),
+  event("e4", ETH, "2021-03-02T10:00:00.000Z", manual),
+  event("e5", SPAM, "2021-03-01T12:00:00.000Z", null),
 ];
 
-const walletDoc = {
+const walletDoc = (rows = ledger) => ({
   header: { documentType: "stackfolio/wallet-account" },
-  state: { global: { address: "0xabc", chainId: 1, ledger } },
-};
+  state: { global: { address: "0xabc", chainId: 1, ledger: rows } },
+});
 
-const jsonResponse = (body: unknown, status = 200) =>
+const json = (body: unknown, status = 200) =>
   ({ ok: status < 400, status, json: async () => body }) as Response;
+
+/** Real response shapes: DefiLlama batchHistorical and Frankfurter v1. */
+function apis(over: { llama?: (coins: Record<string, number[]>) => Response; fx?: () => Response } = {}) {
+  return vi.fn(async (url: string) => {
+    if (url.includes("frankfurter")) {
+      return over.fx?.() ?? json({ base: "USD", rates: { "2021-03-01": { EUR: 0.82967 }, "2021-03-02": { EUR: 0.8301 } } });
+    }
+    if (url.includes("coins.llama.fi/batchHistorical")) {
+      const coins = JSON.parse(decodeURIComponent(url.split("coins=")[1])) as Record<string, number[]>;
+      if (over.llama) return over.llama(coins);
+      return json({
+        coins: {
+          "coingecko:ethereum": { prices: [{ timestamp: noonOf("2021-03-01") + 482, price: 1520.85, confidence: 0.99 }] },
+          "ethereum:0xdac17f958d2ee523a2206206994597c13d831ec7": {
+            prices: [{ timestamp: noonOf("2021-03-01") + 27, price: 1.003, confidence: 0.99 }],
+          },
+          // The spam token: answered, but without a price.
+        },
+      });
+    }
+    throw new Error(`unexpected url ${url}`);
+  });
+}
 
 const execute = vi.fn().mockResolvedValue({});
 const get = vi.fn();
 
 const run = (props: Record<string, unknown>) =>
   ethereumPinPricesAction.run({
-    propsValue: props,
+    propsValue: { documentId: "w1", max: 50, now: "2026-11-14T12:00:00.000Z", ...props },
     auth: undefined,
     reactor: { get, execute },
   } as unknown as Parameters<typeof ethereumPinPricesAction.run>[0]);
 
+type Pinned = { id: string; valuation: { price: string; source: string; granularity: string; unit: string } };
+const pinned = () => {
+  const actions = execute.mock.calls[0]?.[2] as Array<{ type: string; input: { events: Pinned[] } }> | undefined;
+  return new Map((actions?.[0]?.input.events ?? []).map((e) => [e.id, e.valuation]));
+};
+
 beforeEach(() => {
   execute.mockClear();
   get.mockReset();
-  get.mockResolvedValue(walletDoc);
+  get.mockResolvedValue(walletDoc());
 });
 
 describe("pin-prices", () => {
-  it("pins one daily close per asset-day and UNPRICED for misses", async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes("/coins/ethereum/history")) return jsonResponse({ eur: 3000 });
-      if (url.includes("/coins/ethereum/contract/0xdc035d45d973e3ec169d2276ddab16f1e407384f"))
-        return jsonResponse([{ id: "susds" }]);
-      if (url.includes("/coins/susds/history")) return jsonResponse({ eur: 1.02 });
-      if (url.includes("/contract/0x1111111111111111111111111111111111111111"))
-        return jsonResponse([]);
-      throw new Error(`unexpected url ${url}`);
-    });
-    const result = (await run({
-      documentId: "w1",
-      max: 50,
-      fetchImpl,
-    })) as { priced: number; unpriced: number };
-
-    expect(result.priced).toBe(4);
-    expect(result.unpriced).toBe(1);
-    expect(execute).toHaveBeenCalledTimes(1);
-    const actions = execute.mock.calls[0][2] as Array<{
-      type: string;
-      input: {
-        events: Array<{
-          id: string;
-          valuation: { price: string; source: string; granularity: string };
-        }>;
-      };
-    }>;
-    expect(actions[0].type).toBe("PIN_VALUATIONS");
-    const pins = new Map(
-      actions[0].input.events.map((e) => [e.id, e.valuation]),
-    );
-    expect(pins.get("e1")).toMatchObject({ price: "3000", source: "COINGECKO" });
-    expect(pins.get("e2")).toMatchObject({ price: "3000", source: "COINGECKO" });
-    expect(pins.get("e3")).toMatchObject({ price: "3000", source: "COINGECKO" });
-    expect(pins.get("e5")).toMatchObject({ price: "1.02", source: "COINGECKO" });
-    expect(pins.get("e6")).toMatchObject({ price: "0", source: "UNPRICED" });
-    expect(pins.has("e4")).toBe(false);
-    // One history call per (asset, day): ethereum on 2 days + susds on 1.
-    const historyCalls = fetchImpl.mock.calls
-      .map((c) => String(c[0]))
-      .filter((u) => u.includes("/history"));
-    expect(historyCalls).toHaveLength(3);
-    expect(actions[0].input.events.every((e) => e.valuation.granularity === "DAY")).toBe(true);
+  it("prices history from DefiLlama in the portfolio currency, one source label", async () => {
+    const result = (await run({ fetchImpl: apis() })) as { priced: number; unpriced: number; retry: number };
+    const pins = pinned();
+    // 1520.85 USD × 0.82967 EUR/USD
+    expect(pins.get("e1")).toMatchObject({ source: "DEFILLAMA", granularity: "DAY", unit: "EUR" });
+    expect(Number(pins.get("e1")?.price)).toBeCloseTo(1520.85 * 0.82967, 6);
+    expect(pins.get("e2")?.price).toBe(pins.get("e1")?.price);
+    expect(result).toMatchObject({ priced: 3, unpriced: 1, retry: 0 });
   });
 
-  it("caps the batch at max rows, oldest first", async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes("/history")) return jsonResponse({ eur: 3000 });
-      return jsonResponse([]);
-    });
-    const result = (await run({
-      documentId: "w1",
-      max: 2,
-      fetchImpl,
-    })) as { priced: number; unpriced: number };
-    const dispatched = execute.mock.calls[0]?.[2] as
-      | Array<{ input: { events: Array<{ id: string }> } }>
-      | undefined;
-    const events = dispatched?.[0]?.input.events ?? [];
-    expect(events.map((e) => e.id)).toEqual(["e1", "e2"]);
-    expect(result.priced + result.unpriced).toBe(2);
+  it("re-prices a row the broken CoinGecko path pinned UNPRICED", async () => {
+    await run({ fetchImpl: apis() });
+    expect(pinned().get("e3")).toMatchObject({ source: "DEFILLAMA" });
+    expect(Number(pinned().get("e3")?.price)).toBeCloseTo(1.003 * 0.82967, 6);
   });
 
-  it("does nothing when every row already carries a valuation", async () => {
-    get.mockResolvedValue({
-      header: { documentType: "stackfolio/wallet-account" },
-      state: {
-        global: {
-          address: "0xabc",
-          chainId: 1,
-          ledger: [
-            event("e1", "eip155:1/slip44:60", "2026-11-01T10:00:00.000Z", {
-              unit: "EUR",
-              price: "1",
-              source: "MANUAL",
-              granularity: "NONE",
-              pinnedAt: "x",
-            }),
-          ],
-        },
-      },
-    });
-    const result = (await run({
-      documentId: "w1",
-      max: 50,
-      fetchImpl: vi.fn(),
-    })) as { priced: number; unpriced: number };
-    expect(result).toEqual({ priced: 0, unpriced: 0 });
+  it("pins UNPRICED only for a definitive miss, and never touches a manual price", async () => {
+    await run({ fetchImpl: apis() });
+    expect(pinned().get("e5")).toMatchObject({ price: "0", source: "UNPRICED" });
+    expect(pinned().has("e4")).toBe(false);
+  });
+
+  it("pins nothing for a coin whose request failed: the next run retries it", async () => {
+    const fetchImpl = apis({ llama: () => json({ message: "Too Many Requests" }, 429) });
+    const result = (await run({ fetchImpl })) as { priced: number; unpriced: number; retry: number };
     expect(execute).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ priced: 0, unpriced: 0, retry: 4 });
+  });
+
+  it("prices nothing without exchange rates", async () => {
+    const result = (await run({ fetchImpl: apis({ fx: () => json({}, 502) }) })) as { error?: string };
+    expect(execute).not.toHaveBeenCalled();
+    expect(result.error).toMatch(/exchange rates/);
+  });
+
+  it("leaves a fresh UNPRICED pin alone until it is a week old", async () => {
+    const fresh = { ...stuck, pinnedAt: "2026-11-14T00:00:00.000Z" };
+    get.mockResolvedValue(walletDoc([event("e9", USDT, "2021-03-01T09:00:00.000Z", fresh)]));
+    const result = (await run({ fetchImpl: apis() })) as { priced: number };
+    expect(execute).not.toHaveBeenCalled();
+    expect(result.priced).toBe(0);
+  });
+
+  it("caps a run at max rows, never-valued rows first, oldest first", async () => {
+    await run({ fetchImpl: apis(), max: 2 });
+    expect([...pinned().keys()]).toEqual(["e1", "e5"]);
   });
 });

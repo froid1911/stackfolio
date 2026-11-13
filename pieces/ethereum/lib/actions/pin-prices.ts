@@ -1,24 +1,11 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
 
 import { ethereumAuth } from "../auth.js";
-import { authProps } from "../client.js";
 import { globalState, toGlobalAction } from "../reactor.js";
 import { parseJsonish } from "../jsonish.js";
-import { getDailyClose } from "../history.js";
+import { toDecimal } from "../history.js";
+import { fetchFxRates, fetchUsdCloses, llamaKey } from "../llama.js";
 import { WALLET_ACCOUNT_TYPE } from "./import-events-to-wallet-account.js";
-
-const ETH_IDENTIFIER = "eip155:1/slip44:60";
-
-/** CoinGecko contract-lookup platform per chain, mirroring fetch-prices. */
-const CG_PLATFORM: Record<number, string> = {
-  1: "ethereum",
-  10: "optimistic-ethereum",
-  56: "binance-smart-chain",
-  137: "polygon-pos",
-  42161: "arbitrum-one",
-  8453: "base",
-  43114: "avalanche",
-};
 
 interface LedgerRow {
   id: string;
@@ -26,60 +13,27 @@ interface LedgerRow {
   timestamp: string;
   asset: string;
   ignored?: boolean;
-  valuation?: unknown;
+  valuation?: { source?: string; pinnedAt?: string } | null;
 }
 
-interface PinTarget {
-  row: LedgerRow;
-  day: string;
-  coinId: string | null;
-}
-
-async function resolveCoinId(
-  asset: string,
-  registry: Map<string, string>,
-  base: string,
-  doFetch: typeof fetch,
-  apiKey?: string,
-): Promise<string | null> {
-  const known = registry.get(asset);
-  if (known) return known;
-  if (asset === ETH_IDENTIFIER) return "ethereum";
-  const match = /^eip155:(\d+)\/erc20:(0x[0-9a-fA-F]{40})$/.exec(asset);
-  if (!match) return null;
-  const platform = CG_PLATFORM[Number(match[1])];
-  if (!platform) return null;
-  try {
-    const response = await doFetch(
-      `${base}/coins/${platform}/contract/${match[2].toLowerCase()}`,
-      {
-        signal: AbortSignal.timeout(15_000),
-        ...(apiKey && apiKey.trim() !== ""
-          ? { headers: { "x-cg-demo-api-key": apiKey.trim() } }
-          : {}),
-      },
-    );
-    if (!response.ok) return null;
-    const body = (await response.json()) as Array<{ id?: unknown }>;
-    const first = Array.isArray(body) ? body[0] : undefined;
-    return typeof first?.id === "string" && first.id !== ""
-      ? first.id
-      : null;
-  } catch {
-    return null;
-  }
-}
+/** An UNPRICED pin is retried once it is this old: coverage grows. */
+const RETRY_AFTER_MS = 7 * 24 * 3600 * 1000;
+/**
+ * Pins made before this instant came from a CoinGecko call that read the
+ * wrong field and answered UNPRICED for every row; they are retried now.
+ */
+const REPIN_BEFORE = "2026-11-14T00:00:00.000Z";
 
 export const ethereumPinPricesAction = createAction({
-  // CoinGecko needs no node, but the connection carries its optional API
-  // key (and its rate limit).
+  // DefiLlama and Frankfurter need no key; the piece's connection is
+  // still the action's auth, like its siblings.
   auth: ethereumAuth,
   requireReactor: "write",
   // Saved workflows refer to the action by name: don't rename it once published
   name: "pin-prices",
   displayName: "Pin Historical Prices",
   description:
-    "Fill the wallet ledger's missing valuations with CoinGecko daily closes: oldest unpriced rows first, at most one call per (asset, day); rows CoinGecko cannot price are pinned UNPRICED rather than left ambiguous. Manual valuations are never touched.",
+    "Fill the wallet ledger's missing valuations with daily prices from DefiLlama (full history) in the quote currency at the ECB's daily rate: never-valued rows first, then UNPRICED pins due a retry, oldest first. A day the source has no price for is pinned UNPRICED; a source that does not answer pins nothing, so the next run retries. Manual valuations are never touched.",
   props: {
     documentId: Property.ShortText({
       displayName: "Wallet account document",
@@ -104,17 +58,15 @@ export const ethereumPinPricesAction = createAction({
         "Optional asset-registry global state; its coingeckoId fields map identifiers to CoinGecko ids.",
       required: false,
     }),
-    coingeckoBaseUrl: Property.ShortText({
-      displayName: "CoinGecko base URL",
-      description: "Change only to point at a proxy or paid endpoint.",
-      required: false,
-      defaultValue: "https://api.coingecko.com/api/v3",
-    }),
   },
   async run(context) {
-    const props = context.propsValue;
-    const doFetch =
-      (props as { fetchImpl?: typeof fetch }).fetchImpl ?? fetch;
+    const props = context.propsValue as typeof context.propsValue & {
+      fetchImpl?: typeof fetch;
+      /** The run's clock; tests pass one. */
+      now?: string;
+    };
+    const doFetch = props.fetchImpl ?? fetch;
+    const now = props.now ?? new Date().toISOString();
     const documentId = props.documentId.trim();
     const document = await context.reactor.get(documentId);
     if (document.header.documentType !== WALLET_ACCOUNT_TYPE) {
@@ -122,101 +74,87 @@ export const ethereumPinPricesAction = createAction({
         `Document ${documentId} is a ${document.header.documentType}, not a ${WALLET_ACCOUNT_TYPE}.`,
       );
     }
-    const ledger =
-      globalState<{ ledger?: LedgerRow[] }>(document).ledger ?? [];
-    const currency = (props.vsCurrency ?? "EUR").toLowerCase();
-    const apiKey = authProps(context.auth).coingeckoApiKey ?? "";
-    const base =
-      (props.coingeckoBaseUrl ?? "").trim() ||
-      "https://api.coingecko.com/api/v3";
+    const ledger = globalState<{ ledger?: LedgerRow[] }>(document).ledger ?? [];
+    const currency = (props.vsCurrency ?? "EUR").toUpperCase();
 
-    const registry = new Map<string, string>();
+    const coingeckoIds = new Map<string, string>();
     if (props.registryJson) {
       try {
-        const parsed = parseJsonish(
-          props.registryJson,
-          "registryJson",
-        ) as { assets?: Array<{ identifier?: unknown; coingeckoId?: unknown }> };
+        const parsed = parseJsonish(props.registryJson, "registryJson") as {
+          assets?: Array<{ identifier?: unknown; coingeckoId?: unknown }>;
+        };
         for (const asset of parsed.assets ?? []) {
-          if (
-            typeof asset.identifier === "string" &&
-            typeof asset.coingeckoId === "string" &&
-            asset.coingeckoId !== ""
-          ) {
-            registry.set(asset.identifier, asset.coingeckoId);
+          if (typeof asset.identifier === "string" && typeof asset.coingeckoId === "string" && asset.coingeckoId !== "") {
+            coingeckoIds.set(asset.identifier, asset.coingeckoId);
           }
         }
       } catch {
-        // A malformed registry is treated as empty; lookup covers it.
+        // A malformed registry is treated as empty; contract keys cover most rows.
       }
     }
 
-    const open = ledger
-      .filter((row) => !row.valuation && !row.ignored)
-      .sort(
-        (a, b) =>
-          a.timestamp.localeCompare(b.timestamp) ||
-          a.id.localeCompare(b.id),
-      )
-      .slice(0, props.max);
+    // Never-valued rows first, then UNPRICED pins due a retry; oldest first.
+    const retryable = (row: LedgerRow) => {
+      const v = row.valuation;
+      if (!v || v.source !== "UNPRICED") return false;
+      const at = v.pinnedAt ?? "";
+      return at < REPIN_BEFORE || Date.parse(now) - Date.parse(at) >= RETRY_AFTER_MS;
+    };
+    const byTime = (a: LedgerRow, b: LedgerRow) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id);
+    const open = [
+      ...ledger.filter((r) => !r.ignored && !r.valuation).sort(byTime),
+      ...ledger.filter((r) => !r.ignored && retryable(r)).sort(byTime),
+    ].slice(0, props.max);
+    if (open.length === 0) return { priced: 0, unpriced: 0, retry: 0 };
 
-    const targets: PinTarget[] = [];
+    const keyOf = (row: LedgerRow) => llamaKey(row.asset, coingeckoIds.get(row.asset));
+    const dayOf = (row: LedgerRow) => row.timestamp.slice(0, 10);
+    const requests = new Map<string, string[]>();
     for (const row of open) {
-      targets.push({
-        row,
-        day: row.timestamp.slice(0, 10),
-        coinId: null,
-      });
+      const key = keyOf(row);
+      if (key) requests.set(key, [...(requests.get(key) ?? []), dayOf(row)]);
     }
-    const prices = new Map<string, string | null>();
-    for (const target of targets) {
-      const key = `${target.row.asset}|${target.day}`;
-      if (!prices.has(key)) {
-        const coinId = await resolveCoinId(
-          target.row.asset,
-          registry,
-          base,
-          doFetch,
-          apiKey,
-        );
-        const price = coinId
-          ? await getDailyClose(coinId, target.day, currency, {
-              baseUrl: base,
-              fetchImpl: doFetch,
-              apiKey,
-            })
-          : null;
-        prices.set(key, price);
-      }
+    const days = open.map(dayOf).sort();
+    let rate: (day: string) => number | null;
+    try {
+      rate = await fetchFxRates(currency, days[0], days.at(-1)!, { fetchImpl: doFetch });
+    } catch (error) {
+      // Without the day's exchange rate nothing can be priced honestly.
+      return { priced: 0, unpriced: 0, retry: open.length, error: (error as Error).message };
     }
+    const { prices, failed } = await fetchUsdCloses(requests, { fetchImpl: doFetch });
 
-    const pinnedAt = new Date().toISOString();
-    const unit = currency.toUpperCase();
-    const events: unknown[] = [];
     let priced = 0;
     let unpriced = 0;
-    for (const target of targets) {
-      const price = prices.get(`${target.row.asset}|${target.day}`);
-      if (price) priced += 1;
-      else unpriced += 1;
+    let retry = 0;
+    const events: unknown[] = [];
+    for (const row of open) {
+      const key = keyOf(row);
+      if (key && failed.has(key)) {
+        retry += 1; // the source did not answer: pin nothing, next run tries again
+        continue;
+      }
+      const usd = key ? prices.get(`${key}|${dayOf(row)}`) : undefined;
+      const fx = rate(dayOf(row));
+      const price = usd !== undefined && fx !== null ? toDecimal(usd * fx) : null;
+      if (price === null) unpriced += 1;
+      else priced += 1;
       events.push({
-        id: target.row.id,
-        sequenceIndex: target.row.sequenceIndex,
+        id: row.id,
+        sequenceIndex: row.sequenceIndex,
         valuation: {
-          unit,
+          unit: currency,
           price: price ?? "0",
-          source: price ? "COINGECKO" : "UNPRICED",
+          source: price === null ? "UNPRICED" : "DEFILLAMA",
           granularity: "DAY",
-          pinnedAt,
+          pinnedAt: now,
         },
       });
     }
 
     if (events.length > 0) {
-      await context.reactor.execute(documentId, "main", [
-        toGlobalAction("PIN_VALUATIONS", { events }),
-      ]);
+      await context.reactor.execute(documentId, "main", [toGlobalAction("PIN_VALUATIONS", { events })]);
     }
-    return { priced, unpriced };
+    return { priced, unpriced, retry };
   },
 });

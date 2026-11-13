@@ -36,6 +36,19 @@ export function chainLabel(chainId: number): string {
   return CHAINS[chainId] ?? `chain ${chainId}`;
 }
 
+/**
+ * The chain an asset lives on: the registry's word first, else the CAIP-2
+ * prefix of its identifier — never a default chain for an unknown asset.
+ */
+export function chainOf(book: Map<string, Asset>, identifier: string): string {
+  const registered = book.get(identifier);
+  if (registered) return chainLabel(registered.chainId);
+  const evm = /^eip155:(\d+)\//.exec(identifier);
+  if (evm) return chainLabel(Number(evm[1]));
+  if (identifier.startsWith("bip122:")) return "Bitcoin";
+  return "unknown chain";
+}
+
 /** A symbol/name carrying characters a ticker never has: a spoof. */
 const TICKER = /^[A-Za-z0-9$._\- ]+$/;
 const INVISIBLE = /[\u200B-\u200D\u2060\uFEFF]/;
@@ -161,4 +174,81 @@ export function shortIdentifier(identifier: string): string {
 /** Collisions worth a warning: the same ticker on more than one contract. */
 export function ambiguousTicker(view: AssetView): boolean {
   return view.collisions > 1 && view.tier !== "verified";
+}
+
+/** Exact sum of decimal strings ("1000.5" + "6000.25" = "7000.75"). */
+function sumDecimals(values: string[]): string {
+  const parts = values
+    .map((v) => /^(-?)(\d+)(?:\.(\d+))?$/.exec(v))
+    .filter((m): m is RegExpExecArray => m !== null);
+  const scale = parts.reduce((m, p) => Math.max(m, p[3]?.length ?? 0), 0);
+  let acc = 0n;
+  for (const [, sign, int, frac = ""] of parts) {
+    const n = BigInt(int + frac.padEnd(scale, "0"));
+    acc += sign === "-" ? -n : n;
+  }
+  const negative = acc < 0n;
+  const digits = (negative ? -acc : acc).toString().padStart(scale + 1, "0");
+  const whole = digits.slice(0, digits.length - scale);
+  const frac = digits.slice(digits.length - scale).replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${frac ? `.${frac}` : ""}`;
+}
+
+export interface AssetHolding {
+  asset: string;
+  quantity: string;
+  value: string | null;
+}
+
+export interface Allocation<T extends AssetHolding> {
+  /** Priced, not spam, biggest first: these make the total. */
+  valued: T[];
+  /** Not spam, no price: listed with their quantity, never in a total. */
+  unpriced: T[];
+  /** Spoofed tickers, priced or not: never counted. */
+  spam: T[];
+  /** Sum of `valued`, exact decimal. */
+  total: string;
+  /** A valued asset's fraction of `total`; null for anything else. */
+  share: (identifier: string) => number | null;
+  /** Donut slices from the same total: the top `top` plus "Other". */
+  slices: { label: string; value: number }[];
+}
+
+/**
+ * The one place a portfolio's totals are decided: Balances and the
+ * Dashboard both draw from it, so the table total, the shares and the
+ * donut cannot disagree, and a priced spoof cannot inflate any of them.
+ */
+export function allocate<T extends AssetHolding>(
+  perAsset: T[],
+  book: AssetBook,
+  top = 8,
+): Allocation<T> {
+  const tiers = new Map(book.rows.map((r) => [r.asset.identifier, r.tier]));
+  const isSpam = (identifier: string) => tiers.get(identifier) === "spam";
+  const spam = perAsset.filter((a) => isSpam(a.asset));
+  const unpriced = perAsset.filter((a) => a.value === null && !isSpam(a.asset));
+  const valued = perAsset
+    .filter((a) => a.value !== null && !isSpam(a.asset))
+    .sort((a, b) => Number(b.value) - Number(a.value));
+  const total = sumDecimals(valued.map((a) => a.value!));
+  const totalNumber = Number(total);
+  const byId = new Map(valued.map((a) => [a.asset, Number(a.value)]));
+  const head = valued.slice(0, top);
+  const rest = valued.slice(top).reduce((acc, a) => acc + Number(a.value), 0);
+  return {
+    valued,
+    unpriced,
+    spam,
+    total,
+    share: (identifier) => {
+      const value = byId.get(identifier);
+      return value === undefined || totalNumber <= 0 ? null : value / totalNumber;
+    },
+    slices: [
+      ...head.map((a) => ({ label: symbolOf(book.byId, a.asset), value: Number(a.value) })),
+      ...(rest > 0 ? [{ label: "Other", value: rest }] : []),
+    ],
+  };
 }

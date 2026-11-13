@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { Asset, HoldingRow } from "./graphql.js";
 import {
+  allocate,
   ambiguousTicker,
   assetBook,
   chainLabel,
+  chainOf,
   coverage,
   formatQuantity,
   formatUnitPrice,
@@ -89,5 +91,69 @@ describe("formatting", () => {
     expect(chainLabel(77)).toBe("chain 77");
     expect(shortIdentifier("eip155:1/slip44:60")).toBe("slip44:60");
     expect(shortIdentifier("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f")).toBe("0x6b17…1d0f");
+  });
+});
+
+describe("allocate", () => {
+  const book = assetBook(
+    [
+      asset({ identifier: "eth", symbol: "ETH", kind: "NATIVE" }),
+      asset({ identifier: "usdc", symbol: "USDC", coingeckoId: "usd-coin" }),
+      asset({ identifier: "spoof", symbol: "USD\u0422", name: "Tether" }),
+      asset({ identifier: "dust", symbol: "DUST" }),
+    ],
+    ["eth", "usdc", "spoof"],
+  );
+  const perAsset = [
+    { asset: "usdc", quantity: "1000", value: "1000.5" },
+    { asset: "eth", quantity: "2", value: "6000.25" },
+    { asset: "spoof", quantity: "1000000", value: "999999" },
+    { asset: "dust", quantity: "12", value: null },
+  ];
+
+  it("sorts valued holdings by value and keeps spoofs out of the total", () => {
+    const a = allocate(perAsset, book);
+    expect(a.valued.map((r) => r.asset)).toEqual(["eth", "usdc"]);
+    expect(a.unpriced.map((r) => r.asset)).toEqual(["dust"]);
+    expect(a.spam.map((r) => r.asset)).toEqual(["spoof"]);
+    expect(a.total).toBe("7000.75");
+  });
+
+  it("derives shares and slices from that same total", () => {
+    const a = allocate(perAsset, book);
+    expect(a.share("eth")).toBeCloseTo(6000.25 / 7000.75);
+    expect(a.share("spoof")).toBeNull();
+    expect(a.slices).toEqual([
+      { label: "ETH", value: 6000.25 },
+      { label: "USDC", value: 1000.5 },
+    ]);
+  });
+
+  it("folds the tail into Other", () => {
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      asset: `t${i}`,
+      quantity: "1",
+      value: String(10 - i),
+    }));
+    const a = allocate(many, assetBook([], []), 3);
+    expect(a.slices.map((s) => s.label)).toEqual(["t0", "t1", "t2", "Other"]);
+    expect(a.slices.at(-1)?.value).toBe(7 + 6 + 5 + 4 + 3 + 2 + 1);
+    expect(a.total).toBe("55");
+  });
+
+  it("answers zero for an empty portfolio", () => {
+    const a = allocate([], book);
+    expect(a.total).toBe("0");
+    expect(a.slices).toEqual([]);
+  });
+});
+
+describe("chainOf", () => {
+  it("prefers the registry entry, else reads the CAIP identifier", () => {
+    const book = new Map([["x", asset({ identifier: "x", chainId: 8453 })]]);
+    expect(chainOf(book, "x")).toBe("Base");
+    expect(chainOf(book, "eip155:42161/erc20:0xabc")).toBe("Arbitrum");
+    expect(chainOf(book, "bip122:000000000019d6689c085ae165831e93/slip44:0")).toBe("Bitcoin");
+    expect(chainOf(book, "mystery")).toBe("unknown chain");
   });
 });

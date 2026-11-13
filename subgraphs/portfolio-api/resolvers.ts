@@ -122,7 +122,7 @@ export const getResolvers = (
         // each replaces the ledger's native transfers for its own chain's
         // identifier and wallet (the snapshot fold does the same).
         const nativeBalances: HoldingsInput["balances"] = accounts
-          .filter((a) => a.native_balance !== null && a.native_balance !== undefined)
+          .filter((a) => a.native_balance !== null)
           .map((a) => ({
             asset: nativeOf(a.chain_id),
             address: a.address,

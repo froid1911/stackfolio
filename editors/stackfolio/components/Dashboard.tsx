@@ -17,6 +17,7 @@ import { fmtAmount, fmtFiat } from "../lib/format.js";
 import { Donut, ValueHistory } from "../lib/echart.js";
 import { allocate, assetBook, coverage, symbolOf as bookSymbol } from "../lib/assets.js";
 import { buildBalances } from "../../../subgraphs/portfolio-api/lib.js";
+import type { Stack } from "../lib/stack.js";
 
 const CURRENCY_SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
 
@@ -35,6 +36,7 @@ export function Dashboard({
   issues,
   assets,
   holdings,
+  stack,
 }: {
   portfolioDocumentId: string | undefined;
   totals: QueryState<Totals>;
@@ -43,6 +45,8 @@ export function Dashboard({
   issues: QueryState<Issue[]>;
   assets: QueryState<Asset[]>;
   holdings?: QueryState<{ holdings: HoldingRow[]; total: string } | null>;
+  /** Where the money sits; its total is the headline when present. */
+  stack?: Stack | null;
 }) {
   const [portfolio] = useDocumentById(portfolioDocumentId ?? "");
   const currency =
@@ -71,12 +75,17 @@ export function Dashboard({
         <div className="rounded-xl border border-border bg-card p-4 sm:col-span-2">
           <p className="text-xs uppercase text-muted-foreground">Total value</p>
           <p className="mt-1 text-3xl font-semibold">
-            {money(held.length > 0 ? alloc.total : t.totalValue, currency)}
+            {money(
+              stack ? stack.total.toFixed(2) : held.length > 0 ? alloc.total : t.totalValue,
+              currency,
+            )}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {held.length > 0
               ? [
-                  "valued holdings now",
+                  stack
+                    ? stack.groups.map((g) => `${g.label} ${money(g.net.toFixed(2), currency)}`).join(" + ")
+                    : "valued holdings now",
                   alloc.unpriced.length > 0 ? `${alloc.unpriced.length} unpriced not counted` : "",
                   alloc.debt.length > 0 ? `gross of ${alloc.debt.length} debt position${alloc.debt.length === 1 ? "" : "s"}` : "",
                   alloc.negative.length > 0 ? `${alloc.negative.length} incomplete` : "",

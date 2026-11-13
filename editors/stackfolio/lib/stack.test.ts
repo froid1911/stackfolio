@@ -85,6 +85,15 @@ describe("buildStack", () => {
     expect(wallet.unpriced).toBe(1);
   });
 
+  it("exposes the wallet rows it counts, for every page to share", () => {
+    const stack = buildStack(input);
+    expect(stack.walletRows.map((r) => `${r.wallet}:${r.asset}`)).toEqual([
+      `${W1}:${WBTC}`,
+      `${W2}:${AWBTC}`,
+      `${W2}:${MYST}`,
+    ]);
+  });
+
   it("values a protocol from its positions: supplied, borrowed, net and health", () => {
     const aave = buildStack(input).groups.find((g) => g.kind === "protocol")!;
     expect(aave.label).toBe("Aave v3");

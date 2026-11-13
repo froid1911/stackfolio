@@ -19,10 +19,17 @@ import {
   useTotals,
   useValidators,
   useWithdrawals,
+  type BalancesData,
   type EventsFilter,
+  type QueryState,
 } from "../lib/graphql.js";
 import { Accounts } from "./Accounts.js";
 import { Balances } from "./Balances.js";
+import { ProtocolStack } from "./ProtocolStack.js";
+import { buildStack, type Stack } from "../lib/stack.js";
+import { buildBalances } from "../../../subgraphs/portfolio-api/lib.js";
+import { validatorSummary } from "../lib/staking.js";
+import { assetBook } from "../lib/assets.js";
 import { Assets } from "./Assets.js";
 import { Dashboard, short } from "./Dashboard.js";
 import { Prices } from "./Prices.js";
@@ -167,7 +174,7 @@ export function DashboardSection({
   const snapshots = useSnapshots(driveId);
   const issues = useIssues(driveId);
   const assets = useAssets(driveId);
-  const holdings = useHoldings(driveId);
+  const { stack, walletHoldings } = useStack(driveId);
   const recent = useEventsPage(driveId, { first: 6 });
   return (
     <Dashboard
@@ -177,9 +184,72 @@ export function DashboardSection({
       recent={recent}
       issues={issues}
       assets={assets}
-      holdings={holdings}
+      holdings={walletHoldings}
+      stack={stack}
     />
   );
+}
+
+/**
+ * The protocol stack for a drive: live holdings, the portfolio's protocol
+ * positions and the validators' latest balances, priced with overrides
+ * winning — the same precedence the holdings fold uses.
+ */
+export function useStack(driveId: string): {
+  stack: Stack | null;
+  currency: string;
+  /** Holdings as the stack counts them, in the shape Balances and the Dashboard take. */
+  walletHoldings: QueryState<BalancesData | null>;
+} {
+  const holdings = useHoldings(driveId);
+  const assets = useAssets(driveId);
+  const prices = useLatestPrices(driveId);
+  const overrides = useOverrides(driveId);
+  const nodes = useNodesInSelectedDrive();
+  const book = usePortfolioBook(nodes ?? []);
+  const validators = useValidators(driveId);
+  const balances = useStakingBalances(driveId);
+  const withdrawals = useWithdrawals(driveId);
+  if (!holdings.data || !assets.data || !prices.data) {
+    return { stack: null, currency: book.currency, walletHoldings: holdings };
+  }
+  const priceMap = new Map(prices.data.map((p) => [p.asset, p.price]));
+  for (const o of overrides.data ?? []) priceMap.set(o.asset, o.price);
+  const stack = buildStack({
+    book: assetBook(assets.data, priceMap.keys()),
+    prices: priceMap,
+    holdings: holdings.data.holdings,
+    positions: book.positions,
+    validators: (validators.data ?? [])
+      .map((v) => ({
+        index: v.validatorIndex,
+        summary: validatorSummary(v.validatorIndex, balances.data ?? [], withdrawals.data ?? []),
+      }))
+      .filter((v) => v.summary.rows > 0)
+      .map((v) => ({ index: v.index, balanceEth: v.summary.now })),
+  });
+  const data = holdings.data;
+  const counted = new Set(stack.walletRows);
+  const rows = data.holdings.filter((r) => counted.has(r));
+  const folded = buildBalances(rows);
+  const names = new Map(data.perAccount.map((a) => [a.wallet, a]));
+  const walletHoldings: QueryState<BalancesData | null> = {
+    ...holdings,
+    data: {
+      holdings: rows,
+      perAsset: folded.perAsset.map((a) => ({
+        ...a,
+        symbol: data.perAsset.find((p) => p.asset === a.asset)?.symbol ?? "",
+      })),
+      perAccount: folded.perAccount.map((a) => ({
+        ...a,
+        ensName: names.get(a.wallet)?.ensName ?? null,
+        label: names.get(a.wallet)?.label ?? null,
+      })),
+      total: folded.total,
+    },
+  };
+  return { stack, currency: book.currency, walletHoldings };
 }
 
 export function BalancesSection({
@@ -193,16 +263,28 @@ export function BalancesSection({
   onOpenAccount: (address: string) => void;
   onCloseAccount?: () => void;
 }) {
-  const holdings = useHoldings(driveId);
   const assets = useAssets(driveId);
+  const { stack, currency, walletHoldings } = useStack(driveId);
   return (
-    <Balances
-      assets={assets}
-      holdings={holdings}
-      onOpenAsset={onOpenAsset}
-      onOpenAccount={onOpenAccount}
-      onCloseAccount={onCloseAccount}
-    />
+    <div>
+      <div className="px-6 pt-6">
+        {stack ? (
+          <ProtocolStack stack={stack} currency={currency} onOpenAsset={onOpenAsset} />
+        ) : (
+          <p className="text-muted-foreground">Loading where your money sits…</p>
+        )}
+        <h2 className="mt-8 text-sm font-semibold uppercase text-muted-foreground">
+          All assets in wallets
+        </h2>
+      </div>
+      <Balances
+        assets={assets}
+        holdings={walletHoldings}
+        onOpenAsset={onOpenAsset}
+        onOpenAccount={onOpenAccount}
+        onCloseAccount={onCloseAccount}
+      />
+    </div>
   );
 }
 

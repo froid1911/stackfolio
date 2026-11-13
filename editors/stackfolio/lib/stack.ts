@@ -47,6 +47,12 @@ export interface StackGroup {
 export interface Stack {
   groups: StackGroup[];
   total: number;
+  /**
+   * The holdings the Wallet group counts: the input minus receipt tokens a
+   * protocol read covers. Tables, donuts and per-wallet lists elsewhere
+   * read these, so every page agrees with the stack's total.
+   */
+  walletRows: StackInput["holdings"];
 }
 
 export interface StackInput {
@@ -176,5 +182,5 @@ export function buildStack(input: StackInput): Stack {
     groups.push(staking);
   }
 
-  return { groups, total: groups.reduce((sum, g) => sum + g.net, 0) };
+  return { groups, total: groups.reduce((sum, g) => sum + g.net, 0), walletRows };
 }

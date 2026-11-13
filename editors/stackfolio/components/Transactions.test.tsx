@@ -35,6 +35,7 @@ const EVENT = {
   price: null as string | null,
   priceUnit: null as string | null,
   priceSource: null as string | null,
+  priceGap: "value" as "value" | "basis" | null,
 };
 
 const ASSETS = ok([
@@ -103,6 +104,21 @@ describe("Transactions history page", () => {
     expect(body).toContain("−100 DAI");
     expect(body).toContain("0xfeed");
     expect(body).toContain("0xfrank");
+  });
+
+  it("marks direction and the books' price per row", () => {
+    const manual = { ...EVENT, eventId: "ev-2", sequenceIndex: 0, price: "0.95", priceUnit: "EUR", priceSource: "MANUAL" };
+    const setFilter = vi.fn();
+    render({ page: ok<EventsPage>({ rows: [EVENT, manual], total: 2 }), needsPriceCount: 330, setFilter });
+    const [unpriced, priced] = [...host.querySelectorAll("tbody tr")].map((r) => r.textContent ?? "");
+    expect(unpriced).toContain("OUT");
+    expect(unpriced).toContain("needs a price");
+    expect(priced).toContain("0.95");
+    expect(priced).toContain("manual");
+
+    const toggle = [...host.querySelectorAll("label")].find((l) => l.textContent?.includes("needs a price (330)"));
+    act(() => toggle?.querySelector("input")?.click());
+    expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ needsPrice: true, offset: 0 }));
   });
 
   it("sub-tab click reports the intent", () => {

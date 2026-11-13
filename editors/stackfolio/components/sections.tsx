@@ -312,6 +312,7 @@ export function TransactionsSection({
       : {}),
   }));
   const page = useEventsPage(driveId, filter);
+  const needsPrice = useEventsPage(driveId, { needsPrice: true, ignored: false, first: 1 });
   const issues = useIssues(driveId);
   return (
     <Transactions
@@ -324,6 +325,7 @@ export function TransactionsSection({
       issues={issues}
       onOpenEvent={onOpenEvent}
       onOpenAccount={onOpenAccount}
+      needsPriceCount={needsPrice.data?.total}
       onSub={(next) =>
         setSearchParams(
           (prev) => ({ ...prev, ...(next === "issues" ? { sub: "issues" } : { sub: undefined }) }),

@@ -25,6 +25,7 @@ import {
   BalancesSection,
   TransactionsSection,
   portfolioNodeId,
+  usePortfolioBook,
 } from "./components/sections.js";
 import { AddressBookSection } from "./components/sections.js";
 import { AssetDetail } from "./components/AssetDetail.js";
@@ -81,6 +82,7 @@ export default function Editor({ children }: EditorProps) {
   // resolve it - balances rows are a subset).
   const registryIds = useAssetIds(driveId);
   const portfolioId = portfolioNodeId(list);
+  const { currency } = usePortfolioBook(list);
   // The address deep link resolves against the book's addresses (read
   // from the portfolio document's own state).
   const portfolioIds = usePortfolioAddresses(portfolioId);
@@ -185,6 +187,7 @@ export default function Editor({ children }: EditorProps) {
               {eventDetail.id ? (
                 <EventDetail
                   driveId={driveId}
+                  currency={currency}
                   eventId={eventDetail.id}
                   onClose={closeDetail}
                   onOpenAccount={(address) =>

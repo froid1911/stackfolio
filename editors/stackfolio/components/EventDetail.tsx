@@ -7,6 +7,7 @@
  */
 import { useAddressLabels, useAssets, useEventsPage, useRealizedEvents } from "../lib/graphql.js";
 import { fmtAmount } from "../lib/format.js";
+import { EventReview } from "./EventReview.js";
 
 export function EventDetail({
   driveId,
@@ -15,8 +16,11 @@ export function EventDetail({
   onOpenAccount,
   onOpenHistory,
   onOpenPnl,
+  currency = "EUR",
 }: {
   driveId: string;
+  /** The portfolio's base currency: the unit a manual price is pinned in. */
+  currency?: string;
   /** The live event id (resolved from the slug by the caller). */
   eventId: string;
   onClose: () => void;
@@ -110,6 +114,15 @@ export function EventDetail({
               </button>
             )}
           </div>
+
+          <EventReview
+            key={`${event.eventId}:${event.sequenceIndex}`}
+            driveId={driveId}
+            event={event}
+            symbol={asset?.symbol ?? event.asset}
+            currency={currency}
+            onChanged={page.reload}
+          />
         </>
       )}
     </div>

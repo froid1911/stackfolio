@@ -44,6 +44,8 @@ export interface EventRow {
   price: string | null;
   priceUnit: string | null;
   priceSource: string | null;
+  /** Why P&L could not value this leg; null when it could. */
+  priceGap: "value" | "basis" | null;
 }
 
 export interface EventsPage {
@@ -61,7 +63,7 @@ export interface EventsFilter {
   from?: string;
   to?: string;
   query?: string;
-  /** Only events the books cannot value yet. */
+  /** Only the events P&L counted as unpriced. */
   needsPrice?: boolean;
   first?: number;
   offset?: number;
@@ -210,7 +212,7 @@ export function useIndexQuery<T>(
 const EVENTS_ROWS = `
   documentId eventId eventIdentifier sequenceIndex timestamp type subtype
   asset amount counterparty counterpartyLabel notes ignored source address
-  chainId label price priceUnit priceSource
+  chainId label price priceUnit priceSource priceGap
 `;
 
 /** Everything `portfolioApi` answers, so a hook is one field name. */

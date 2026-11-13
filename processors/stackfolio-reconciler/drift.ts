@@ -103,10 +103,15 @@ export function workflowDrift(
       differences.push(`the step ${step.name} was missing`);
     }
   }
+  // Ids of the spec's steps as they will stand: existing ones by name,
+  // appended ones as they are minted below.
+  const stepIdByName = new Map(facts.steps.map((s) => [s.name, s.id]));
   for (const step of missing?.steps ?? []) {
+    const id = newId();
+    stepIdByName.set(step.name, id);
     actions.push(
       wf.addStep({
-        id: newId(),
+        id,
         key: step.name,
         name: step.name,
         ...pieceOf(step, reactorPieceVersion),
@@ -119,6 +124,26 @@ export function workflowDrift(
       }),
     );
   }
+
+  // Every step needs a "next" edge into it, from the trigger (first step of
+  // an interval workflow) or the step before; a step nothing leads to is
+  // skipped on every run. Appending a step used to add no edge, so live
+  // wallets' pin step never ran.
+  const reached = new Set(facts.edges.map((e) => e.to));
+  spec.steps.forEach((step, i) => {
+    const id = stepIdByName.get(step.name);
+    if (!id || reached.has(id)) return;
+    const from =
+      i === 0
+        ? spec.trigger.kind === "interval"
+          ? facts.triggerId
+          : null
+        : (stepIdByName.get(spec.steps[i - 1].name) ?? null);
+    if (!from) return;
+    const appended = missing?.steps.some((m) => m.name === step.name) ?? false;
+    if (!appended) differences.push(`the step ${step.name} was not wired`);
+    actions.push(wf.addEdge({ id: newId(), from, to: id, port: "next" }));
+  });
 
   // Steps the workflow already has: settings must read as the spec says.
   const have = new Map(facts.steps.map((s) => [s.name, s]));

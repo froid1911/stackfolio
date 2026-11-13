@@ -50,6 +50,12 @@ const specFacts = (
       ...connectionOf(s, CONNS),
     })),
     managedBy: null,
+    // Wired as a build wires it: trigger → first step → … → last step.
+    triggerId: triggerKind === "interval" ? "trigger" : null,
+    edges: spec.steps.map((_, i) => ({
+      from: i === 0 ? "trigger" : `step-${i - 1}`,
+      to: `step-${i}`,
+    })).filter((e) => triggerKind === "interval" || e.from !== "trigger"),
     ...overrides,
   };
 };
@@ -82,6 +88,23 @@ describe("readFacts", () => {
     expect(facts.steps.map((s) => s.name)).toEqual(["one"]);
   });
 
+  it("reads the published edges and the trigger id", () => {
+    const facts = readFacts(
+      workflowDoc({
+        status: "ENABLED",
+        version: 2,
+        published: {
+          version: 2,
+          trigger: { id: "t1", triggerName: "on-interval", config: { seconds: 120 } },
+          steps: [{ id: "s1", name: "poll", actionName: "fetch" }],
+          edges: [{ id: "e1", from: "t1", to: "s1", port: "next", condition: null }],
+        },
+      }),
+    );
+    expect(facts.triggerId).toBe("t1");
+    expect(facts.edges).toEqual([{ from: "t1", to: "s1" }]);
+  });
+
   it("reads an unpublished draft", () => {
     const facts = readFacts(
       workflowDoc({ status: "DRAFT", name: "d", steps: [] }),
@@ -108,7 +131,28 @@ describe("workflowDrift", () => {
     };
     const drift = workflowDrift(spec, trimmed, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
     expect(drift.differences).toEqual(["the step pin was missing"]);
-    expect(drift.actions.map((a) => a.type)).toEqual(["ADD_STEP"]);
+    // An appended step is chained to the last one: without the edge the
+    // engine skips it on every run (pin never ran on live wallets).
+    expect(drift.actions.map((a) => a.type)).toEqual(["ADD_STEP", "ADD_EDGE"]);
+    expect(drift.actions[1]?.input).toMatchObject({ from: "step-1", to: "n1", port: "next" });
+  });
+
+  it("wires a step nothing leads to", () => {
+    const spec = liveEtherscanSpec("w1");
+    const facts = specFacts(spec);
+    const unwired = { ...facts, edges: facts.edges.filter((e) => e.to !== "step-2") };
+    const drift = workflowDrift(spec, unwired, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
+    expect(drift.differences).toEqual(["the step pin was not wired"]);
+    expect(drift.actions.map((a) => a.type)).toEqual(["ADD_EDGE"]);
+    expect(drift.actions[0]?.input).toMatchObject({ from: "step-1", to: "step-2", port: "next" });
+  });
+
+  it("wires an unreached first step to the trigger", () => {
+    const spec = liveEtherscanSpec("w1");
+    const facts = specFacts(spec);
+    const unwired = { ...facts, edges: facts.edges.filter((e) => e.to !== "step-0") };
+    const drift = workflowDrift(spec, unwired, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
+    expect(drift.actions[0]?.input).toMatchObject({ from: "trigger", to: "step-0" });
   });
 
   it("refuses to repair a hand-edited chain", () => {

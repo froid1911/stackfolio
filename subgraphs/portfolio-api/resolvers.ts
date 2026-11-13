@@ -6,6 +6,7 @@ import {
   driveFileIds,
   forwardEnsAddress,
   holdingsFromRows,
+  newestPrices,
   unitCostPerWhole,
   type HoldingsInput,
 } from "./lib.js";
@@ -79,7 +80,7 @@ export const getResolvers = (
               .select(["identifier", "symbol", "decimals", "chain_id"])
               .execute(),
             query(args.driveId).selectFrom("prices_latest").where("document_id", "in", ids)
-              .select(["asset", "price"])
+              .select(["asset", "price", "fetched_at as fetchedAt"])
               .orderBy("fetched_at", "desc")
               .execute(),
             query(args.driveId).selectFrom("price_overrides").where("document_id", "in", ids)
@@ -132,7 +133,7 @@ export const getResolvers = (
         const rows = holdingsFromRows({
           events: [...ledgerEvents, ...nativeEvents],
           decimals,
-          prices: Object.fromEntries(prices.map((p) => [p.asset, p.price])),
+          prices: Object.fromEntries(newestPrices(prices).map((p) => [p.asset, p.price])),
           overrides: Object.fromEntries(overrides.map((o) => [o.asset, o.price])),
         });
 
@@ -291,16 +292,17 @@ export const getResolvers = (
       ) => {
         const ids = await driveFileIds(subgraph, args.driveId, ctx);
         if (!ids || ids.length === 0) return [];
-        return query(args.driveId)
+        const rows = await query(args.driveId)
           .selectFrom("prices_latest")
+          .where("document_id", "in", ids)
           .select([
             "asset",
             "price",
             "source",
             "fetched_at as fetchedAt",
           ])
-          .orderBy("asset")
           .execute();
+        return newestPrices(rows);
       },
 
       priceHistory: async (

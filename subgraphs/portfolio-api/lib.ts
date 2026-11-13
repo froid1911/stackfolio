@@ -324,3 +324,21 @@ export function buildBalances(rows: HoldingsRow[]): BalancesTotals {
     perAccount.length === 0 ? "0" : sum(perAccount.map((a) => a.value));
   return { perAsset, perAccount, total };
 }
+
+/**
+ * One answer per asset: the newest. A drive can hold more than one price
+ * document (a re-created book, a second portfolio), and `prices_latest` is
+ * keyed per document, so the same asset can carry several "latest" rows.
+ * Sorted by asset.
+ */
+export function newestPrices<T extends { asset: string; fetchedAt: string | Date }>(
+  rows: T[],
+): T[] {
+  const time = (row: T) => new Date(row.fetchedAt).getTime();
+  const newest = new Map<string, T>();
+  for (const row of rows) {
+    const held = newest.get(row.asset);
+    if (!held || time(row) > time(held)) newest.set(row.asset, row);
+  }
+  return [...newest.values()].sort((a, b) => a.asset.localeCompare(b.asset));
+}

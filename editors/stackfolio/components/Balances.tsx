@@ -10,9 +10,10 @@
 import { Fragment, useState } from "react";
 import type { Asset, QueryState } from "../lib/graphql.js";
 import {
+  allocate,
   ambiguousTicker,
   assetBook,
-  chainLabel,
+  chainOf,
   coverage,
   formatQuantity,
   nameOf,
@@ -24,10 +25,8 @@ import {
   type AssetTotal,
   type HoldingsRow,
 } from "../../../subgraphs/portfolio-api/lib.js";
-import { Donut } from "../lib/charts.js";
+import { Donut } from "../lib/echart.js";
 import { short } from "./Dashboard.js";
-
-const HUE = ["text-c1", "text-c2", "text-c3", "text-c4", "text-c5", "text-c6"];
 
 /** "12240162.1270714" as a compact figure for the donut's center. */
 function compact(value: string): string {
@@ -84,25 +83,11 @@ export function Balances({
   const tierOf = (identifier: string) =>
     book.rows.find((r) => r.asset.identifier === identifier);
 
-  const all = totals?.perAsset ?? [];
-  const valued = all.filter((a) => a.value !== null && tierOf(a.asset)?.tier !== "spam");
-  const unpriced = all.filter((a) => a.value === null && tierOf(a.asset)?.tier !== "spam");
-  const spam = all.filter((a) => tierOf(a.asset)?.tier === "spam");
+  const alloc = allocate(totals?.perAsset ?? [], book);
+  const { valued: sorted, unpriced, spam, slices } = alloc;
   const walletName = new Map(
     (data.perAccount ?? []).map((a) => [a.wallet, a.ensName || a.label || short(a.wallet)]),
   );
-
-  const sorted = [...valued].sort((a, b) => Number(b.value) - Number(a.value));
-  const top = sorted.slice(0, 8);
-  const rest = sorted.slice(8).reduce((acc, a) => acc + Number(a.value), 0);
-  const slices = [
-    ...top.map((a, i) => ({
-      label: symbolOf(book.byId, a.asset),
-      value: Number(a.value),
-      color: HUE[i % HUE.length],
-    })),
-    ...(rest > 0 ? [{ label: "Other", value: rest, color: "text-muted-foreground" }] : []),
-  ];
 
   return (
     <div className="grid gap-6 p-6 lg:grid-cols-[1fr_auto]">
@@ -144,17 +129,15 @@ export function Balances({
             <tbody>
               {sorted.map((asset) => {
                 const view = tierOf(asset.asset);
-                const share =
-                  asset.value !== null && Number(data.total) > 0
-                    ? `${((Number(asset.value) / Number(data.total)) * 100).toFixed(1)}%`
-                    : "—";
+                const fraction = alloc.share(asset.asset);
+                const share = fraction === null ? "—" : `${(fraction * 100).toFixed(1)}%`;
                 return (
                   <FragmentRows
                     key={asset.asset}
                     asset={asset}
                     symbol={symbolOf(book.byId, asset.asset)}
                     name={nameOf(book.byId, asset.asset)}
-                    chain={chainLabel(view?.asset.chainId ?? 1)}
+                    chain={chainOf(book.byId, asset.asset)}
                     ambiguous={view ? ambiguousTicker(view) : false}
                     verified={view?.tier === "verified"}
                     share={share}
@@ -189,7 +172,7 @@ export function Balances({
                 <td className="px-3 py-2">Total (valued)</td>
                 <td className="px-3 py-2" />
                 <td className="px-3 py-2" />
-                <td className="px-3 py-2 text-right tabular-nums">{fmtFiat(data.total)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmtFiat(alloc.total)}</td>
                 <td className="px-3 py-2 text-right">100%</td>
               </tr>
             </tfoot>
@@ -219,7 +202,7 @@ export function Balances({
                       </span>
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">
-                      {chainLabel(tierOf(asset.asset)?.asset.chainId ?? 1)}
+                      {chainOf(book.byId, asset.asset)}
                     </td>
                     <td className="px-3 py-1.5 text-right tabular-nums">
                       {formatQuantity(asset.quantity)}
@@ -257,7 +240,12 @@ export function Balances({
         )}
       </div>
       <div className="lg:pt-2">
-        <Donut slices={slices} center={compact(data.total)} sub="valued holdings" />
+        <Donut
+          slices={slices}
+          center={compact(alloc.total)}
+          sub="valued holdings"
+          formatValue={(v) => fmtFiat(v.toFixed(2))}
+        />
         {data.perAccount.length > 0 && (
           <ul className="mt-4 grid gap-1 text-xs">
             {data.perAccount.map((a) => (

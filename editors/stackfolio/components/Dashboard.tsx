@@ -14,9 +14,9 @@ import type {
   HoldingRow,
 } from "../lib/graphql.js";
 import { fmtAmount, fmtFiat } from "../lib/format.js";
-import { Donut } from "../lib/charts.js";
-import { ValueHistory } from "../lib/echart.js";
-import { coverage, formatQuantity } from "../lib/assets.js";
+import { Donut, ValueHistory } from "../lib/echart.js";
+import { allocate, assetBook, coverage } from "../lib/assets.js";
+import { buildBalances } from "../../../subgraphs/portfolio-api/lib.js";
 
 const CURRENCY_SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
 
@@ -53,9 +53,16 @@ export function Dashboard({
 
   const t = totals.data;
   const series = [...(snapshots.data ?? [])].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  const latest = series.at(-1);
   const open = (issues.data ?? []).filter((i) => i.severity !== "RESOLVED").slice(0, 5);
-  const cov = coverage(holdings?.data?.holdings ?? [], holdings?.data?.total ?? null);
+  const held = holdings?.data?.holdings ?? [];
+  const cov = coverage(held, holdings?.data?.total ?? null);
+  // The same allocation Balances draws: spoofs out, unpriced listed apart.
+  const book = assetBook(
+    assets.data ?? [],
+    held.filter((r) => r.value !== null).map((r) => r.asset),
+  );
+  const alloc = allocate(buildBalances(held).perAsset, book, 6);
+  const pricedShare = cov.assets > 0 ? Math.round((cov.pricedAssets / cov.assets) * 100) : null;
   const history = series.map((s) => ({ at: s.timestamp, value: Number(s.totalValue) || 0 }));
 
   return (
@@ -64,10 +71,14 @@ export function Dashboard({
         <div className="rounded-xl border border-border bg-card p-4 sm:col-span-2">
           <p className="text-xs uppercase text-muted-foreground">Total value</p>
           <p className="mt-1 text-3xl font-semibold">
-            {money(t.totalValue, currency)}
+            {money(held.length > 0 ? alloc.total : t.totalValue, currency)}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {t.snapshotAt ? `as of ${new Date(t.snapshotAt).toLocaleString()}` : "no snapshot yet"}
+            {held.length > 0
+              ? `valued holdings now${alloc.unpriced.length > 0 ? ` · ${alloc.unpriced.length} unpriced not counted` : ""}`
+              : t.snapshotAt
+                ? `as of ${new Date(t.snapshotAt).toLocaleString()}`
+                : "no snapshot yet"}
           </p>
         </div>
         <Stat label="Transactions" value={String(t.events)} />
@@ -80,13 +91,14 @@ export function Dashboard({
         />
       </div>
 
-      {cov.unpricedAssets > 0 && (
+      {alloc.unpriced.length > 0 && (
         <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
-          <p className="text-sm font-medium">Unpriced holdings</p>
+          <p className="text-sm font-medium">
+            Unpriced holdings: {alloc.unpriced.length}
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {cov.unpricedAssets} of {cov.assets} tracked assets carry a quantity but
-            no price, so they sit outside the total. Open Balances to review them;
-            the {formatQuantity(String(cov.unpricedRows))} rows are kept, not dropped.
+            They carry a quantity but no price, so they sit outside the total
+            rather than counting as zero. Open Balances to review them.
           </p>
         </div>
       )}
@@ -125,7 +137,7 @@ export function Dashboard({
         <div className="mt-3">
           <ValueHistory
             points={history}
-            formatValue={(v) => money(String(v), currency)}
+            formatValue={(v) => money(v.toFixed(2), currency)}
             ariaLabel="Total portfolio value over time"
           />
         </div>
@@ -133,17 +145,27 @@ export function Dashboard({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-sm font-medium">Allocation</p>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm font-medium">Allocation</p>
+            {pricedShare !== null && (
+              <p className="text-[10px] text-muted-foreground">
+                price coverage {pricedShare}% of {cov.assets} tracked asset
+                {cov.assets === 1 ? "" : "s"}
+                {alloc.spam.length > 0 ? ` · ${alloc.spam.length} suspected spam excluded` : ""}
+              </p>
+            )}
+          </div>
           <div className="mt-3">
-            {latest && latest.assets.length > 0 ? (
+            {held.length > 0 ? (
               <Donut
-                slices={topAssets(latest, (id) => symbolOf(assets.data, id))}
-                center={money(latest.totalValue, currency)}
-                sub="top holdings"
+                slices={alloc.slices}
+                center={money(alloc.total, currency)}
+                sub="valued holdings"
+                formatValue={(v) => money(v.toFixed(2), currency)}
               />
             ) : (
               <p className="text-sm text-muted-foreground">
-                No holdings in a snapshot yet — they land with the first scan.
+                No holdings yet — they land with the first scan.
               </p>
             )}
           </div>
@@ -201,18 +223,3 @@ function decimalsOf(assets: Asset[] | null, identifier: string): number {
 function symbolOf(assets: Asset[] | null, identifier: string): string {
   return assets?.find((a) => a.identifier === identifier)?.symbol ?? identifier;
 }
-
-/** The snapshot's assets, biggest first, folded into top 6 + Other. */
-export function topAssets(
-  snapshot: Snapshot,
-  labelOf: (identifier: string) => string,
-): { label: string; value: number }[] {
-  const rows = snapshot.assets
-    .map((a) => ({ label: labelOf(a.asset), value: Number(a.value) || 0 }))
-    .sort((x, y) => y.value - x.value);
-  if (rows.length <= 7) return rows;
-  const head = rows.slice(0, 6);
-  const rest = rows.slice(6).reduce((s, r) => s + r.value, 0);
-  return [...head, { label: "Other", value: rest }];
-}
-

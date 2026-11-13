@@ -23,11 +23,14 @@ export function Chart({
   ariaLabel?: string;
 }) {
   const host = useRef<HTMLDivElement | null>(null);
+  const chart = useRef<echarts.ECharts | null>(null);
+  // One instance per mount; callers rebuild `option` every render, which
+  // must update the chart, not tear it down.
   useEffect(() => {
     if (!host.current) return;
-    const chart = echarts.init(host.current, undefined, { renderer: "canvas" });
-    chart.setOption(option);
-    const resize = () => chart.resize();
+    const instance = echarts.init(host.current, undefined, { renderer: "svg" });
+    chart.current = instance;
+    const resize = () => instance.resize();
     const observer =
       typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
     observer?.observe(host.current);
@@ -35,8 +38,12 @@ export function Chart({
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", resize);
-      chart.dispose();
+      instance.dispose();
+      chart.current = null;
     };
+  }, []);
+  useEffect(() => {
+    chart.current?.setOption(option, { notMerge: true });
   }, [option]);
   return (
     <div
@@ -154,5 +161,99 @@ export function ValueHistory({
       height={height}
       ariaLabel={ariaLabel ?? "value over time"}
     />
+  );
+}
+
+/** Categorical hues for allocation slices; "Other" always takes slate. */
+const PALETTE = ["#8b5cf6", "#0ea5e9", "#10b981", "#f59e0b", "#f43f5e", "#d946ef", "#14b8a6", "#6366f1"];
+const OTHER = "#94a3b8";
+
+export interface Slice {
+  label: string;
+  value: number;
+}
+
+/**
+ * Allocation donut with a legend that shows each slice's share. The caller
+ * passes slices already folded from the same total the page prints, so the
+ * ring and the table agree.
+ */
+export function Donut({
+  slices,
+  center,
+  sub,
+  formatValue,
+}: {
+  slices: Slice[];
+  center: string;
+  sub?: string;
+  formatValue: (v: number) => string;
+}) {
+  const total = slices.reduce((a, s) => a + s.value, 0);
+  if (slices.length === 0 || total <= 0) {
+    return (
+      <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+        Nothing valued yet.
+      </div>
+    );
+  }
+  const colorOf = (s: Slice, i: number) =>
+    s.label === "Other" ? OTHER : PALETTE[i % PALETTE.length]!;
+  const option: ChartOption = {
+    animation: false,
+    tooltip: {
+      trigger: "item",
+      backgroundColor: "rgba(15, 23, 42, 0.92)",
+      borderWidth: 0,
+      textStyle: { color: "#f8fafc", fontSize: 12 },
+      formatter: (params: unknown) => {
+        const p = params as { name: string; value: number; percent: number };
+        return `${p.name}<br/><b>${formatValue(p.value)}</b> · ${p.percent.toFixed(1)}%`;
+      },
+    },
+    title: {
+      text: center,
+      subtext: sub,
+      left: "center",
+      top: "center",
+      itemGap: 2,
+      textStyle: { fontSize: 14, fontWeight: 600, color: TEXT },
+      subtextStyle: { fontSize: 10, color: TEXT },
+    },
+    series: [
+      {
+        type: "pie",
+        radius: ["62%", "86%"],
+        avoidLabelOverlap: true,
+        label: { show: false },
+        itemStyle: { borderColor: "transparent", borderWidth: 2, borderRadius: 3 },
+        data: slices.map((s, i) => ({
+          name: s.label,
+          value: s.value,
+          itemStyle: { color: colorOf(s, i) },
+        })),
+      },
+    ],
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-6">
+      <div className="h-44 w-44 shrink-0">
+        <Chart option={option} height={176} ariaLabel={`allocation: ${center}`} />
+      </div>
+      <ul className="grid min-w-0 gap-1 text-xs">
+        {slices.map((s, i) => (
+          <li key={s.label} className="flex items-center gap-2">
+            <span
+              className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+              style={{ background: colorOf(s, i) }}
+            />
+            <span className="max-w-40 truncate">{s.label}</span>
+            <span className="ml-auto pl-2 tabular-nums text-muted-foreground">
+              {((s.value / total) * 100).toFixed(1)}%
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

@@ -143,4 +143,22 @@ describe("Balances view", () => {
     render();
     expect(host.textContent).not.toContain("US\u200BDT");
   });
+
+  it("keeps a priced spoof out of the total, the shares and the donut", () => {
+    const spoofed = {
+      ...DATA,
+      holdings: [
+        ...DATA.holdings,
+        { asset: "SPAM", symbol: "US\u200BDT", wallet: "0xw1", quantity: "1000000", value: "999999" },
+      ],
+      // The server's total counts every priced row; the view must not.
+      total: "1006000.3",
+    };
+    render(ok(spoofed));
+    const footer = host.querySelector("tfoot")?.textContent ?? "";
+    expect(footer).toContain("6,000.3");
+    expect(footer).not.toContain("1,006,000");
+    expect(rowFor("Ether")).toContain("100.0%"); // 6000 of 6000.3, not of 1M
+    expect(host.textContent).toContain("1 suspected spam");
+  });
 });

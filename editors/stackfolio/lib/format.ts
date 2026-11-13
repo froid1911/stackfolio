@@ -116,3 +116,19 @@ export function fmtFiat(
 ): string {
   return render(value, 0, places, false);
 }
+
+/**
+ * A scaled integer string (the accounting index's 1e8 fixed point) as a
+ * plain decimal string: exact, ungrouped, ready for `fmtFiat`. Null for a
+ * missing or malformed value.
+ */
+export function unscale(
+  value: string | null | undefined,
+  decimals: number,
+): string | null {
+  if (value === null || value === undefined) return null;
+  const scaled = scale(value, decimals);
+  if (!scaled) return null;
+  const sign = scaled.negative ? "-" : "";
+  return `${sign}${trim(`${scaled.int}.${scaled.frac}`)}`;
+}

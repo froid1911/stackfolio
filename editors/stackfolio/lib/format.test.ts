@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtAmount, fmtFiat } from "./format.js";
+import { fmtAmount, fmtFiat, unscale } from "./format.js";
 
 describe("fmtAmount", () => {
   it("scales a decimal string by the asset's decimals and keeps precision", () => {
@@ -45,5 +45,24 @@ describe("fmtFiat", () => {
     expect(fmtFiat("1234567.987", 2)).toBe("1,234,567.98");
     expect(fmtFiat("0.004", 2)).toBe(">0");
     expect(fmtFiat(null)).toBe("—");
+  });
+});
+
+describe("unscale", () => {
+  it("shifts a scaled integer string to a plain decimal, exactly", () => {
+    expect(unscale("123456789012", 8)).toBe("1234.56789012");
+    expect(unscale("-150000000", 8)).toBe("-1.5");
+    expect(unscale("5", 8)).toBe("0.00000005");
+    expect(unscale("0", 8)).toBe("0");
+  });
+
+  it("feeds fmtFiat without grouping, so large figures stay readable", () => {
+    expect(fmtFiat(unscale("123456789012", 8))).toBe("1,234.56");
+    expect(fmtFiat(unscale("-123456789012", 8))).toBe("-1,234.56");
+  });
+
+  it("answers null for missing or malformed input", () => {
+    expect(unscale(null, 8)).toBeNull();
+    expect(unscale("1,234", 8)).toBeNull();
   });
 });

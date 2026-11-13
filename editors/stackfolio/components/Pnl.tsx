@@ -17,7 +17,7 @@ import type {
   RealizedEvent,
 } from "../lib/graphql.js";
 import { useHyperliquidAccounts, useIncomeByMonth, useOpenLots, usePnlReport, useRealizedEvents, useUnpricedSummary } from "../lib/graphql.js";
-import { fmtAmount, fmtFiat } from "../lib/format.js";
+import { fmtAmount, fmtFiat, unscale } from "../lib/format.js";
 import { money, short } from "./Dashboard.js";
 
 const PERIODS: { id: string; label: string; months?: number; ytd?: boolean }[] = [
@@ -45,8 +45,10 @@ function windowOf(period: (typeof PERIODS)[number], now: string): {
   return { from: "1970-01-01T00:00:00.000Z", to: "2999-12-31T23:59:59.000Z" };
 }
 
-/** A 1e8-scaled integer string as fiat. */
-const scaled = (value: string): string => fmtAmount(value, 8, 2);
+/** A 1e8-scaled integer string as a plain decimal, for `money`. */
+const fiat = (value: string): string | null => unscale(value, 8);
+/** A 1e8-scaled integer string as fiat, rounded down like every value. */
+const scaled = (value: string): string => fmtFiat(fiat(value));
 
 export function Pnl({
   driveId,
@@ -155,8 +157,10 @@ export function Pnl({
     </div>
   );
 
-  // Coverage first: an empty window is a data problem, not a zero result.
-  if (months.length === 0) {
+  // Coverage first: an empty or all-zero window is a data problem, not a
+  // zero result — say why instead of drawing a table of zeros.
+  const settled = totals.income !== 0n || totals.expense !== 0n || totals.realized !== 0n;
+  if (!settled) {
     const missingBasis = unpricedIn > 0;
     const missingValue = unpricedOut > 0;
     return (
@@ -221,13 +225,13 @@ export function Pnl({
       )}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label={`Income ${period.label}`} value={money(scaled(totals.income.toString()), currency)} />
+        <Stat label={`Income ${period.label}`} value={money(fiat(totals.income.toString()), currency)} />
         <Stat
           label={`Realized P&L ${period.label}`}
-          value={money(scaled(totals.realized.toString()), currency)}
+          value={money(fiat(totals.realized.toString()), currency)}
           tone={totals.realized >= 0n ? "good" : "bad"}
         />
-        <Stat label={`Expenses ${period.label}`} value={money(scaled(totals.expense.toString()), currency)} />
+        <Stat label={`Expenses ${period.label}`} value={money(fiat(totals.expense.toString()), currency)} />
       </div>
 
       <section className="overflow-hidden rounded-xl border border-border">
@@ -307,7 +311,7 @@ export function Pnl({
                     {fmtAmount(lot.quantity, decimalsOf(lot.asset), 6)}
                   </td>
                   <td className="px-4 py-2 text-right font-mono">
-                    {money(fmtFiat(lot.unitCost), currency)}
+                    {money(lot.unitCost, currency)}
                   </td>
                   <td className="px-4 py-2 text-right">
                     <EventLink onClick={() => onOpenEvents([lot.sourceEventId])}>
@@ -398,7 +402,7 @@ export function Pnl({
                       {i.bucket.toLowerCase().replaceAll("_", " ")}
                     </td>
                     <td className="px-4 py-2 text-right font-mono">
-                      {money(scaled(i.amount), currency)}
+                      {money(fiat(i.amount), currency)}
                     </td>
                   </tr>
                 ))}

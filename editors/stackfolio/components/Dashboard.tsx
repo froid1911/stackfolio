@@ -130,7 +130,7 @@ export function Dashboard({
             {series.length === 0
               ? "no snapshots yet"
               : `${series.length} snapshot${series.length === 1 ? "" : "s"} · ${new Date(
-                  series[0]!.timestamp,
+                  series[0].timestamp,
                 ).toLocaleString()} → ${new Date(series.at(-1)!.timestamp).toLocaleString()}`}
           </p>
         </div>

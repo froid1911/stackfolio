@@ -65,7 +65,7 @@ export function Prices({
               {series.length === 0
                 ? "no history yet"
                 : `${series.length} hourly point${series.length === 1 ? "" : "s"} · ${new Date(
-                    series[0]!.hour,
+                    series[0].hour,
                   ).toLocaleString()} → ${new Date(series.at(-1)!.hour).toLocaleString()}`}
             </p>
           </div>

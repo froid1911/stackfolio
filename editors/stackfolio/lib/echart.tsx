@@ -4,9 +4,36 @@
  * truthful sparse series. One place owns the chart theme.
  */
 import { useEffect, useRef } from "react";
-import * as echarts from "echarts";
+import * as core from "echarts/core";
+import * as charts from "echarts/charts";
+import * as components from "echarts/components";
+import * as renderers from "echarts/renderers";
 
-export type ChartOption = echarts.EChartsOption;
+/**
+ * echarts' .d.ts files import siblings without an extension ("./shared"),
+ * which NodeNext resolution refuses: every echarts type arrives as an
+ * error type. The slice this module uses is typed here instead.
+ */
+export type ChartOption = Record<string, unknown>;
+
+interface ChartInstance {
+  setOption(option: ChartOption, opts?: { notMerge?: boolean }): void;
+  resize(): void;
+  dispose(): void;
+}
+
+const lib = core as unknown as {
+  init(host: HTMLElement, theme?: string, opts?: { renderer: "svg" | "canvas" }): ChartInstance;
+  use(parts: unknown[]): void;
+};
+const parts = { ...charts, ...components, ...renderers } as unknown as Record<string, unknown>;
+
+// Only what the pages draw: lines and donuts, rendered to SVG.
+lib.use(
+  ["LineChart", "PieChart", "GridComponent", "TitleComponent", "TooltipComponent", "SVGRenderer"].map(
+    (name) => parts[name],
+  ),
+);
 
 const TEXT = "#94a3b8";
 const LINE = "#8b5cf6";
@@ -23,12 +50,12 @@ export function Chart({
   ariaLabel?: string;
 }) {
   const host = useRef<HTMLDivElement | null>(null);
-  const chart = useRef<echarts.ECharts | null>(null);
+  const chart = useRef<ChartInstance | null>(null);
   // One instance per mount; callers rebuild `option` every render, which
   // must update the chart, not tear it down.
   useEffect(() => {
     if (!host.current) return;
-    const instance = echarts.init(host.current, undefined, { renderer: "svg" });
+    const instance = lib.init(host.current, undefined, { renderer: "svg" });
     chart.current = instance;
     const resize = () => instance.resize();
     const observer =
@@ -149,9 +176,9 @@ export function ValueHistory({
     return (
       <div className="flex h-24 flex-col items-center justify-center gap-1 text-sm text-muted-foreground">
         <span className="text-lg font-medium text-foreground">
-          {formatValue(points[0]!.value)}
+          {formatValue(points[0].value)}
         </span>
-        <span>{new Date(points[0]!.at).toLocaleString()} — one observation so far.</span>
+        <span>{new Date(points[0].at).toLocaleString()} — one observation so far.</span>
       </div>
     );
   }
@@ -198,7 +225,7 @@ export function Donut({
     );
   }
   const colorOf = (s: Slice, i: number) =>
-    s.label === "Other" ? OTHER : PALETTE[i % PALETTE.length]!;
+    s.label === "Other" ? OTHER : PALETTE[i % PALETTE.length];
   const option: ChartOption = {
     animation: false,
     tooltip: {

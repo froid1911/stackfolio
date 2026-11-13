@@ -215,7 +215,7 @@ describe("debt tokens", () => {
 });
 
 describe("negative nets", () => {
-  it("keeps an impossible negative holding out of the total and lists it", () => {
+  it("counts a negative holding in the total, signed, and lists it as a ledger gap", () => {
     const book = assetBook(
       [
         asset({ identifier: "eth", symbol: "ETH", kind: "NATIVE" }),
@@ -232,8 +232,11 @@ describe("negative nets", () => {
       ],
       book,
     );
-    expect(a.total).toBe("1754.28");
+    // Never richer than the ledger says: the -74,813.44 stays in the sum,
+    // as in the server total and the snapshot fold.
+    expect(a.total).toBe("-73059.16");
     expect(a.negative.map((r) => r.asset)).toEqual(["wst", "dai"]);
+    expect(a.slices.map((x) => x.label)).toEqual(["ETH"]);
     expect(a.valued.map((r) => r.asset)).toEqual(["eth"]);
     expect(a.unpriced).toEqual([]);
     expect(a.share("wst")).toBeNull();

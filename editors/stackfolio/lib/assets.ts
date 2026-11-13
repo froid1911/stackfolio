@@ -229,11 +229,13 @@ export interface Allocation<T extends AssetHolding> {
   debt: T[];
   /**
    * Holdings whose ledger nets below zero — impossible for a balance, so
-   * an inflow the ledger never recorded (a wrap, a bridge). Kept out of the
-   * total and listed rather than subtracted.
+   * an inflow the ledger never recorded (a wrap, a bridge). They stay in
+   * the total, signed, so it is never richer than the ledger says (the
+   * server total and the snapshot fold count them the same way); the page
+   * lists them as ledger gaps.
    */
   negative: T[];
-  /** Sum of `valued`, exact decimal. */
+  /** Sum of `valued` and the priced `negative` rows, exact decimal. */
   total: string;
   /** A valued asset's fraction of `total`; null for anything else. */
   share: (identifier: string) => number | null;
@@ -264,7 +266,9 @@ export function allocate<T extends AssetHolding>(
   const valued = perAsset
     .filter((a) => a.value !== null && counted(a))
     .sort((a, b) => Number(b.value) - Number(a.value));
-  const total = sumDecimals(valued.map((a) => a.value!));
+  const total = sumDecimals(
+    [...valued, ...negative].flatMap((a) => (a.value === null ? [] : [a.value])),
+  );
   const totalNumber = Number(total);
   const byId = new Map(valued.map((a) => [a.asset, Number(a.value)]));
   const head = valued.slice(0, top);

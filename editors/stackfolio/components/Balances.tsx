@@ -215,7 +215,7 @@ export function Balances({
         {negative.length > 0 && (
           <div className="mt-4 overflow-x-auto rounded-xl border border-warning/30 bg-warning/5">
             <p className="px-3 pt-3 text-xs font-medium text-warning">
-              Below zero — the ledger missed an inflow; left out of the total
+              Below zero — the ledger missed an inflow; counted as it stands, so the total errs low
             </p>
             <table className="mt-2 w-full text-left text-xs">
               <tbody>

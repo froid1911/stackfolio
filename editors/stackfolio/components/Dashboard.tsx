@@ -15,7 +15,7 @@ import type {
 } from "../lib/graphql.js";
 import { fmtAmount, fmtFiat } from "../lib/format.js";
 import { Donut, ValueHistory } from "../lib/echart.js";
-import { allocate, assetBook, coverage } from "../lib/assets.js";
+import { allocate, assetBook, coverage, symbolOf as bookSymbol } from "../lib/assets.js";
 import { buildBalances } from "../../../subgraphs/portfolio-api/lib.js";
 
 const CURRENCY_SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
@@ -101,7 +101,7 @@ export function Dashboard({
       {alloc.debt.length > 0 && (
         <div className="rounded-xl border border-red-500/40 bg-red-500/5 p-4">
           <p className="text-sm font-medium">
-            Debt not netted: {alloc.debt.map((d) => symbolOf(assets.data, d.asset)).join(", ")}
+            Debt not netted: {alloc.debt.map((d) => bookSymbol(book.byId, d.asset)).join(", ")}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Borrowed positions are listed, not subtracted, so the total above is
@@ -117,12 +117,12 @@ export function Dashboard({
             {alloc.negative.length === 1 ? "" : "s"} net below zero
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {[...new Set(alloc.negative.map((n) => symbolOf(assets.data, n.asset)))]
+            {[...new Set(alloc.negative.map((n) => bookSymbol(book.byId, n.asset)))]
               .slice(0, 8)
               .join(", ")}
             {alloc.negative.length > 8 ? ", …" : ""} — more went out than the ledger saw come
-            in (a wrap, a bridge or an unscanned path). They are left out of the total, not
-            subtracted.
+            in (a wrap, a bridge or an unscanned path). They count in the total as the ledger
+            has them, so it errs low rather than high.
           </p>
         </div>
       )}
@@ -201,7 +201,9 @@ export function Dashboard({
               />
             ) : (
               <p className="text-sm text-muted-foreground">
-                No holdings yet — they land with the first scan.
+                {holdings?.loading || !holdings?.data
+                  ? "Loading holdings…"
+                  : "No holdings yet — they land with the first scan."}
               </p>
             )}
           </div>
@@ -223,7 +225,7 @@ export function Dashboard({
                     className={`shrink-0 tabular-nums ${e.type === "RECEIVE" ? "text-success" : e.type === "SPEND" ? "text-red-700" : ""}`}
                   >
                     {fmtAmount(e.amount, decimalsOf(assets.data, e.asset), 4)}{" "}
-                    {symbolOf(assets.data, e.asset)}
+                    {bookSymbol(book.byId, e.asset)}
                   </span>
                 </li>
               ))}
@@ -256,6 +258,3 @@ function decimalsOf(assets: Asset[] | null, identifier: string): number {
   return assets?.find((a) => a.identifier === identifier)?.decimals ?? 18;
 }
 
-function symbolOf(assets: Asset[] | null, identifier: string): string {
-  return assets?.find((a) => a.identifier === identifier)?.symbol ?? identifier;
-}

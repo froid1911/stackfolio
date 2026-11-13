@@ -130,7 +130,8 @@ function optionFor(
       axisLabel: {
         color: TEXT,
         fontSize: 10,
-        formatter: (v: number) => formatValue(v),
+        // Ticks are round numbers: drop the cents the tooltip keeps.
+        formatter: (v: number) => formatValue(v).replace(/\.00(?=\D*$)/, ""),
       },
       splitLine: { lineStyle: { color: GRID } },
     },

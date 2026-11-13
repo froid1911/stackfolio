@@ -136,7 +136,7 @@ describe("Transactions history page", () => {
     Object.defineProperty(URL, "revokeObjectURL", { value: revoke, configurable: true });
     const clicks: string[] = [];
     const realCreate = document.createElement.bind(document);
-    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+    const createElement = vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
       const el = realCreate(tag) as HTMLAnchorElement;
       if (tag === "a") el.click = () => clicks.push(el.download);
       return el;
@@ -149,7 +149,7 @@ describe("Transactions history page", () => {
     expect(clicks[0]).toMatch(/^stackfolio-events-\d{4}-\d{2}-\d{2}\.csv$/);
     expect(create).toHaveBeenCalled();
     expect(revoke).toHaveBeenCalledWith("blob:x");
-    vi.mocked(document.createElement).mockRestore();
+    createElement.mockRestore();
   });
 
   it("row click reports the event id", () => {

@@ -60,8 +60,8 @@ const type = (value: string) => {
     // React tracks the DOM value; set through the native setter so the
     // change event is seen as new, then dispatch the input event React
     // listens to.
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    setter?.call(input, value);
+    // The native setter, so React sees a change it did not make itself.
+    Reflect.set(HTMLInputElement.prototype, "value", value, input);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 };

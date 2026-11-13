@@ -89,8 +89,8 @@ describe("AddressBookView", () => {
         i.placeholder?.includes(placeholder),
       )!;
       act(() => {
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-        setter?.call(input, value);
+        // The native setter, so React sees a change it did not make itself.
+        Reflect.set(HTMLInputElement.prototype, "value", value, input);
         input.dispatchEvent(new Event("input", { bubbles: true }));
       });
     };
@@ -101,14 +101,14 @@ describe("AddressBookView", () => {
       form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     expect(actions.addAddress).toHaveBeenCalledTimes(1);
-    const [draft] = actions.addAddress.mock.calls[0];
+    const [draft] = actions.addAddress.mock.calls[0] as [Record<string, string | number>];
     // The view hands the raw draft; addressInput() (mutations.ts) is
     // what lowercases/trims - tested in mutations.test.ts.
     expect(draft.address).toBe("0xNew");
     expect(draft.label).toBe("  new label  ");
     expect(draft.chainId).toBe(1);
     expect(draft.id).toBeTruthy();
-    expect(Date.parse(draft.timestamp)).not.toBeNaN();
+    expect(Date.parse(String(draft.timestamp))).not.toBeNaN();
   });
 
   it("inline label edit dispatches updateAddress with id and new label", () => {
@@ -121,8 +121,8 @@ describe("AddressBookView", () => {
     act(() => edit!.click());
     const input = row.querySelector<HTMLInputElement>("input")!;
     act(() => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setter?.call(input, "renamed");
+      // The native setter, so React sees a change it did not make itself.
+      Reflect.set(HTMLInputElement.prototype, "value", "renamed", input);
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const save = buttonIn(row, "save") ?? buttonIn(row, "✓");

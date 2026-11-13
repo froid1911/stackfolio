@@ -71,9 +71,11 @@ describe("downloadCsv", () => {
     };
     const create = vi.fn(() => "blob:tmp/1");
     const revoke = vi.fn();
+    const appendChild = vi.fn();
+    const removeChild = vi.fn();
     const doc = {
       createElement: vi.fn(() => anchor),
-      body: { appendChild: vi.fn(), removeChild: vi.fn() },
+      body: { appendChild, removeChild },
     } as unknown as Document;
 
     downloadCsv("events.csv", "a,b\r\n1,2\r\n", {
@@ -85,7 +87,7 @@ describe("downloadCsv", () => {
     expect(create).toHaveBeenCalledTimes(1);
     expect(clicked).toEqual([{ download: "events.csv", href: "blob:tmp/1" }]);
     expect(revoke).toHaveBeenCalledWith("blob:tmp/1");
-    expect((doc.body.appendChild as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
-    expect((doc.body.removeChild as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
+    expect(appendChild).toHaveBeenCalled();
+    expect(removeChild).toHaveBeenCalled();
   });
 });

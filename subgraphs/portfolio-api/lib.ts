@@ -387,3 +387,33 @@ export function newestPrices<T extends { asset: string; fetchedAt: string | Date
   }
   return [...newest.values()].sort((a, b) => a.asset.localeCompare(b.asset));
 }
+
+export interface EventValuation {
+  eventId: string;
+  sequenceIndex: number;
+  price: string | null;
+  priceUnit: string | null;
+  priceSource: string | null;
+}
+
+/**
+ * The books' price per event leg, merged onto ledger rows (the two live in
+ * different index namespaces, so this is a join in code). An UNPRICED
+ * marker or a missing price both read as "no price": null throughout.
+ */
+export function attachValuations<T extends { eventId: string; sequenceIndex: number }>(
+  rows: T[],
+  valuations: EventValuation[],
+): (T & Omit<EventValuation, "eventId" | "sequenceIndex">)[] {
+  const byLeg = new Map(valuations.map((v) => [`${v.eventId}\u0000${v.sequenceIndex}`, v]));
+  return rows.map((row) => {
+    const v = byLeg.get(`${row.eventId}\u0000${row.sequenceIndex}`);
+    const priced = v && v.price !== null && v.priceSource !== "UNPRICED";
+    return {
+      ...row,
+      price: priced ? v.price : null,
+      priceUnit: priced ? v.priceUnit : null,
+      priceSource: priced ? v.priceSource : null,
+    };
+  });
+}

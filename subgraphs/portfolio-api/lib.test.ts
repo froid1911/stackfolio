@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { encodeFunctionResult } from "viem";
-import { forwardEnsAddress, newestPrices } from "./lib.js";
+import { attachValuations, forwardEnsAddress, newestPrices } from "./lib.js";
 
 const RESOLVER = "0x4976fb03c32e5b8cfe2b6ccb31c09ba78ebaba41";
 const ADDRESS = "5c647ca5e2bc5bd17c40410fcb8003d38879ae50";
@@ -141,5 +141,25 @@ describe("newestPrices", () => {
         { asset: "ETH", price: "1", fetchedAt: "2026-11-13T09:59:59.999Z" },
       ]).map((p) => p.price),
     ).toEqual(["2"]);
+  });
+});
+
+describe("attachValuations", () => {
+  it("hands each event leg its own price, null where the books have none", () => {
+    const rows = [
+      { eventId: "a", sequenceIndex: 0, amount: "1" },
+      { eventId: "a", sequenceIndex: 1, amount: "2" },
+      { eventId: "b", sequenceIndex: 0, amount: "3" },
+    ];
+    const valuations = [
+      { eventId: "a", sequenceIndex: 1, price: "2000", priceUnit: "EUR", priceSource: "COINGECKO" },
+      { eventId: "b", sequenceIndex: 0, price: null, priceUnit: null, priceSource: "UNPRICED" },
+    ];
+    expect(attachValuations(rows, valuations)).toEqual([
+      { eventId: "a", sequenceIndex: 0, amount: "1", price: null, priceUnit: null, priceSource: null },
+      { eventId: "a", sequenceIndex: 1, amount: "2", price: "2000", priceUnit: "EUR", priceSource: "COINGECKO" },
+      // An UNPRICED marker is no price at all.
+      { eventId: "b", sequenceIndex: 0, amount: "3", price: null, priceUnit: null, priceSource: null },
+    ]);
   });
 });

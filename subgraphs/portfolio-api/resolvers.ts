@@ -5,6 +5,7 @@ import {
   buildBalances,
   driveFileIds,
   forwardEnsAddress,
+  attachValuations,
   holdingsFromRows,
   newestPrices,
   unitCostPerWhole,
@@ -172,6 +173,7 @@ export const getResolvers = (
           from?: string;
           to?: string;
           query?: string;
+          needsPrice?: boolean;
           first?: number;
           offset?: number;
         },
@@ -179,7 +181,26 @@ export const getResolvers = (
       ) => {
         const ids = await driveFileIds(subgraph, args.driveId, ctx);
         if (!ids || ids.length === 0) return { rows: [], total: 0 };
+        // Valuations live in the accounting namespace: the "needs a price"
+        // filter is resolved there first, then applied to the ledger page.
+        const acc = accountingQuery(args.driveId);
+        let unpricedIds: string[] | null = null;
+        if (args.needsPrice) {
+          const unpriced = await acc
+            .selectFrom("acc_events")
+            .where("document_id", "in", ids)
+            .where("ignored", "=", false)
+            .where((eb) => eb.or([eb("price", "is", null), eb("price_source", "=", "UNPRICED")]))
+            .select("event_id")
+            .distinct()
+            .execute();
+          unpricedIds = unpriced.map((r) => r.event_id);
+          if (unpricedIds.length === 0) return { rows: [], total: 0 };
+        }
         const filtered = query(args.driveId).selectFrom("events").where("document_id", "in", ids)
+          .$if(unpricedIds !== null, (qb) =>
+            qb.where("event_id", "in", unpricedIds as string[]),
+          )
           .$if(Boolean(args.ids?.length), (qb) =>
             qb.where("event_id", "in", args.ids as string[]),
           )
@@ -242,7 +263,22 @@ export const getResolvers = (
           .limit(limit)
           .offset(args.offset ?? 0)
           .execute();
-        return { rows, total: Number(totalRow.total) };
+        const valuations =
+          rows.length === 0
+            ? []
+            : await acc
+                .selectFrom("acc_events")
+                .where("document_id", "in", ids)
+                .where("event_id", "in", rows.map((r) => r.eventId))
+                .select([
+                  "event_id as eventId",
+                  "sequence_index as sequenceIndex",
+                  "price",
+                  "price_unit as priceUnit",
+                  "price_source as priceSource",
+                ])
+                .execute();
+        return { rows: attachValuations(rows, valuations), total: Number(totalRow.total) };
       },
 
       addressLabels: async (

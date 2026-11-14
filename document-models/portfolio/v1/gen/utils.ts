@@ -36,6 +36,7 @@ export const initialGlobalState: PortfolioGlobalState = {
   resources: null,
   lastCheck: null,
   grant: null,
+  bundles: [],
 };
 export const initialLocalState: PortfolioLocalState = {};
 

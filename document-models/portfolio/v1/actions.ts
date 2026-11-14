@@ -5,6 +5,7 @@
 import { baseActions } from "document-model";
 import {
   portfolioAddressBookActions,
+  portfolioBundlesActions,
   portfolioIdentityActions,
   portfolioPositionsActions,
   portfolioPricingActions,
@@ -22,4 +23,5 @@ export const actions = {
   ...portfolioSnapshotsActions,
   ...portfolioReconcilerActions,
   ...portfolioPositionsActions,
+  ...portfolioBundlesActions,
 };

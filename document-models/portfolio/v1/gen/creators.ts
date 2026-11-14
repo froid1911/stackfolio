@@ -4,6 +4,8 @@
  */
 export * from "./address-book/creators.js";
 export * as portfolioAddressBookActions from "./address-book/creators.js";
+export * from "./bundles/creators.js";
+export * as portfolioBundlesActions from "./bundles/creators.js";
 export * from "./identity/creators.js";
 export * as portfolioIdentityActions from "./identity/creators.js";
 export * from "./positions/creators.js";

@@ -13,6 +13,8 @@ export interface ShellProps {
   onOpenFiles: () => void;
   onSearchOpen: () => void;
   filesActive?: boolean;
+  /** Left of the header: the wallet bundle switcher. */
+  headerStart?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -23,6 +25,7 @@ export function Shell({
   onOpenFiles,
   onSearchOpen,
   filesActive = false,
+  headerStart,
   children,
 }: ShellProps) {
   return (
@@ -74,6 +77,7 @@ export function Shell({
       </nav>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-2 border-b border-border px-4 py-2">
+          {headerStart}
           <button
             type="button"
             onClick={onSearchOpen}

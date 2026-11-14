@@ -16,9 +16,9 @@
           "initialValue": ""
         },
         "global": {
-          "schema": "type PortfolioState {\n  name: String\n  baseCurrency: String!\n  addresses: [AddressEntry!]!\n  priceOverrides: [PriceOverride!]!\n  ignoredAssets: [String!]!\n  autoSnapshot: AutoSnapshot!\n  snapshots: [Snapshot!]!\n  positions: [WalletPositions!]!\n  resources: ManagedResources\n  lastCheck: ReconcilerCheck\n  grant: GrantInfo\n}\n\ntype AddressEntry {\n  id: OID!\n  address: String!\n  chainId: Int!\n  label: String\n  ensName: String\n  tags: [String!]!\n  ignored: Boolean!\n  addedAt: DateTime!\n}\n\ntype PriceOverride {\n  asset: String!\n  price: String!\n  setAt: DateTime!\n}\n\ntype AutoSnapshot {\n  enabled: Boolean!\n  intervalHours: Int!\n}\n\ntype Snapshot {\n  id: OID!\n  timestamp: DateTime!\n  totalValue: String!\n  netWorth: String\n  liabilities: [SnapshotLiability!]\n  perLocation: [LocationValue!]!\n  perAsset: [AssetValue!]!\n}\n\ntype SnapshotLiability {\n  asset: String!\n  amount: String!\n}\n\ntype LocationValue {\n  location: String!\n  value: String!\n}\n\ntype AssetValue {\n  asset: String!\n  amount: String!\n  value: String!\n}\n\ntype WalletPositions {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionEntry!]!\n}\n\ntype PositionEntry {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAsset!]!\n  note: String\n}\n\ntype PositionAsset {\n  asset: String!\n  amount: String!\n}\n\nenum PositionKind {\n  SPOT\n  LP\n}\n\ntype ManagedResources {\n  connectionId: String!\n  workflowIds: [String!]!\n}\n\ntype ReconcilerCheck {\n  at: DateTime!\n  issues: [ReconcilerIssue!]!\n  fixes: [ReconcilerFix!]!\n}\n\ntype ReconcilerIssue {\n  code: String!\n  severity: IssueSeverity!\n  message: String!\n  accountId: String\n}\n\ntype ReconcilerFix {\n  code: String!\n  message: String!\n  at: DateTime!\n}\n\nenum IssueSeverity {\n  BLOCKING\n  WARNING\n}\n\ntype GrantInfo {\n  id: String!\n  name: String\n  grantedAt: DateTime\n}",
+          "schema": "type PortfolioState {\n  name: String\n  baseCurrency: String!\n  addresses: [AddressEntry!]!\n  priceOverrides: [PriceOverride!]!\n  ignoredAssets: [String!]!\n  autoSnapshot: AutoSnapshot!\n  snapshots: [Snapshot!]!\n  positions: [WalletPositions!]!\n  resources: ManagedResources\n  lastCheck: ReconcilerCheck\n  grant: GrantInfo\n  bundles: [Bundle!]!\n}\n\n\"\"\"\nA named group of the portfolio's wallets: every page can be filtered to it.\n\"\"\"\ntype Bundle {\n  id: OID!\n  name: String!\n  addresses: [String!]!\n}\n\ntype AddressEntry {\n  id: OID!\n  address: String!\n  chainId: Int!\n  label: String\n  ensName: String\n  tags: [String!]!\n  ignored: Boolean!\n  addedAt: DateTime!\n}\n\ntype PriceOverride {\n  asset: String!\n  price: String!\n  setAt: DateTime!\n}\n\ntype AutoSnapshot {\n  enabled: Boolean!\n  intervalHours: Int!\n}\n\ntype Snapshot {\n  id: OID!\n  timestamp: DateTime!\n  totalValue: String!\n  netWorth: String\n  liabilities: [SnapshotLiability!]\n  perLocation: [LocationValue!]!\n  perAsset: [AssetValue!]!\n}\n\ntype SnapshotLiability {\n  asset: String!\n  amount: String!\n}\n\ntype LocationValue {\n  location: String!\n  value: String!\n}\n\ntype AssetValue {\n  asset: String!\n  amount: String!\n  value: String!\n}\n\ntype WalletPositions {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionEntry!]!\n}\n\ntype PositionEntry {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAsset!]!\n  note: String\n}\n\ntype PositionAsset {\n  asset: String!\n  amount: String!\n}\n\nenum PositionKind {\n  SPOT\n  LP\n}\n\ntype ManagedResources {\n  connectionId: String!\n  workflowIds: [String!]!\n}\n\ntype ReconcilerCheck {\n  at: DateTime!\n  issues: [ReconcilerIssue!]!\n  fixes: [ReconcilerFix!]!\n}\n\ntype ReconcilerIssue {\n  code: String!\n  severity: IssueSeverity!\n  message: String!\n  accountId: String\n}\n\ntype ReconcilerFix {\n  code: String!\n  message: String!\n  at: DateTime!\n}\n\nenum IssueSeverity {\n  BLOCKING\n  WARNING\n}\n\ntype GrantInfo {\n  id: String!\n  name: String\n  grantedAt: DateTime\n}",
           "examples": [],
-          "initialValue": "{\"name\": null, \"baseCurrency\": \"EUR\", \"addresses\": [], \"priceOverrides\": [], \"ignoredAssets\": [], \"autoSnapshot\": {\"enabled\": false, \"intervalHours\": 24}, \"snapshots\": [], \"positions\": [], \"resources\": null, \"lastCheck\": null, \"grant\": null}"
+          "initialValue": "{\"name\": null, \"baseCurrency\": \"EUR\", \"addresses\": [], \"priceOverrides\": [], \"ignoredAssets\": [], \"autoSnapshot\": {\"enabled\": false, \"intervalHours\": 24}, \"snapshots\": [], \"positions\": [], \"resources\": null, \"lastCheck\": null, \"grant\": null, \"bundles\": []}"
         }
       },
       "modules": [
@@ -292,16 +292,115 @@
         {
           "id": "a08bbd13-0901-4007-8b3b-55ea20f649a7",
           "name": "positions",
-          "description": "On-chain DeFi positions per wallet and chain",
           "operations": [
             {
               "id": "16fbc77b-6071-41d7-a0d5-641af3cbf5e3",
               "name": "SET_POSITIONS",
-              "description": "",
-              "schema": "input SetPositionsInput {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionInput!]!\n}\n\ninput PositionInput {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAssetInput!]!\n  note: String\n}\n\ninput PositionAssetInput {\n  asset: String!\n  amount: String!\n}",
-              "template": "",
-              "reducer": "const entry = {\n  wallet: action.input.wallet,\n  chainId: action.input.chainId,\n  fetchedAt: action.input.fetchedAt,\n  positions: action.input.positions,\n};\n// Documents created before the positions field existed carry no key at\n// all; without this backfill SET_POSITIONS throws and the sweep fails.\nif (!Array.isArray(state.positions)) {\n  state.positions = [];\n}\nconst index = state.positions.findIndex(\n  (p) => p.wallet === action.input.wallet && p.chainId === action.input.chainId,\n);\nif (index === -1) {\n  state.positions.push(entry);\n} else {\n  state.positions[index] = entry;\n};",
+              "scope": "global",
               "errors": [],
+              "schema": "input SetPositionsInput {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionInput!]!\n}\n\ninput PositionInput {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAssetInput!]!\n  note: String\n}\n\ninput PositionAssetInput {\n  asset: String!\n  amount: String!\n}",
+              "reducer": "const entry = {\n  wallet: action.input.wallet,\n  chainId: action.input.chainId,\n  fetchedAt: action.input.fetchedAt,\n  positions: action.input.positions,\n};\n// Documents created before the positions field existed carry no key at\n// all; without this backfill SET_POSITIONS throws and the sweep fails.\nif (!Array.isArray(state.positions)) {\n  state.positions = [];\n}\nconst index = state.positions.findIndex(\n  (p) => p.wallet === action.input.wallet && p.chainId === action.input.chainId,\n);\nif (index === -1) {\n  state.positions.push(entry);\n} else {\n  state.positions[index] = entry;\n};",
+              "examples": [],
+              "template": "",
+              "description": ""
+            }
+          ],
+          "description": "On-chain DeFi positions per wallet and chain"
+        },
+        {
+          "id": "3328b480-9be9-41fa-99de-8c7bb6da577b",
+          "name": "bundles",
+          "description": "Named groups of wallets the views filter by.",
+          "operations": [
+            {
+              "id": "565b98bc-f8a2-452c-aed6-abf368414d60",
+              "name": "ADD_BUNDLE",
+              "description": "Group wallets under a name.",
+              "schema": "input AddBundleInput {\n  id: OID!\n  name: String!\n  addresses: [String!]!\n}",
+              "template": "Group wallets under a name.",
+              "reducer": "if (!state.bundles) state.bundles = [];\nconst name = action.input.name.trim();\nif (!name) throw new EmptyBundleError(\"A bundle needs a name\");\nif (state.bundles.some((b) => b.name.toLowerCase() === name.toLowerCase())) {\n  throw new DuplicateBundleNameError(`A bundle named ${name} exists`);\n}\nconst addresses = [...new Set(action.input.addresses.map((a) => a.toLowerCase()))];\nif (addresses.length === 0) throw new EmptyBundleError(\"A bundle needs at least one wallet\");\nconst known = new Set(state.addresses.map((a) => a.address));\nconst unknown = addresses.find((a) => !known.has(a));\nif (unknown) throw new UnknownBundleAddressError(`${unknown} is not in the portfolio`);\nstate.bundles.push({ id: action.input.id, name, addresses });",
+              "errors": [
+                {
+                  "id": "b20b3a2b-10b9-4be4-aa8c-196fde89a99a",
+                  "name": "EmptyBundleError",
+                  "code": "EMPTY_BUNDLE",
+                  "description": "A bundle needs a name and at least one wallet",
+                  "template": ""
+                },
+                {
+                  "id": "6b9b0c34-47c1-4da3-b1bf-81c9622f8ed2",
+                  "name": "DuplicateBundleNameError",
+                  "code": "DUPLICATE_BUNDLE_NAME",
+                  "description": "Another bundle already has this name",
+                  "template": ""
+                },
+                {
+                  "id": "425b3d1a-bb05-4267-848b-5ce5e58c9642",
+                  "name": "UnknownBundleAddressError",
+                  "code": "UNKNOWN_BUNDLE_ADDRESS",
+                  "description": "The address is not in the portfolio",
+                  "template": ""
+                }
+              ],
+              "examples": [],
+              "scope": "global"
+            },
+            {
+              "id": "e457e404-265a-4351-ba46-88e4e0a2d293",
+              "name": "UPDATE_BUNDLE",
+              "description": "Rename a bundle or change its wallets.",
+              "schema": "input UpdateBundleInput {\n  id: OID!\n  name: String\n  addresses: [String!]\n}",
+              "template": "Rename a bundle or change its wallets.",
+              "reducer": "if (!state.bundles) state.bundles = [];\nconst bundle = state.bundles.find((b) => b.id === action.input.id);\nif (!bundle) throw new BundleNotFoundError(`Bundle ${action.input.id} does not exist`);\nif (action.input.name != null) {\n  const name = action.input.name.trim();\n  if (!name) throw new EmptyBundleError(\"A bundle needs a name\");\n  if (state.bundles.some((b) => b.id !== bundle.id && b.name.toLowerCase() === name.toLowerCase())) {\n    throw new DuplicateBundleNameError(`A bundle named ${name} exists`);\n  }\n  bundle.name = name;\n}\nif (action.input.addresses != null) {\n  const addresses = [...new Set(action.input.addresses.map((a) => a.toLowerCase()))];\n  if (addresses.length === 0) throw new EmptyBundleError(\"A bundle needs at least one wallet\");\n  const known = new Set(state.addresses.map((a) => a.address));\n  const unknown = addresses.find((a) => !known.has(a));\n  if (unknown) throw new UnknownBundleAddressError(`${unknown} is not in the portfolio`);\n  bundle.addresses = addresses;\n}",
+              "errors": [
+                {
+                  "id": "3e245a4b-4da3-41ef-8d95-794d54cf1af2",
+                  "name": "BundleNotFoundError",
+                  "code": "BUNDLE_NOT_FOUND",
+                  "description": "No bundle has this id",
+                  "template": ""
+                },
+                {
+                  "id": "5772e6ad-ebda-4e22-a7f0-66be2fdc1f16",
+                  "name": "EmptyBundleError",
+                  "code": "EMPTY_BUNDLE",
+                  "description": "A bundle needs a name and at least one wallet",
+                  "template": ""
+                },
+                {
+                  "id": "bc5468f8-9fec-411c-a8c3-7dd500b2479c",
+                  "name": "DuplicateBundleNameError",
+                  "code": "DUPLICATE_BUNDLE_NAME",
+                  "description": "Another bundle already has this name",
+                  "template": ""
+                },
+                {
+                  "id": "2cdd722d-689e-470c-9702-c441a5858d76",
+                  "name": "UnknownBundleAddressError",
+                  "code": "UNKNOWN_BUNDLE_ADDRESS",
+                  "description": "The address is not in the portfolio",
+                  "template": ""
+                }
+              ],
+              "examples": [],
+              "scope": "global"
+            },
+            {
+              "id": "d62fe1c8-7ea6-4421-914d-4e66ef305894",
+              "name": "REMOVE_BUNDLE",
+              "description": "Delete a bundle; its wallets stay in the portfolio.",
+              "schema": "input RemoveBundleInput {\n  id: OID!\n}",
+              "template": "Delete a bundle; its wallets stay in the portfolio.",
+              "reducer": "if (!state.bundles) state.bundles = [];\nconst index = state.bundles.findIndex((b) => b.id === action.input.id);\nif (index === -1) throw new BundleNotFoundError(`Bundle ${action.input.id} does not exist`);\nstate.bundles.splice(index, 1);",
+              "errors": [
+                {
+                  "id": "02d19fc4-c099-4b19-a18b-7154018ec905",
+                  "name": "BundleNotFoundError",
+                  "code": "BUNDLE_NOT_FOUND",
+                  "description": "No bundle has this id",
+                  "template": ""
+                }
+              ],
               "examples": [],
               "scope": "global"
             }

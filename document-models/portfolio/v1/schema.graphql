@@ -31,6 +31,16 @@ type PortfolioState {
   resources: ManagedResources
   lastCheck: ReconcilerCheck
   grant: GrantInfo
+  bundles: [Bundle!]!
+}
+
+"""
+A named group of the portfolio's wallets: every page can be filtered to it.
+"""
+type Bundle {
+  id: OID!
+  name: String!
+  addresses: [String!]!
 }
 
 type AddressEntry {
@@ -280,4 +290,22 @@ input PositionInput {
 input PositionAssetInput {
   asset: String!
   amount: String!
+}
+
+# bundles
+
+input AddBundleInput {
+  id: OID!
+  name: String!
+  addresses: [String!]!
+}
+
+input UpdateBundleInput {
+  id: OID!
+  name: String
+  addresses: [String!]
+}
+
+input RemoveBundleInput {
+  id: OID!
 }

@@ -41,6 +41,8 @@ import { Setup } from "./components/Setup.js";
 import { DriveContents } from "./components/DriveContents.js";
 import { FolderTree } from "./components/FolderTree.js";
 import { Shell } from "./components/Shell.js";
+import { BundleSwitcher } from "./components/Bundles.js";
+import { useBundleScope } from "./lib/bundles.js";
 import { planSetup } from "./lib/setup.js";
 import { slug } from "./lib/slugs.js";
 import { pageParam, type Page } from "./nav.js";
@@ -87,6 +89,7 @@ export default function Editor({ children }: EditorProps) {
   // from the portfolio document's own state).
   const portfolioIds = usePortfolioAddresses(portfolioId);
   const portfolioActions = usePortfolioActions(portfolioId);
+  const scope = useBundleScope(portfolioId);
   const eventPageIds = useEventIds(driveId, active === "history");
   const eventDetail = useDetail(
     active === "history" ? "history" : "dashboard",
@@ -152,6 +155,13 @@ export default function Editor({ children }: EditorProps) {
       onNavigate={go}
       onOpenFiles={() => go("files")}
       onSearchOpen={() => setPaletteOpen(true)}
+      headerStart={
+        <BundleSwitcher
+          bundles={scope.bundles}
+          active={scope.active}
+          onPick={(bundle) => setSearchParams({ bundle }, { replace: false })}
+        />
+      }
     >
       {page === "files" ? (
         <div className="flex h-full">

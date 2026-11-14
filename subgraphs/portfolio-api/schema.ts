@@ -11,6 +11,8 @@ export const schema: DocumentNode = gql`
       "Ledger event ids to pin to; a deep link from another view."
       ids: [String!]
       address: String
+      "Only these wallets' events; a wallet bundle."
+      addresses: [String!]
       asset: String
       types: [String!]
       ignored: Boolean

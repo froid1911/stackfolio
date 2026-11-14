@@ -37,6 +37,7 @@ export function Dashboard({
   assets,
   holdings,
   stack,
+  bundle,
 }: {
   portfolioDocumentId: string | undefined;
   totals: QueryState<Totals>;
@@ -47,6 +48,9 @@ export function Dashboard({
   holdings?: QueryState<{ holdings: HoldingRow[]; total: string } | null>;
   /** Where the money sits; its total is the headline when present. */
   stack?: Stack | null;
+  /** A wallet bundle narrows the page: counts are the bundle's, and the
+   * snapshot history (kept for the whole portfolio) steps aside. */
+  bundle?: { name: string; wallets: number; validators: number };
 }) {
   const [portfolio] = useDocumentById(portfolioDocumentId ?? "");
   const currency =
@@ -57,7 +61,8 @@ export function Dashboard({
 
   const t = totals.data;
   const series = [...(snapshots.data ?? [])].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  const open = (issues.data ?? []).filter((i) => i.severity !== "RESOLVED").slice(0, 5);
+  const openAll = (issues.data ?? []).filter((i) => i.severity !== "RESOLVED");
+  const open = openAll.slice(0, 5);
   const held = holdings?.data?.holdings ?? [];
   const cov = coverage(held, holdings?.data?.total ?? null);
   // The same allocation Balances draws: spoofs out, unpriced listed apart.
@@ -97,13 +102,16 @@ export function Dashboard({
                 : "no snapshot yet"}
           </p>
         </div>
-        <Stat label="Transactions" value={String(t.events)} />
-        <Stat label="Accounts" value={String(t.accounts)} />
-        <Stat label="Validators" value={String(t.validators)} />
+        <Stat
+          label="Transactions"
+          value={bundle ? (recent.data ? String(recent.data.total) : "…") : String(t.events)}
+        />
+        <Stat label="Accounts" value={String(bundle ? bundle.wallets : t.accounts)} />
+        <Stat label="Validators" value={String(bundle ? bundle.validators : t.validators)} />
         <Stat
           label="Open issues"
-          value={String(t.openIssues)}
-          tone={t.openIssues > 0 ? "text-warning" : "text-success"}
+          value={String(bundle ? openAll.length : t.openIssues)}
+          tone={(bundle ? openAll.length : t.openIssues) > 0 ? "text-warning" : "text-success"}
         />
       </div>
 
@@ -168,6 +176,12 @@ export function Dashboard({
         </div>
       )}
 
+      {bundle ? (
+        <p className="text-xs text-muted-foreground">
+          Showing the {bundle.name} bundle. Value over time is snapshotted for the whole
+          portfolio, so its chart shows with every wallet selected.
+        </p>
+      ) : (
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-sm font-medium">Total value over time</p>
@@ -187,6 +201,7 @@ export function Dashboard({
           />
         </div>
       </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-4">

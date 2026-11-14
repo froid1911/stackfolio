@@ -44,11 +44,14 @@ import {
 } from "./DeFi.js";
 import { AddAccountForm } from "./Setup.js";
 import { AddressBookView } from "./AddressBookView.js";
+import { Bundles } from "./Bundles.js";
+import { generateId } from "document-model";
 import type { Detail } from "../lib/detail.js";
 import type { usePortfolioActions } from "../lib/mutations.js";
 import { actions as stakingActions } from "document-models/eth-staking";
 import { fireWorkflow, useWorkflowByName } from "../lib/workflows.js";
 import { useState } from "react";
+import { inScope, scoped, useBundleScope, type BundleScope } from "../lib/bundles.js";
 
 /**
  * The page views, lifted from the tab shell so the Connect routes and the
@@ -87,6 +90,7 @@ export function DeFiSection({ driveId }: { driveId: string }) {
   const prices = useLatestPrices(driveId);
   const nodes = useNodesInSelectedDrive();
   const book = usePortfolioBook(nodes ?? []);
+  const { wallets } = useScope();
   const sweepId = useWorkflowByName("positions-sweep");
   const [sweepStatus, setSweepStatus] = useState("");
   return (
@@ -119,7 +123,7 @@ export function DeFiSection({ driveId }: { driveId: string }) {
         )}
       </div>
       <DeFi
-        positions={book.positions}
+        positions={scoped(wallets, book.positions, (p) => p.wallet)}
         latestSnapshot={book.latestSnapshot}
         assets={assets.data ?? []}
         prices={prices.data ?? []}
@@ -144,17 +148,41 @@ export function PnlSection({
   const assets = useAssets(driveId);
   const book = usePortfolioBook(list);
   const setSearchParams = useSetSearchParams();
+  const { wallets } = useScope();
   return (
     <Pnl
       driveId={driveId}
       currency={book.currency}
       assets={assets}
-      accounts={accounts}
+      accounts={scopedQuery(accounts, wallets, (a) => a.address)}
+      wallets={wallets}
       onOpenEvents={(ids) =>
         setSearchParams({ tab: "transactions", ids: ids.join(",") })
       }
     />
   );
+}
+
+/** The wallet bundle the URL names, read from the drive's portfolio. */
+export function useScope(): BundleScope {
+  const nodes = useNodesInSelectedDrive();
+  return useBundleScope(portfolioNodeId(nodes ?? []));
+}
+
+/** A list query narrowed to the bundle's wallets. */
+function scopedQuery<T>(
+  query: QueryState<T[]>,
+  wallets: ReadonlySet<string> | null,
+  key: (row: T) => string | null | undefined,
+): QueryState<T[]> {
+  return wallets === null || !query.data
+    ? query
+    : { ...query, data: scoped(wallets, query.data, key) };
+}
+
+/** The events filter's share of a bundle. */
+function addressesOf(wallets: ReadonlySet<string> | null): { addresses?: string[] } {
+  return wallets === null ? {} : { addresses: [...wallets] };
 }
 
 export function portfolioNodeId(
@@ -172,10 +200,24 @@ export function DashboardSection({
 }) {
   const totals = useTotals(driveId);
   const snapshots = useSnapshots(driveId);
-  const issues = useIssues(driveId);
+  const { active, wallets } = useScope();
+  const accounts = useAccounts(driveId);
+  const validators = useValidators(driveId);
   const assets = useAssets(driveId);
   const { stack, walletHoldings } = useStack(driveId);
-  const recent = useEventsPage(driveId, { first: 6 });
+  const recent = useEventsPage(driveId, { first: 6, ...addressesOf(wallets) });
+  // Issues name the wallet document; ones about no wallet stay in view.
+  const accountAddress = new Map((accounts.data ?? []).map((a) => [a.documentId, a.address]));
+  const allIssues = useIssues(driveId);
+  const issues =
+    wallets === null || !allIssues.data
+      ? allIssues
+      : {
+          ...allIssues,
+          data: allIssues.data.filter(
+            (i) => i.accountId === null || inScope(wallets, accountAddress.get(i.accountId)),
+          ),
+        };
   return (
     <Dashboard
       portfolioDocumentId={id}
@@ -186,6 +228,16 @@ export function DashboardSection({
       assets={assets}
       holdings={walletHoldings}
       stack={stack}
+      bundle={
+        active
+          ? {
+              name: active.name,
+              wallets: active.addresses.length,
+              validators: scoped(wallets, validators.data ?? [], (v) => v.withdrawalAddress)
+                .length,
+            }
+          : undefined
+      }
     />
   );
 }
@@ -201,13 +253,14 @@ export function useStack(driveId: string): {
   /** Holdings as the stack counts them, in the shape Balances and the Dashboard take. */
   walletHoldings: QueryState<BalancesData | null>;
 } {
+  const { wallets } = useScope();
   const holdings = useHoldings(driveId);
   const assets = useAssets(driveId);
   const prices = useLatestPrices(driveId);
   const overrides = useOverrides(driveId);
   const nodes = useNodesInSelectedDrive();
   const book = usePortfolioBook(nodes ?? []);
-  const validators = useValidators(driveId);
+  const validators = scopedQuery(useValidators(driveId), wallets, (v) => v.withdrawalAddress);
   const balances = useStakingBalances(driveId);
   const withdrawals = useWithdrawals(driveId);
   if (!holdings.data || !assets.data || !prices.data) {
@@ -218,8 +271,8 @@ export function useStack(driveId: string): {
   const stack = buildStack({
     book: assetBook(assets.data, priceMap.keys()),
     prices: priceMap,
-    holdings: holdings.data.holdings,
-    positions: book.positions,
+    holdings: scoped(wallets, holdings.data.holdings, (r) => r.wallet),
+    positions: scoped(wallets, book.positions, (p) => p.wallet),
     validators: (validators.data ?? [])
       .map((v) => ({
         index: v.validatorIndex,
@@ -311,12 +364,18 @@ export function TransactionsSection({
       ? { ids: ids.split(",").filter(Boolean) }
       : {}),
   }));
-  const page = useEventsPage(driveId, filter);
-  const needsPrice = useEventsPage(driveId, { needsPrice: true, ignored: false, first: 1 });
+  const { wallets } = useScope();
+  const page = useEventsPage(driveId, { ...filter, ...addressesOf(wallets) });
+  const needsPrice = useEventsPage(driveId, {
+    needsPrice: true,
+    ignored: false,
+    first: 1,
+    ...addressesOf(wallets),
+  });
   const issues = useIssues(driveId);
   return (
     <Transactions
-      accounts={accounts}
+      accounts={scopedQuery(accounts, wallets, (a) => a.address)}
       assets={assets}
       filter={filter}
       setFilter={setFilter}
@@ -355,6 +414,7 @@ export function AddressBookSection({
   const global = (
     doc as { state?: { global?: { addresses?: unknown } } } | undefined
   )?.state?.global;
+  const { bundles } = useScope();
   const entries = (Array.isArray(global?.addresses) ? global.addresses : []) as Array<{
     id: string;
     address: string;
@@ -365,6 +425,7 @@ export function AddressBookSection({
     addedAt?: string;
   }>;
   return (
+    <>
     <AddressBookView
       entries={entries.map((e) => ({
         id: e.id,
@@ -387,12 +448,25 @@ export function AddressBookSection({
           : undefined
       }
     />
+    <Bundles
+      bundles={bundles}
+      wallets={[...new Map(entries.map((e) => [e.address, e.label ?? null])).entries()].map(
+        ([address, label]) => ({ address, label }),
+      )}
+      ready={actions.ready}
+      newId={generateId}
+      onAdd={actions.addBundle}
+      onUpdate={actions.updateBundle}
+      onRemove={actions.removeBundle}
+    />
+    </>
   );
 }
 
 export function StakingSection({ driveId }: { driveId: string }) {
   const [picked, setPicked] = useState<number | undefined>(undefined);
-  const validators = useValidators(driveId);
+  const { wallets } = useScope();
+  const validators = scopedQuery(useValidators(driveId), wallets, (v) => v.withdrawalAddress);
   // Every validator's rows: the summary cards need them all; the page
   // narrows the chart and the withdrawals list to the picked one itself.
   const balances = useStakingBalances(driveId);

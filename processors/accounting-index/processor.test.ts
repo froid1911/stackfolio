@@ -326,6 +326,20 @@ describe("accounting-index", () => {
     expect(after[0].input_hash).toBe(before[0].input_hash);
   });
 
+  it("refolds on start when the stored books are an older fold version", async () => {
+    const { db, processor } = await harness();
+    await indexAll(processor, walletDocument());
+    // As an older release left them: another version, and stale tables.
+    await db.updateTable("fold_checkpoint").set({ fold_version: 1 }).execute();
+    await db.deleteFrom("pnl_month").execute();
+
+    await processor.initAndUpgrade();
+
+    const [checkpoint] = await db.selectFrom("fold_checkpoint").selectAll().execute();
+    expect(checkpoint.fold_version).not.toBe(1);
+    expect(await db.selectFrom("pnl_month").selectAll().execute()).toHaveLength(2);
+  });
+
   it("keeps the checkpoint when nothing changed", async () => {
     const { db, processor } = await harness();
     const wallet = walletDocument();

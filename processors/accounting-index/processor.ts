@@ -95,6 +95,9 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
 
   override async initAndUpgrade(): Promise<void> {
     await up(this.relationalDb);
+    // A new FOLD_VERSION must take effect without waiting for the ledger
+    // to change; with matching hashes and version this is a no-op.
+    await this.recomputeFold();
   }
 
   /** Test and teardown helper: removes every table this index created. */

@@ -28,7 +28,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
       - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24 }
       - uses: powerhouse-inc/vetra-publish@v1
         with:
           app-id: fbdd090d-9f89-4840-8843-a0e8b923c40e

@@ -1,10 +1,9 @@
-import { useDocumentById } from "@powerhousedao/reactor-browser";
+import { deleteNode, useDocumentById, useSelectedDrive } from "@powerhousedao/reactor-browser";
 import { actions } from "document-models/wallet-account";
 import { useState } from "react";
 import type { AccountRow, Issue, QueryState } from "../lib/graphql.js";
 import { fmtAmount } from "../lib/format.js";
 import { EVM_CHAINS } from "./Setup.js";
-import { deleteAccount } from "../lib/workflows.js";
 
 /** The address's chain rows behind one header: total native balance and
  * the number of chains, so a seven-chain address reads as one account. */
@@ -138,6 +137,8 @@ function AccountRowView({
   onReload: () => void;
 }) {
   const [, dispatch] = useDocumentById(row.documentId);
+  const [drive] = useSelectedDrive();
+  const driveId = drive.header.id;
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const blocking = issues.some((i) => i.severity === "BLOCKING");
@@ -188,7 +189,9 @@ function AccountRowView({
               setConfirming(true);
               return;
             }
-            deleteAccount(row.documentId)
+            // Through the drive: the node goes with the document, so the
+            // drive keeps no entry pointing at nothing.
+            deleteNode(driveId, row.documentId)
               .then(onReload)
               .catch((cause: unknown) =>
                 setError(cause instanceof Error ? cause.message : String(cause)),

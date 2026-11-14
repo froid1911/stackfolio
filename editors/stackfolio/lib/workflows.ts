@@ -94,12 +94,3 @@ export async function fireWorkflow(workflowId: string): Promise<FireResult> {
   );
   return data.workflowRuntime.fire;
 }
-
-/** Remove a wallet-account document from the drive: the account and its
- * ledger are gone; the reconciler retires its workflows on the next pass. */
-export async function deleteAccount(id: string): Promise<void> {
-  await gql<{ deleteDocument: boolean }>(
-    `mutation ($id: String!) { deleteDocument(idOrSlug: $id, propagate: ORPHAN) }`,
-    { id },
-  );
-}

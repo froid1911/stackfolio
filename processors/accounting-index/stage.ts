@@ -7,6 +7,7 @@
 import type { AssetRow, AddressRow, EventRow } from "./schema.js";
 import type { FoldEvent } from "./fold.js";
 import { unwrapState } from "../portfolio-index/rows.js";
+import { overrideKey } from "../shared/categories.js";
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === "object" && value !== null
@@ -89,6 +90,44 @@ export function portfolioIgnoredAssetRows(
   );
 }
 
+/** The portfolio's tax category rules (in order) and overrides, as JSON. */
+export function portfolioCategoryRows(
+  documentId: string,
+  state: unknown,
+): {
+  rules: { document_id: string; id: string; position: number; rule: string }[];
+  overrides: { document_id: string; key: string; override: string }[];
+} {
+  const global = asRecord(unwrapState(state));
+  const list = (field: string): unknown[] =>
+    global && Array.isArray(global[field]) ? global[field] : [];
+  const rules = list("categoryRules")
+    .map((raw) => asRecord(raw))
+    .filter((rule): rule is Record<string, unknown> => typeof rule?.id === "string")
+    .map((rule, position) => ({
+      document_id: documentId,
+      id: rule.id as string,
+      position,
+      rule: JSON.stringify(rule),
+    }));
+  const overrides = list("categoryOverrides")
+    .map((raw) => asRecord(raw))
+    .filter(
+      (o): o is Record<string, unknown> =>
+        typeof o?.wallet === "string" && typeof o.eventId === "string",
+    )
+    .map((o) => ({
+      document_id: documentId,
+      key: overrideKey(o.wallet as string, o.eventId as string, Number(o.sequenceIndex)),
+      override: JSON.stringify({
+        category: o.category,
+        giftCost: o.giftCost ?? null,
+        giftAcquiredAt: o.giftAcquiredAt ?? null,
+      }),
+    }));
+  return { rules, overrides };
+}
+
 /** Asset decimals from the registry; without them nothing is priceable. */
 export function registryAssetRows(
   documentId: string,
@@ -145,6 +184,7 @@ export function foldInputHash(
   addresses: string[],
   decimals: Array<[string, number]>,
   ignoredAssets: string[] = [],
+  categories = "",
 ): { inputHash: string; ctxHash: string } {
   const ordered = [...events].sort(
     (a, b) =>
@@ -165,6 +205,7 @@ export function foldInputHash(
     [...decimals].sort((a, b) => a[0].localeCompare(b[0])).map(([asset, decimals]) => `${asset}:${decimals}`).join(","),
     // Appended only when present: an unchanged context hashes as before.
     ...(ignoredAssets.length > 0 ? [[...ignoredAssets].sort().join(",")] : []),
+    ...(categories ? [categories] : []),
   ].join("|");
   return { inputHash: fnv1a(input), ctxHash: fnv1a(context) };
 }

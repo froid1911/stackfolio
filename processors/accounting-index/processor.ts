@@ -21,9 +21,14 @@ import {
   type FoldContext,
   type FoldState,
 } from "./fold.js";
+import type {
+  CategoryOverrideLike,
+  CategoryRuleLike,
+} from "../shared/categories.js";
 import {
   foldInputHash,
   portfolioAddressRows,
+  portfolioCategoryRows,
   portfolioIgnoredAssetRows,
   registryAssetRows,
   rowKey,
@@ -52,7 +57,8 @@ const FOLLOWED = new Set<string>(ACCOUNTING_DOCUMENT_TYPES);
 // 3: beacon withdrawals book as staking income; protocol principal
 // withdrawals stay off the books.
 // 4: a beacon withdrawal of 16 ETH or more is an exit, not income.
-const FOLD_VERSION = 4;
+// 5: books by tax category; lots carry their acquisition date.
+const FOLD_VERSION = 5;
 const CURRENCY = "EUR";
 const BATCH = 200;
 
@@ -180,6 +186,10 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
             documentId,
             portfolioIgnoredAssetRows(documentId, parsed),
           );
+          await this.writeCategories(
+            documentId,
+            portfolioCategoryRows(documentId, parsed),
+          );
           break;
         }
         default: {
@@ -290,6 +300,26 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
     }
   }
 
+  /** Rules and overrides are small lists: replace them wholesale. */
+  private async writeCategories(
+    documentId: string,
+    rows: ReturnType<typeof portfolioCategoryRows>,
+  ): Promise<void> {
+    await this.relationalDb.transaction().execute(async (db) => {
+      await db.deleteFrom("acc_category_rules").where("document_id", "=", documentId).execute();
+      await db.deleteFrom("acc_category_overrides").where("document_id", "=", documentId).execute();
+      for (let at = 0; at < rows.rules.length; at += BATCH) {
+        await db.insertInto("acc_category_rules").values(rows.rules.slice(at, at + BATCH)).execute();
+      }
+      for (let at = 0; at < rows.overrides.length; at += BATCH) {
+        await db
+          .insertInto("acc_category_overrides")
+          .values(rows.overrides.slice(at, at + BATCH))
+          .execute();
+      }
+    });
+  }
+
   private async writeAssets(documentId: string, rows: AssetRow[]): Promise<void> {
     const stored = await this.relationalDb
       .selectFrom("acc_assets")
@@ -334,12 +364,34 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
     const ignored = (
       await this.relationalDb.selectFrom("acc_ignored_assets").select("asset").execute()
     ).map((row) => row.asset);
+    const rules = (
+      await this.relationalDb
+        .selectFrom("acc_category_rules")
+        .selectAll()
+        .orderBy("document_id")
+        .orderBy("position")
+        .execute()
+    ).map((row) => JSON.parse(row.rule) as CategoryRuleLike);
+    const overrideRows = await this.relationalDb
+      .selectFrom("acc_category_overrides")
+      .selectAll()
+      .orderBy("key")
+      .orderBy("document_id")
+      .execute();
+    const overrides = new Map(
+      overrideRows.map(
+        (row) => [row.key, JSON.parse(row.override) as CategoryOverrideLike] as const,
+      ),
+    );
 
     const { inputHash, ctxHash } = foldInputHash(
       events,
       addresses.map((row) => row.address),
       assets.map((row) => [row.asset, row.decimals] as [string, number]),
       ignored,
+      rules.length > 0 || overrideRows.length > 0
+        ? JSON.stringify([rules, overrideRows.map((row) => [row.key, row.override])])
+        : "",
     );
     const checkpoint = await this.relationalDb
       .selectFrom("fold_checkpoint")
@@ -367,8 +419,8 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       currency: CURRENCY,
       knownAddresses,
       decimals,
-      rules: [],
-      overrides: new Map(),
+      rules,
+      overrides,
     };
     const state: FoldState = foldAll(toFoldEvents(events, new Set(ignored)), ctx);
     // One transaction: readers never see the tables mid-rewrite, and a
@@ -397,7 +449,14 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
   }
 
   private async writeFoldTables(db: Kysely<DB>, state: FoldState): Promise<void> {
-    for (const table of ["lots", "realized", "income", "pnl_month", "acc_unpriced"] as const) {
+    for (const table of [
+      "lots",
+      "realized",
+      "income",
+      "pnl_month",
+      "acc_unpriced",
+      "acc_event_categories",
+    ] as const) {
       await db.deleteFrom(table).execute();
     }
     for (const lots of state.lots.values()) {
@@ -408,6 +467,7 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
         source_seq: lot.sourceSeq,
         quantity: lot.quantity.toString(),
         unit_cost: formatScaled((lot.cost * 100000000n) / lot.quantity),
+        acquired_at: lot.acquiredAt || null,
       }));
       for (let at = 0; at < rows.length; at += BATCH) {
         await db
@@ -461,6 +521,23 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       await db
         .insertInto("pnl_month")
         .values(months.slice(at, at + BATCH))
+        .execute();
+    }
+    const categories = [...state.categories.entries()].map(([key, classified]) => {
+      const [wallet, eventId, sequenceIndex] = key.split("|");
+      return {
+        wallet,
+        event_id: eventId,
+        sequence_index: Number(sequenceIndex),
+        category: classified.category,
+        source: classified.source,
+      };
+    });
+    for (let at = 0; at < categories.length; at += BATCH) {
+      await db
+        .insertInto("acc_event_categories")
+        .values(categories.slice(at, at + BATCH))
+        .onConflict((oc) => oc.columns(["wallet", "event_id", "sequence_index"]).doNothing())
         .execute();
     }
     // A leg can carry both gaps once each; the key keeps a re-listed one out.

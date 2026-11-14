@@ -447,4 +447,43 @@ describe("accounting-index", () => {
       },
     ]);
   });
+
+  it("books by the portfolio's category rules and overrides, and records each event's category", async () => {
+    const { db, processor } = await harness();
+    await indexAll(processor, walletDocument());
+    const before = await db.selectFrom("acc_event_categories").selectAll().execute();
+    expect(before).toContainEqual(
+      expect.objectContaining({ event_id: "ev-2", category: "TRADE", source: "auto" }),
+    );
+    expect((await db.selectFrom("lots").selectAll().execute())[0].acquired_at).toBe(
+      "2026-01-10T10:00:00.000Z",
+    );
+
+    const tagged = portfolioReducer(
+      portfolioDocument(),
+      portfolioActions.setEventCategories({
+        overrides: [{ wallet: W1, eventId: "ev-2", sequenceIndex: 0, category: "GIFT_OUT" }],
+      }),
+    );
+    await processor.onOperations(replay(tagged));
+    const row = await db
+      .selectFrom("acc_event_categories")
+      .selectAll()
+      .where("event_id", "=", "ev-2")
+      .executeTakeFirstOrThrow();
+    expect(row).toMatchObject({ category: "GIFT_OUT", source: "override" });
+    // A gift realizes nothing.
+    const realized = await db.selectFrom("realized").selectAll().execute();
+    expect(realized.some((r) => r.source_event_id === "ev-2")).toBe(false);
+
+    const ruled = portfolioReducer(
+      tagged,
+      portfolioActions.clearEventCategories({
+        events: [{ wallet: W1, eventId: "ev-2", sequenceIndex: 0 }],
+      }),
+    );
+    await processor.onOperations(replay(ruled));
+    expect(await db.selectFrom("acc_category_overrides").selectAll().execute()).toHaveLength(0);
+    expect(await db.selectFrom("realized").selectAll().execute()).toHaveLength(1);
+  });
 });

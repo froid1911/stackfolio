@@ -47,6 +47,8 @@ export interface LotRow {
   source_seq: number;
   quantity: string;
   unit_cost: string;
+  /** When the lot's units were acquired; null in stores from before. */
+  acquired_at: string | null;
 }
 
 export interface RealizedRow {
@@ -99,6 +101,30 @@ export interface UnpricedRow {
   reason: string;
 }
 
+/** A portfolio's counterparty rule, as JSON, in the portfolio's order. */
+export interface CategoryRuleRow {
+  document_id: string;
+  id: string;
+  position: number;
+  rule: string;
+}
+
+/** A hand-chosen category, keyed wallet|eventId|sequenceIndex, as JSON. */
+export interface CategoryOverrideRow {
+  document_id: string;
+  key: string;
+  override: string;
+}
+
+/** Each ledger leg's resolved tax category and where it came from. */
+export interface EventCategoryRow {
+  wallet: string;
+  event_id: string;
+  sequence_index: number;
+  category: string;
+  source: string;
+}
+
 export interface DB {
   acc_events: EventRow;
   acc_addresses: AddressRow;
@@ -110,4 +136,7 @@ export interface DB {
   pnl_month: PnlMonthRow;
   fold_checkpoint: CheckpointRow;
   acc_unpriced: UnpricedRow;
+  acc_category_rules: CategoryRuleRow;
+  acc_category_overrides: CategoryOverrideRow;
+  acc_event_categories: EventCategoryRow;
 }

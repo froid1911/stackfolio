@@ -70,7 +70,7 @@ export const txHashOf = (eventIdentifier: string): string => {
 export const overrideKey = (wallet: string, eventId: string, sequenceIndex: number): string =>
   `${wallet.toLowerCase()}|${eventId}|${sequenceIndex}`;
 
-const SUBTYPE_DEFAULT: Record<string, TxCategory> = {
+const SUBTYPE_DEFAULT: Partial<Record<string, TxCategory>> = {
   DEPOSIT_ASSET: "COLLATERAL_OUT",
   REMOVE_ASSET: "COLLATERAL_IN",
   BORROW: "BORROWING",

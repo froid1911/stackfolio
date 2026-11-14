@@ -70,6 +70,7 @@ export async function up(db: Kysely<DB>): Promise<void> {
     .addColumn("source_seq", "integer", (col) => col.notNull())
     .addColumn("quantity", text, (col) => col.notNull())
     .addColumn("unit_cost", text, (col) => col.notNull())
+    .addColumn("acquired_at", "varchar(64)")
     .addPrimaryKeyConstraint("lots_pk", [
       "wallet",
       "asset",
@@ -143,6 +144,44 @@ export async function up(db: Kysely<DB>): Promise<void> {
     .ifNotExists()
     .execute();
 
+  // The portfolio's tax category rules and overrides, staged as JSON like
+  // the ignored assets, and each leg's resolved category from the fold.
+  await db.schema
+    .createTable("acc_category_rules")
+    .addColumn("document_id", "varchar(255)", (col) => col.notNull())
+    .addColumn("id", "varchar(255)", (col) => col.notNull())
+    .addColumn("position", "integer", (col) => col.notNull())
+    .addColumn("rule", text, (col) => col.notNull())
+    .addPrimaryKeyConstraint("acc_category_rules_pk", ["document_id", "id"])
+    .ifNotExists()
+    .execute();
+  await db.schema
+    .createTable("acc_category_overrides")
+    .addColumn("document_id", "varchar(255)", (col) => col.notNull())
+    .addColumn("key", text, (col) => col.notNull())
+    .addColumn("override", text, (col) => col.notNull())
+    .addPrimaryKeyConstraint("acc_category_overrides_pk", ["document_id", "key"])
+    .ifNotExists()
+    .execute();
+  await db.schema
+    .createTable("acc_event_categories")
+    .addColumn("wallet", "varchar(128)", (col) => col.notNull())
+    .addColumn("event_id", text, (col) => col.notNull())
+    .addColumn("sequence_index", "integer", (col) => col.notNull())
+    .addColumn("category", "varchar(32)", (col) => col.notNull())
+    .addColumn("source", "varchar(16)", (col) => col.notNull())
+    .addPrimaryKeyConstraint("acc_event_categories_pk", ["wallet", "event_id", "sequence_index"])
+    .ifNotExists()
+    .execute();
+
+  // Lots made before holding periods lack the column.
+  const lotColumns = (await db.introspection.getTables()).find(
+    (table) => table.name === "lots",
+  )?.columns;
+  if (lotColumns && !lotColumns.some((column) => column.name === "acquired_at")) {
+    await db.schema.alterTable("lots").addColumn("acquired_at", "varchar(64)").execute();
+  }
+
   // Persisted namespaces keep the column types they were born with, and
   // the first ones were guessed too small for real chain data: tx-log
   // event identifiers ("0x<64 hex>:log:<block>") overrun varchar(64) and
@@ -177,6 +216,9 @@ export async function up(db: Kysely<DB>): Promise<void> {
 
 export async function down(db: Kysely<DB>): Promise<void> {
   for (const table of [
+    "acc_event_categories",
+    "acc_category_overrides",
+    "acc_category_rules",
     "acc_unpriced",
     "fold_checkpoint",
     "pnl_month",

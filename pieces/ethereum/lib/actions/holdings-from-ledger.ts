@@ -22,6 +22,7 @@ interface WalletGlobalState {
   chainId?: number;
   backfill?: { state?: string } | null;
   nativeBalance?: { amount: string; blockNumber: number } | null;
+  tokenBalances?: { observedAt: string; balances: Array<{ asset: string; amount: string }> } | null;
   ledger?: Array<{
     asset: string;
     amount: string;
@@ -139,10 +140,12 @@ export const ethereumHoldingsFromLedgerAction = createAction({
     const nets = new Map<string, { raw: bigint; estimated: boolean }>();
     // Observed native coin balances per chain native asset: the ledger only
     // half-see native inflows (internal transfers need traces nobody free
-    // offers), so the chain's own balance read is the truth for the coin,
-    // and the ledger keeps its role for tokens, whose transfers are fully
-    // logged.
-    const observedNative = new Map<string, bigint>();
+    // offers), so the chain's own balance read is the truth for the coin.
+    // Tokens read from the chain (tokenBalances) replace their ledger net
+    // the same way: the scan misses swaps, repayments and bridges, and a
+    // sum of transfers drifts where a balanceOf does not. A reading only
+    // speaks for an `asOf` at or after it.
+    const observed = new Map<string, bigint>();
     for (const walletId of walletIds) {
       if (typeof walletId !== "string") continue;
       const wallet = globalState<WalletGlobalState>(
@@ -156,12 +159,21 @@ export const ethereumHoldingsFromLedgerAction = createAction({
           ? BigInt(wallet.nativeBalance.amount)
           : null;
       if (balance !== null && !ignoredAssets.has(native)) {
-        observedNative.set(native, (observedNative.get(native) ?? 0n) + balance);
+        observed.set(native, (observed.get(native) ?? 0n) + balance);
+      }
+      const tokens = new Set<string>();
+      if (wallet.tokenBalances && wallet.tokenBalances.observedAt <= asOf) {
+        for (const token of wallet.tokenBalances.balances) {
+          if (!/^\d+$/.test(token.amount) || ignoredAssets.has(token.asset)) continue;
+          tokens.add(token.asset);
+          observed.set(token.asset, (observed.get(token.asset) ?? 0n) + BigInt(token.amount));
+        }
       }
       for (const event of wallet.ledger ?? []) {
         if (event.ignored || ignoredAssets.has(event.asset)) continue;
         if (event.timestamp > asOf) continue;
         if (event.asset === native && balance !== null) continue;
+        if (tokens.has(event.asset)) continue;
         const sign = SIGN[event.type];
         if (!sign) continue;
         const entry = nets.get(event.asset) ?? { raw: 0n, estimated: false };
@@ -170,7 +182,7 @@ export const ethereumHoldingsFromLedgerAction = createAction({
         nets.set(event.asset, entry);
       }
     }
-    for (const [asset, raw] of observedNative) {
+    for (const [asset, raw] of observed) {
       const ledger = nets.get(asset);
       nets.set(asset, {
         raw: raw + (ledger?.raw ?? 0n),

@@ -45,7 +45,7 @@ type TestDocument = {
 
 /** One ledger: buy 2 ETH, sell 1 priced, 5% staking income, sell 0.25
  * unpriced - so every P&L query has something to show. */
-function walletDocument() {
+function walletDocument(extra: Parameters<typeof walletActions.importEvents>[0]["events"] = []) {
   let document = walletReducer(
     walletUtils.createDocument(),
     walletActions.setAccountDetails({ address: W1, chainId: 1 }),
@@ -102,6 +102,7 @@ function walletDocument() {
           counterparty: "uniswap-v2",
           sequenceIndex: 0,
         },
+        ...extra,
       ],
     }),
   );
@@ -161,7 +162,12 @@ function replay(document: TestDocument) {
 
 /** Fold the ledger into drive-1's accounting namespace and hand back the
  * resolvers plus the read context that may see the drive's documents. */
-async function harness(opts: { ignoredAssets?: string[] } = {}) {
+async function harness(
+  opts: {
+    ignoredAssets?: string[];
+    extra?: Parameters<typeof walletActions.importEvents>[0]["events"];
+  } = {},
+) {
   const relationalDb = createTestRelationalDb();
   const namespace = AccountingIndex.getNamespace("drive-1");
   const store = await runProcessorMigrations<AccountingIndex>(
@@ -184,7 +190,7 @@ async function harness(opts: { ignoredAssets?: string[] } = {}) {
     portfolioStore,
   );
 
-  const wallet = walletDocument();
+  const wallet = walletDocument(opts.extra);
   const portfolio = (opts.ignoredAssets ?? []).reduce(
     (document, asset) =>
       portfolioReducer(document, portfolioActions.setAssetIgnored({ asset, ignored: true })),
@@ -351,6 +357,47 @@ describe("portfolio-api accounting queries", () => {
     expect(staking.total).toBe(1);
     const none = (await q.events({ categories: ["UNCLASSIFIED"] })) as { total: number };
     expect(none.total).toBe(0);
+  });
+
+  it("queues unclassified legs by counterparty, ignored assets left out", async () => {
+    const STRANGER = "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef";
+    const TOKEN = "eip155:1/erc20:0x9e2d266d6c90f6c0d80a88159b15958f7135b8af";
+    const pushed = (id: string, asset: string) => ({
+      id,
+      eventIdentifier: `0x${id}`,
+      timestamp: "2026-05-10T10:00:00.000Z",
+      type: "RECEIVE" as const,
+      subtype: "NONE" as const,
+      asset,
+      amount: "100000000000000000",
+      counterparty: STRANGER,
+      sequenceIndex: 0,
+      valuation: price("3000"),
+    });
+    const { q } = await harness({
+      ignoredAssets: [TOKEN],
+      extra: [pushed("e5", ETH), pushed("e6", ETH), pushed("e7", TOKEN)],
+    });
+    const queue = (await q.classificationQueue()) as {
+      total: number;
+      value: string | null;
+      groups: Record<string, unknown>[];
+    };
+    expect(queue.total).toBe(2);
+    expect(queue.value).toBe("600");
+    expect(queue.groups).toEqual([
+      expect.objectContaining({
+        counterparty: STRANGER,
+        direction: "IN",
+        count: 2,
+        value: "600",
+        assets: [ETH],
+        suspectedAirdrop: true,
+        events: [`${W1}|e5|0`, `${W1}|e6|0`],
+      }),
+    ]);
+    const empty = (await q.classificationQueue({ addresses: [STRANGER] })) as { total: number };
+    expect(empty.total).toBe(0);
   });
 
   it("leaves an ignored asset out of holdings and the not-ignored history", async () => {

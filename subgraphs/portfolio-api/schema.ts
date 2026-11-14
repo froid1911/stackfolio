@@ -26,6 +26,8 @@ export const schema: DocumentNode = gql`
       first: Int
       offset: Int
     ): PortfolioApiEventPage!
+    "UNCLASSIFIED legs grouped by counterparty and direction, largest EUR value first; ignored assets and rows left out."
+    classificationQueue(driveId: String!, addresses: [String!]): PortfolioApiQueue!
     addressLabels(driveId: String!): [PortfolioApiAddressLabel!]!
     assets(driveId: String!): [PortfolioApiAsset!]!
     latestPrices(driveId: String!): [PortfolioApiPrice!]!
@@ -91,6 +93,29 @@ export const schema: DocumentNode = gql`
     backfillState: String
     nativeBalance: String
     nativeBalanceBlock: Int
+  }
+
+  type PortfolioApiQueueGroup {
+    "Lower-cased address, a protocol id, or null for legs without a counterparty."
+    counterparty: String
+    "The address book's label, or the known airdrop it pays out."
+    counterpartyLabel: String
+    "IN or OUT."
+    direction: String!
+    count: Int!
+    "Sum of the priced legs in EUR; null when none is priced."
+    value: String
+    assets: [String!]!
+    "Every leg was pushed to the wallet (it paid no gas), priced and inbound, from an address."
+    suspectedAirdrop: Boolean!
+    "Event keys wallet|eventId|sequenceIndex, at most 500."
+    events: [String!]!
+  }
+
+  type PortfolioApiQueue {
+    total: Int!
+    value: String
+    groups: [PortfolioApiQueueGroup!]!
   }
 
   type PortfolioApiEventPage {

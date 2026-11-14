@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { holdingsFromRows, type HoldingsInput } from "./lib.js";
+import { holdingsFromRows, tokenBalancesOf, type HoldingsInput } from "./lib.js";
 
 const INPUT: HoldingsInput = {
   // Two wallets, two assets. Amounts are RAW token units as stored by the
@@ -153,5 +153,36 @@ describe("holdingsFromRows", () => {
     ]);
     expect(totals.perAsset).toEqual([{ asset: "X", quantity: "5", value: null }]);
     expect(totals.total).toBe("0");
+  });
+});
+
+describe("tokenBalancesOf", () => {
+  it("reads a stored reading as observed balances of the wallet", () => {
+    expect(tokenBalancesOf("0xw", '[{"asset":"a","amount":"0"},{"asset":"b","amount":"5"}]')).toEqual([
+      { asset: "a", address: "0xw", amount: "0" },
+      { asset: "b", address: "0xw", amount: "5" },
+    ]);
+  });
+
+  it("reads nothing from no reading or a broken one", () => {
+    expect(tokenBalancesOf("0xw", null)).toEqual([]);
+    expect(tokenBalancesOf("0xw", "not json")).toEqual([]);
+    expect(tokenBalancesOf("0xw", '{"a":1}')).toEqual([]);
+    expect(tokenBalancesOf("0xw", '[{"asset":1},null,{"asset":"c","amount":"2"}]')).toEqual([
+      { asset: "c", address: "0xw", amount: "2" },
+    ]);
+  });
+
+  it("lets an observed zero end a balance the ledger got wrong", () => {
+    const USDT = "eip155:1/erc20:0xusdt";
+    const rows = holdingsFromRows({
+      // The scan saw a borrow land but not the swap that spent it.
+      events: [{ asset: USDT, address: "0xw", amount: "193541000000", ignored: false, type: "RECEIVE" }],
+      balances: tokenBalancesOf("0xw", `[{"asset":"${USDT}","amount":"0"}]`),
+      decimals: { [USDT]: 6 },
+      prices: { [USDT]: "0.92" },
+      overrides: {},
+    });
+    expect(rows).toEqual([]);
   });
 });

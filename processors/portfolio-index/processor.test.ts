@@ -139,6 +139,41 @@ describe("portfolio-index", () => {
     expect(rows).toHaveLength(2);
   });
 
+  it("stores the wallet's token balances read from the chain", async () => {
+    const { db, processor } = await harness();
+    const wallet = walletReducer(
+      walletDocument(),
+      walletActions.setTokenBalances({
+        blockNumber: 21_000_000,
+        observedAt: "2026-11-14T12:00:00.000Z",
+        balances: [{ asset: "eip155:1/erc20:0xusdt", amount: "0" }],
+      }),
+    );
+    await processor.onOperations(replayEnvelope(wallet));
+
+    const account = await db
+      .selectFrom("accounts")
+      .select("token_balances")
+      .where("document_id", "=", wallet.header.id)
+      .executeTakeFirstOrThrow();
+    expect(JSON.parse(account.token_balances ?? "null")).toEqual([
+      { asset: "eip155:1/erc20:0xusdt", amount: "0" },
+    ]);
+  });
+
+  it("adds the token balances column to a store created without it", async () => {
+    const db = createTestRelationalDb();
+    const namespace = PortfolioIndex.getNamespace("drive-old");
+    const store = await runProcessorMigrations<PortfolioIndex>(db, namespace, up);
+    await store.schema.alterTable("accounts").dropColumn("token_balances").execute();
+
+    await up(store);
+    await up(store); // a second start leaves it be
+
+    const columns = (await store.introspection.getTables()).find((t) => t.name === "accounts")?.columns;
+    expect(columns?.some((c) => c.name === "token_balances")).toBe(true);
+  });
+
   it("fetches the document state when a delivery carries none", async () => {
     const { db, processor } = await harness();
     const wallet = walletDocument();

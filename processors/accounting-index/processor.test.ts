@@ -340,6 +340,30 @@ describe("accounting-index", () => {
     expect(await db.selectFrom("pnl_month").selectAll().execute()).toHaveLength(2);
   });
 
+  it("keeps an ignored asset out of the books, and back in when un-ignored", async () => {
+    const { db, processor } = await harness();
+    await indexAll(processor, walletDocument());
+    expect(await db.selectFrom("lots").selectAll().execute()).not.toHaveLength(0);
+
+    const ignoring = portfolioReducer(
+      portfolioDocument(),
+      portfolioActions.setAssetIgnored({ asset: ETH, ignored: true }),
+    );
+    await processor.onOperations(replay(ignoring));
+    expect(await db.selectFrom("lots").selectAll().execute()).toHaveLength(0);
+    expect(await db.selectFrom("realized").selectAll().execute()).toHaveLength(0);
+    expect(await db.selectFrom("pnl_month").selectAll().execute()).toHaveLength(0);
+    expect(await db.selectFrom("acc_unpriced").selectAll().execute()).toHaveLength(0);
+
+    const unignoring = portfolioReducer(
+      ignoring,
+      portfolioActions.setAssetIgnored({ asset: ETH, ignored: false }),
+    );
+    await processor.onOperations(replay(unignoring));
+    expect(await db.selectFrom("lots").selectAll().execute()).not.toHaveLength(0);
+    expect(await db.selectFrom("acc_ignored_assets").selectAll().execute()).toHaveLength(0);
+  });
+
   it("keeps the checkpoint when nothing changed", async () => {
     const { db, processor } = await harness();
     const wallet = walletDocument();

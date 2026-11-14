@@ -242,6 +242,34 @@ describe("holdings-from-ledger", () => {
     expect(eth?.estimated).toBe(true); // wallet B is mid-backfill
   });
 
+  it("prefers observed token balances over the ledger sum, once read", async () => {
+    // The scan saw USDC arrive but not the swap that spent it.
+    const tokenWallet = doc("stackfolio/wallet-account", {
+      ignored: false,
+      chainId: 1,
+      tokenBalances: {
+        observedAt: "2026-11-10T00:00:00.000Z",
+        balances: [{ asset: USDC, amount: "0" }],
+      },
+      ledger: [event("RECEIVE", USDC, "60339968508")],
+    });
+    get.mockImplementation((id: string) =>
+      Promise.resolve(
+        id === "p1" ? portfolio : id === "b1" ? book : id === "r1" ? registry : tokenWallet,
+      ),
+    );
+    const now = (await run({ walletDocumentIdsJson: JSON.stringify(["w1"]), asOf: "2026-11-11T00:00:00.000Z" })) as {
+      holdings: Array<{ asset: string }>;
+    };
+    expect(now.holdings.find((h) => h.asset === USDC)).toBeUndefined();
+
+    // A snapshot from before the reading still sums the ledger.
+    const before = (await run({ walletDocumentIdsJson: JSON.stringify(["w1"]), asOf: "2026-11-01T00:00:00.000Z" })) as {
+      holdings: Array<{ asset: string; amount: string }>;
+    };
+    expect(before.holdings.find((h) => h.asset === USDC)?.amount).toBe("60339.968508");
+  });
+
   it("skips the native observation for ignored assets", async () => {
     get.mockImplementation((id: string) =>
       Promise.resolve(

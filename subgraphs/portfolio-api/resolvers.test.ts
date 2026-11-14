@@ -161,7 +161,7 @@ function replay(document: TestDocument) {
 
 /** Fold the ledger into drive-1's accounting namespace and hand back the
  * resolvers plus the read context that may see the drive's documents. */
-async function harness() {
+async function harness(opts: { ignoredAssets?: string[] } = {}) {
   const relationalDb = createTestRelationalDb();
   const namespace = AccountingIndex.getNamespace("drive-1");
   const store = await runProcessorMigrations<AccountingIndex>(
@@ -185,7 +185,11 @@ async function harness() {
   );
 
   const wallet = walletDocument();
-  const portfolio = portfolioDocument();
+  const portfolio = (opts.ignoredAssets ?? []).reduce(
+    (document, asset) =>
+      portfolioReducer(document, portfolioActions.setAssetIgnored({ asset, ignored: true })),
+    portfolioDocument(),
+  );
   const registry = registryDocument();
   for (const document of [registry, portfolio, wallet]) {
     await processor.onOperations(replay(document));
@@ -328,6 +332,17 @@ describe("portfolio-api accounting queries", () => {
     };
     expect(unpriced.rows.map((r) => r.eventId)).toEqual(["ev-4"]);
     expect(unpriced.total).toBe(1);
+  });
+
+  it("leaves an ignored asset out of holdings and the not-ignored history", async () => {
+    const { q } = await harness({ ignoredAssets: [ETH] });
+    const holdings = (await q.holdings()) as { holdings: { asset: string }[] };
+    expect(holdings.holdings.some((h) => h.asset === ETH)).toBe(false);
+
+    const shown = (await q.events({ ignored: false })) as { total: number };
+    expect(shown.total).toBe(0);
+    const everything = (await q.events()) as { total: number };
+    expect(everything.total).toBe(4);
   });
 
   it("narrows events to a bundle's wallets", async () => {

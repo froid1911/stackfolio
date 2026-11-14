@@ -318,3 +318,71 @@ describe("import re-decode mode", () => {
     expect(actions.map((a) => a.type)).not.toContain("RECORD_SCAN_PROGRESS");
   });
 });
+
+describe("import-events-to-wallet-account: decoded rows supersede generic twins", () => {
+  const TX = `0x${"b".repeat(64)}`;
+  const USDT = "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7";
+  const priced = { unit: "EUR", price: "0.92", source: "DEFILLAMA", granularity: "DAY", pinnedAt: "2026-11-14T00:00:00.000Z" };
+  const ledgerRow = (id: string, eventIdentifier: string, sequenceIndex: number, over: Record<string, unknown> = {}) => ({
+    id,
+    eventIdentifier,
+    sequenceIndex,
+    timestamp: "2023-06-15T00:00:00.000Z",
+    type: "RECEIVE",
+    subtype: "NONE",
+    asset: USDT,
+    amount: "15000000000",
+    counterparty: "0xpool",
+    ignored: false,
+    notes: null,
+    counterpartyLabel: null,
+    valuation: null,
+    ...over,
+  });
+
+  it("heals a doubled ledger on the next import, moving the price over", async () => {
+    get.mockResolvedValue(
+      walletDoc([
+        ledgerRow(`${TX}-163`, TX, 163, { valuation: priced }),
+        ledgerRow(`${TX}-165-165`, `${TX}-165`, 165, { subtype: "BORROW", counterparty: "aave-v3" }),
+        ledgerRow(`${TX}-2`, TX, 2, { type: "SPEND", subtype: "FEE", asset: "eip155:1/slip44:60", amount: "21000" }),
+      ]),
+    );
+    await run({ ...baseProps, eventsJson: "[]" });
+
+    const [, , actions] = execute.mock.calls[0] as [string, string, { type: string; input: Record<string, unknown> }[]];
+    expect(actions.map((a) => a.type)).toEqual(["REPLACE_EVENTS", "PIN_VALUATIONS"]);
+    expect(actions[0].input).toMatchObject({ remove: [{ id: `${TX}-163`, sequenceIndex: 163 }], add: [] });
+    expect(actions[1].input).toEqual({
+      events: [{ id: `${TX}-165-165`, sequenceIndex: 165, valuation: priced }],
+    });
+  });
+
+  it("imports a decoded leg in place of its held generic twin, carrying the price", async () => {
+    get.mockResolvedValue(walletDoc([ledgerRow(`${TX}-163`, TX, 163, { valuation: priced })]));
+    await run({
+      ...baseProps,
+      eventsJson: JSON.stringify([
+        { ...event(`${TX}-165`, 165), asset: USDT, amount: "15000000000", subtype: "BORROW", counterparty: "aave-v3" },
+        { ...event(TX, 163), asset: USDT, amount: "15000000000" },
+      ]),
+    });
+    const [, , actions] = execute.mock.calls[0] as [string, string, { type: string; input: { remove: unknown[]; add: Record<string, unknown>[] } }[]];
+    expect(actions.map((a) => a.type)).toEqual(["REPLACE_EVENTS"]);
+    expect(actions[0].input.remove).toEqual([{ id: `${TX}-163`, sequenceIndex: 163 }]);
+    expect(actions[0].input.add).toHaveLength(1);
+    expect(actions[0].input.add[0]).toMatchObject({ eventIdentifier: `${TX}-165`, subtype: "BORROW", valuation: priced });
+  });
+
+  it("removes generic twins on the re-decode path too", async () => {
+    get.mockResolvedValue(
+      walletDoc([
+        ledgerRow(`${TX}-163`, TX, 163),
+        ledgerRow(`${TX}-165-165`, `${TX}-165`, 165, { subtype: "BORROW" }),
+      ]),
+    );
+    await run({ ...baseProps, eventsJson: "[]", redecode: true });
+    const [, , actions] = execute.mock.calls[0] as [string, string, { type: string; input: { remove: unknown[] } }[]];
+    expect(actions[0]).toMatchObject({ type: "REPLACE_EVENTS", input: { remove: [{ id: `${TX}-163`, sequenceIndex: 163 }] } });
+  });
+});

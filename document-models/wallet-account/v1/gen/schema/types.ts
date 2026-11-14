@@ -238,8 +238,34 @@ export type SetRedecodeStateInput = {
   state: BackfillPhase;
 };
 
+export type SetTokenBalancesInput = {
+  balances: Array<TokenBalanceInput>;
+  blockNumber: Scalars["Int"]["input"];
+  observedAt: Scalars["DateTime"]["input"];
+};
+
 export type SetWalletXpubInput = {
   xpub?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type TokenBalance = {
+  amount: Scalars["String"]["output"];
+  asset: Scalars["String"]["output"];
+};
+
+export type TokenBalanceInput = {
+  amount: Scalars["String"]["input"];
+  asset: Scalars["String"]["input"];
+};
+
+/**
+ * Token balances read from the chain at one block: every token the ledger has
+ * touched, zeros included, so an observed balance replaces the ledger's net.
+ */
+export type TokenBalances = {
+  balances: Array<TokenBalance>;
+  blockNumber: Scalars["Int"]["output"];
+  observedAt: Scalars["DateTime"]["output"];
 };
 
 export type Valuation = {
@@ -274,4 +300,5 @@ export type WalletAccountState = {
   ledger: Array<LedgerEvent>;
   nativeBalance: Maybe<NativeBalance>;
   redecode: Maybe<BackfillState>;
+  tokenBalances: Maybe<TokenBalances>;
 };

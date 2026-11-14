@@ -77,6 +77,18 @@ export function portfolioAddressRows(
   return rows;
 }
 
+/** The assets the portfolio ignores (spam, unlisted tokens). */
+export function portfolioIgnoredAssetRows(
+  documentId: string,
+  state: unknown,
+): { document_id: string; asset: string }[] {
+  const global = asRecord(unwrapState(state));
+  const assets = global && Array.isArray(global.ignoredAssets) ? global.ignoredAssets : [];
+  return [...new Set(assets.filter((a): a is string => typeof a === "string" && a !== ""))].map(
+    (asset) => ({ document_id: documentId, asset }),
+  );
+}
+
 /** Asset decimals from the registry; without them nothing is priceable. */
 export function registryAssetRows(
   documentId: string,
@@ -132,6 +144,7 @@ export function foldInputHash(
   }>,
   addresses: string[],
   decimals: Array<[string, number]>,
+  ignoredAssets: string[] = [],
 ): { inputHash: string; ctxHash: string } {
   const ordered = [...events].sort(
     (a, b) =>
@@ -150,6 +163,8 @@ export function foldInputHash(
   const context = [
     [...addresses].sort().join(","),
     [...decimals].sort((a, b) => a[0].localeCompare(b[0])).map(([asset, decimals]) => `${asset}:${decimals}`).join(","),
+    // Appended only when present: an unchanged context hashes as before.
+    ...(ignoredAssets.length > 0 ? [[...ignoredAssets].sort().join(",")] : []),
   ].join("|");
   return { inputHash: fnv1a(input), ctxHash: fnv1a(context) };
 }
@@ -157,6 +172,7 @@ export function foldInputHash(
 /** Index rows back into fold events. */
 export function toFoldEvents(
   rows: Array<Omit<EventRow, "document_id">>,
+  ignoredAssets: ReadonlySet<string> = new Set(),
 ): FoldEvent[] {
   return rows.map((row) => ({
     wallet: row.wallet,
@@ -169,7 +185,8 @@ export function toFoldEvents(
     asset: row.asset,
     amount: row.amount,
     counterparty: row.counterparty,
-    ignored: row.ignored,
+    // An ignored asset's events stay out of the books like ignored rows.
+    ignored: row.ignored || ignoredAssets.has(row.asset),
     valuation:
       row.price != null && row.price_unit != null && row.price_source != null
         ? {

@@ -49,6 +49,20 @@ export interface WalletIndex {
   events: EventRow[];
 }
 
+/** The token balances last read from the chain, as stored JSON, or null. */
+function tokenBalancesJson(value: unknown): string | null {
+  const reading = asRecord(value);
+  if (!reading) return null;
+  const balances: { asset: string; amount: string }[] = [];
+  for (const entry of list(reading.balances)) {
+    const balance = asRecord(entry);
+    const asset = str(balance?.asset);
+    const amount = str(balance?.amount);
+    if (asset !== null && amount !== null) balances.push({ asset, amount });
+  }
+  return JSON.stringify(balances);
+}
+
 /** A wallet document's account row and every ledger event. */
 export function walletRows(
   documentId: string,
@@ -100,6 +114,7 @@ export function walletRows(
       backfill_state: str(backfill?.state),
       native_balance: str(native?.amount),
       native_balance_block: num(native?.blockNumber),
+      token_balances: tokenBalancesJson(state.tokenBalances),
     },
     events,
   };

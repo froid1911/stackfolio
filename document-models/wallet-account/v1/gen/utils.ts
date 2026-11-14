@@ -36,6 +36,7 @@ export const initialGlobalState: WalletAccountGlobalState = {
   nativeBalance: null,
   bitcoinXpub: null,
   ensNames: [],
+  tokenBalances: null,
 };
 export const initialLocalState: WalletAccountLocalState = {};
 

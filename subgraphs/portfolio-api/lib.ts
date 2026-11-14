@@ -225,6 +225,29 @@ function pow10(n: number): bigint {
   return 10n ** BigInt(n);
 }
 
+/** An account row's stored token reading as observed balances. */
+export function tokenBalancesOf(
+  address: string,
+  json: string | null,
+): { asset: string; address: string; amount: string }[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (b): b is { asset: string; amount: string } =>
+          typeof b === "object" &&
+          b !== null &&
+          typeof (b as { asset?: unknown }).asset === "string" &&
+          typeof (b as { amount?: unknown }).amount === "string",
+      )
+      .map((b) => ({ asset: b.asset, address, amount: b.amount }));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Fold the drive's ledger events into (asset, wallet) holdings: ignored
  * events drop, each type signs its unsigned amount (SIGN), nets per pair

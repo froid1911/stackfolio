@@ -1,5 +1,5 @@
 import { createAction, Property } from "@powerhousedao/pieces-framework";
-import { planImport } from "../plan.js";
+import { planImport, planSupersede } from "../plan.js";
 import { globalState, toGlobalAction } from "../reactor.js";
 import type { EventRow } from "../types.js";
 
@@ -25,6 +25,9 @@ interface WalletLedgerRow {
   id: string;
   eventIdentifier: string;
   sequenceIndex: number;
+  type: string;
+  asset: string;
+  amount: string;
   ignored: boolean;
   notes: string | null;
   counterpartyLabel: string | null;
@@ -187,11 +190,42 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
     );
 
     const actions = [];
+    // Generic rows a decoded transaction replaces - held ones leave, incoming
+    // ones are not imported - so no transfer is booked twice. A replaced
+    // row's pinned price moves to the decoded row that replaces it.
+    const ledger = global.ledger ?? [];
+    const superseded = planSupersede(ledger, events);
+    const supersededRemove = superseded.remove.map(({ row }) => ({
+      id: row.id,
+      sequenceIndex: row.sequenceIndex,
+    }));
+    const carried = new Map(
+      superseded.remove
+        .filter(({ row }) => row.valuation)
+        .map(({ row, by }) => [`${by.eventIdentifier}#${by.sequenceIndex}`, row.valuation]),
+    );
+    const heldByKey = new Map(ledger.map((row) => [`${row.eventIdentifier}#${row.sequenceIndex}`, row]));
+    // Decoded rows already held keep their own price; one without gets its
+    // twin's.
+    const repins = [...carried]
+      .map(([key, valuation]) => ({ held: heldByKey.get(key), valuation }))
+      .filter(({ held }) => held !== undefined && !held.valuation)
+      .map(({ held, valuation }) => ({ id: held!.id, sequenceIndex: held!.sequenceIndex, valuation }));
+
     if (p.redecode) {
       // The retrofit path: the window's decoded rows replace the held
       // generic ones - review fields carry in the reducer, valuations
       // here - and the redecode cursor, not the backfill one, advances.
-      const { remove, add } = planReplace(global.ledger ?? [], events);
+      const planned = planReplace(ledger, superseded.incoming);
+      const removing = new Set(planned.remove.map((r) => `${r.id}#${r.sequenceIndex}`));
+      const remove = [
+        ...planned.remove,
+        ...supersededRemove.filter((r) => !removing.has(`${r.id}#${r.sequenceIndex}`)),
+      ];
+      const add = planned.add.map((row) => {
+        const valuation = carried.get(`${String(row.eventIdentifier)}#${String(row.sequenceIndex)}`);
+        return valuation && !row.valuation ? { ...row, valuation } : row;
+      });
       if (remove.length > 0 || add.length > 0) {
         actions.push(
           toGlobalAction("REPLACE_EVENTS", {
@@ -208,34 +242,55 @@ export const ethereumImportEventsToWalletAccountAction = createAction({
           nextBlock: p.redecodeNextBlock ?? global.redecode?.nextBlock ?? null,
         }),
       );
+      if (repins.length > 0) {
+        actions.push(toGlobalAction("PIN_VALUATIONS", { events: repins }));
+      }
       await context.reactor.execute(p.walletDocumentId, "main", actions);
       return {
         replaced: add.length,
+        superseded: supersededRemove.length,
         walletDocumentId: p.walletDocumentId,
       };
     }
 
-    const planned = planImport(held, events);
+    const planned = planImport(held, superseded.incoming);
+    const plannedInput = planned.map((row) => {
+      const valuation = carried.get(`${row.eventIdentifier}#${row.sequenceIndex}`);
+      return {
+        id: eventId(row),
+        eventIdentifier: row.eventIdentifier,
+        sequenceIndex: row.sequenceIndex,
+        timestamp: row.timestamp,
+        type: row.type,
+        subtype: row.subtype,
+        asset: row.asset,
+        amount: row.amount,
+        counterparty: row.counterparty || null,
+        notes: row.notes ?? null,
+        ...(valuation ? { valuation } : {}),
+      };
+    });
 
-    if (planned.length > 0) {
+    if (supersededRemove.length > 0) {
+      // Removing and adding in one operation: the ledger never holds both.
+      actions.push(
+        toGlobalAction("REPLACE_EVENTS", {
+          batchId: p.batchId,
+          remove: supersededRemove,
+          add: plannedInput,
+        }),
+      );
+    } else if (planned.length > 0) {
       actions.push(
         toGlobalAction("IMPORT_EVENTS", {
           batchId: p.batchId,
           importedAt: p.importedAt,
-          events: planned.map((row) => ({
-            id: eventId(row),
-            eventIdentifier: row.eventIdentifier,
-            sequenceIndex: row.sequenceIndex,
-            timestamp: row.timestamp,
-            type: row.type,
-            subtype: row.subtype,
-            asset: row.asset,
-            amount: row.amount,
-            counterparty: row.counterparty || null,
-            notes: row.notes ?? null,
-          })),
+          events: plannedInput,
         }),
       );
+    }
+    if (repins.length > 0) {
+      actions.push(toGlobalAction("PIN_VALUATIONS", { events: repins }));
     }
     if (p.scanProgressJson) {
       const progress = parseJsonish(p.scanProgressJson, "scanProgressJson") as {

@@ -29,6 +29,7 @@ type WalletAccountState {
   backfill: BackfillState
   redecode: BackfillState
   nativeBalance: NativeBalance
+  tokenBalances: TokenBalances
   bitcoinXpub: String
   ensNames: [EnsName!]!
 }
@@ -136,6 +137,21 @@ enum BackfillPhase {
   LOGS
   NATIVE
   DONE
+}
+
+"""
+Token balances read from the chain at one block: every token the ledger has
+touched, zeros included, so an observed balance replaces the ledger's net.
+"""
+type TokenBalances {
+  blockNumber: Int!
+  observedAt: DateTime!
+  balances: [TokenBalance!]!
+}
+
+type TokenBalance {
+  asset: String!
+  amount: String!
 }
 
 # account
@@ -287,4 +303,15 @@ input SetRedecodeStateInput {
   state: BackfillPhase!
   startBlock: Int
   nextBlock: Int
+}
+
+input SetTokenBalancesInput {
+  blockNumber: Int!
+  observedAt: DateTime!
+  balances: [TokenBalanceInput!]!
+}
+
+input TokenBalanceInput {
+  asset: String!
+  amount: String!
 }

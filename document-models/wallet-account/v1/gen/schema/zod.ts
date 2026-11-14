@@ -28,7 +28,11 @@ import type {
   SetIgnoredInput,
   SetNativeBalanceInput,
   SetRedecodeStateInput,
+  SetTokenBalancesInput,
   SetWalletXpubInput,
+  TokenBalance,
+  TokenBalanceInput,
+  TokenBalances,
   Valuation,
   ValuationGranularity,
   ValuationInput,
@@ -317,11 +321,47 @@ export function SetRedecodeStateInputSchema(): z.ZodObject<
   });
 }
 
+export function SetTokenBalancesInputSchema(): z.ZodObject<
+  Properties<SetTokenBalancesInput>
+> {
+  return z.object({
+    balances: z.array(z.lazy(() => TokenBalanceInputSchema())),
+    blockNumber: z.number(),
+    observedAt: z.iso.datetime(),
+  });
+}
+
 export function SetWalletXpubInputSchema(): z.ZodObject<
   Properties<SetWalletXpubInput>
 > {
   return z.object({
     xpub: z.string().nullish(),
+  });
+}
+
+export function TokenBalanceSchema(): z.ZodObject<Properties<TokenBalance>> {
+  return z.object({
+    __typename: z.literal("TokenBalance").optional(),
+    amount: z.string(),
+    asset: z.string(),
+  });
+}
+
+export function TokenBalanceInputSchema(): z.ZodObject<
+  Properties<TokenBalanceInput>
+> {
+  return z.object({
+    amount: z.string(),
+    asset: z.string(),
+  });
+}
+
+export function TokenBalancesSchema(): z.ZodObject<Properties<TokenBalances>> {
+  return z.object({
+    __typename: z.literal("TokenBalances").optional(),
+    balances: z.array(z.lazy(() => TokenBalanceSchema())),
+    blockNumber: z.number(),
+    observedAt: z.iso.datetime(),
   });
 }
 
@@ -364,5 +404,6 @@ export function WalletAccountStateSchema(): z.ZodObject<
     ledger: z.array(z.lazy(() => LedgerEventSchema())),
     nativeBalance: z.lazy(() => NativeBalanceSchema().nullish()),
     redecode: z.lazy(() => BackfillStateSchema().nullish()),
+    tokenBalances: z.lazy(() => TokenBalancesSchema().nullish()),
   });
 }

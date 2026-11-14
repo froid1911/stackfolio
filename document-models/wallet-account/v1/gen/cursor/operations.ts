@@ -9,6 +9,7 @@ import type {
   SetBackfillStateAction,
   SetNativeBalanceAction,
   SetRedecodeStateAction,
+  SetTokenBalancesAction,
 } from "./actions.js";
 
 export interface WalletAccountCursorOperations {
@@ -30,6 +31,11 @@ export interface WalletAccountCursorOperations {
   setRedecodeStateOperation: (
     state: WalletAccountGlobalState,
     action: SetRedecodeStateAction,
+    dispatch?: SignalDispatch,
+  ) => void;
+  setTokenBalancesOperation: (
+    state: WalletAccountGlobalState,
+    action: SetTokenBalancesAction,
     dispatch?: SignalDispatch,
   ) => void;
 }

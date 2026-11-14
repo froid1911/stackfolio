@@ -40,7 +40,7 @@ be guessed. Today:
 | Lost, Stolen | Leaves the books FIFO with no gain or loss; listed separately. |
 | Deposit / Withdrawal (own exchange or wallet) | Lots move with cost and acquisition date unchanged. |
 | Collateral out / Collateral in | Not a disposal; the asset stays the holder's with its lots. |
-| Borrowing / Loan repayment | Neither purchase nor sale. Borrowed units are a liability, not a lot; repaying with units bought later consumes those units' lots as a disposal only for the interest part (v1: repayment consumes lots at cost, no gain). |
+| Borrowing / Loan repayment | Neither purchase nor sale, and no income. Borrowed units open a lot at market value (so spending them later has a cost basis); a repayment consumes lots FIFO at cost with no gain or loss. |
 | Liquidation | Sale of the seized collateral at market value. |
 | Fee | Cost of the sale in the same transaction; with no sale (a transfer), the fee units leave the books with no gain. |
 | Margin / Derivatives | Out of scope (§20 EStG); listed separately. |
@@ -57,7 +57,7 @@ lost/stolen units, LP deposits/withdrawals (treated as not a disposal).
 State:
 
 - `categoryRules: [CategoryRule!]!` with `CategoryRule { id: OID!, counterparty: String!` (lower-cased address)`, chainId: Int, direction: CategoryDirection!` (IN, OUT, ANY)`, asset: String, category: TxCategory!, label: String }`.
-- `categoryOverrides: [CategoryOverride!]!` with `CategoryOverride { wallet: String!` (wallet document id)`, eventId: String!, sequenceIndex: Int!, category: TxCategory!, giftCost: String, giftAcquiredAt: DateTime }`.
+- `categoryOverrides: [CategoryOverride!]!` with `CategoryOverride { wallet: String!` (lower-cased wallet address, as the books key wallets)`, eventId: String!, sequenceIndex: Int!, category: TxCategory!, giftCost: String, giftAcquiredAt: DateTime }`.
 - `enum TxCategory` with the categories above in SCREAMING_SNAKE_CASE (TRADE, SPEND, INCOME, STAKING, LENDING_INCOME, MINING, AIRDROP, AIRDROP_NON_TAXABLE, GIFT_IN, GIFT_OUT, DONATION, LOST, STOLEN, DEPOSIT, WITHDRAWAL, COLLATERAL_OUT, COLLATERAL_IN, BORROWING, LOAN_REPAYMENT, LIQUIDATION, FEE, MARGIN).
 
 Operations (module `categories`): ADD_CATEGORY_RULE, UPDATE_CATEGORY_RULE,
@@ -86,6 +86,10 @@ fold, the subgraph and the editor. First match wins:
    - LP_MINT / LP_BURN → COLLATERAL_OUT / COLLATERAL_IN (disputed, flagged);
    - SPAM, APPROVE, NAME_REGISTRATION as today (off the books / FEE for the name cost);
 4. otherwise UNCLASSIFIED.
+
+Rows are grouped by transaction hash for the derived defaults: a decoded leg's
+identifier is `<hash>-<log>`, a generic row's is `<hash>`, and both belong to the
+same transaction.
 
 The result carries its source (`override`, `rule`, `auto`, `unclassified`) for
 the UI badge.

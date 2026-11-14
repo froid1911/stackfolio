@@ -102,6 +102,39 @@ hash, so an edit re-folds. The fold switches from type/subtype sets to the
 category table in section 1. Lots gain `acquired_at` (for the holding period;
 gifts take the giver's date). FOLD_VERSION bumps.
 
+## 2a. Spam and airdrops (decided 2026-11-14)
+
+Measured on the live drive: of 461 ERC-20s, 314 (521 rows, 189 of them fake
+"outgoing" transfers planted for address poisoning, 19 with lookalike names
+such as `ÚЅDС`) were never moved in a transaction the portfolio's own wallet
+sent and have no price anywhere. Real airdrops (ARB, PSP, CVX, ENS, GRT, UNI,
+GTC: about EUR 50k) sit unclassified among them.
+
+- **Signed:** a transaction counts as signed by a wallet when that wallet paid
+  its gas (it carries the wallet's FEE row).
+- **Spam (automatic):** an asset that no wallet of the portfolio ever moved in a
+  signed transaction and that has no price (CoinGecko, DefiLlama or manual) is
+  spam: category `SPAM`, source `auto`; not booked, not in the queue, not in any
+  total. Native assets are never spam.
+- **Spam (by hand):** "Mark as spam" ignores the asset (existing
+  `ignoredAssets`). "Not spam" adds it to a new `trustedAssets` list (ops
+  TRUST_ASSET / UNTRUST_ASSET), which the automatic rule never flags.
+- **Known airdrop claims:** a receipt from a known claim contract
+  (`processors/shared/airdrops.ts`: UNI MerkleDistributor, Arbitrum
+  TokenDistributor, ENS token, ParaSwap PSP, Gitcoin GTC distributors, each
+  verified against the live ledger) is `AIRDROP_NON_TAXABLE` by default.
+- **Default airdrop treatment:** non-taxable, lot at cost 0, acquired on
+  receipt (BMF 10.05.2022: income only where the recipient gave something in
+  return). The user switches any airdrop to `AIRDROP` (income) per transaction
+  or per distributor rule.
+- **Suspected airdrops:** an unsigned receipt with a price, from a counterparty
+  that is not the portfolio's own and not a known protocol, stays
+  `UNCLASSIFIED` but the queue tags its group "suspected airdrop" with one-click
+  choices Airdrop (non-taxable) · Airdrop (income) · Spam.
+- **Other claim-shaped receipts** (signed, receive only, from a contract: reward
+  claims such as Curve gauges or Aavegotchi alchemica) stay `UNCLASSIFIED` and
+  group by paying contract in the queue, where one rule settles each.
+
 ## 3. Review queue (History page)
 
 - A "Needs a type" tab beside "Needs a price": UNCLASSIFIED transactions grouped

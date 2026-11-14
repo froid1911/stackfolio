@@ -62,4 +62,46 @@ describe("accounting migrations", () => {
     const rows = await db.selectFrom("acc_events").selectAll().execute();
     expect(rows).toHaveLength(1);
   });
+
+  it("widens the realized table's source event id", async () => {
+    const db = createTestRelationalDb() as unknown as Kysely<DB>;
+    // The first release's realized table: a varchar(64) source event id
+    // that a tx-log event id overruns, which stopped every refold at the
+    // first such disposal and left pnl_month, income and acc_unpriced empty.
+    await db.schema
+      .createTable("realized")
+      .addColumn("id", "varchar(255)", (col) => col.primaryKey())
+      .addColumn("wallet", "varchar(64)", (col) => col.notNull())
+      .addColumn("asset", "varchar(128)", (col) => col.notNull())
+      .addColumn("timestamp", "varchar(64)", (col) => col.notNull())
+      .addColumn("quantity", "text", (col) => col.notNull())
+      .addColumn("cost", "text", (col) => col.notNull())
+      .addColumn("proceeds", "text", (col) => col.notNull())
+      .addColumn("pnl", "text", (col) => col.notNull())
+      .addColumn("source_event_id", "varchar(64)", (col) => col.notNull())
+      .addColumn("source_seq", "integer", (col) => col.notNull())
+      .addColumn("consumed", "text", (col) => col.notNull())
+      .execute();
+
+    await up(db);
+
+    const longId = `0x${"b".repeat(64)}:log:21000000`;
+    await db
+      .insertInto("realized")
+      .values({
+        id: `${longId}:eth:0`,
+        wallet: "0x1111111111111111111111111111111111111111",
+        asset: "eip155:1/slip44:60",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        quantity: "1",
+        cost: "1",
+        proceeds: "2",
+        pnl: "1",
+        source_event_id: longId,
+        source_seq: 0,
+        consumed: "[]",
+      })
+      .execute();
+    expect(await db.selectFrom("realized").selectAll().execute()).toHaveLength(1);
+  });
 });

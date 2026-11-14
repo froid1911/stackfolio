@@ -4,13 +4,20 @@ import * as z from "zod";
 import type {
   AddAddressInput,
   AddBundleInput,
+  AddCategoryRuleInput,
   AddressEntry,
   AssetValue,
   AssetValueInput,
   AutoSnapshot,
   Bundle,
+  CategoryDirection,
+  CategoryOverride,
+  CategoryOverrideInput,
+  CategoryRule,
+  ClearEventCategoriesInput,
   ClearGrantInput,
   DeleteSnapshotInput,
+  EventKeyInput,
   FixInput,
   GrantInfo,
   IssueInput,
@@ -32,9 +39,11 @@ import type {
   RecordResourcesInput,
   RemoveAddressInput,
   RemoveBundleInput,
+  RemoveCategoryRuleInput,
   RemovePriceOverrideInput,
   SetAddressIgnoredInput,
   SetAssetIgnoredInput,
+  SetEventCategoriesInput,
   SetGrantInput,
   SetPortfolioDetailsInput,
   SetPositionsInput,
@@ -43,8 +52,10 @@ import type {
   SnapshotLiability,
   SnapshotLiabilityInput,
   TakeSnapshotInput,
+  TxCategory,
   UpdateAddressInput,
   UpdateBundleInput,
+  UpdateCategoryRuleInput,
   WalletPositions,
 } from "./types.js";
 
@@ -61,9 +72,36 @@ export const definedNonNullAnySchema = z
   .any()
   .refine((v) => isDefinedNonNullAny(v));
 
+export const CategoryDirectionSchema = z.enum(["ANY", "IN", "OUT"]);
+
 export const IssueSeveritySchema = z.enum(["BLOCKING", "WARNING"]);
 
 export const PositionKindSchema = z.enum(["LP", "SPOT"]);
+
+export const TxCategorySchema = z.enum([
+  "AIRDROP",
+  "AIRDROP_NON_TAXABLE",
+  "BORROWING",
+  "COLLATERAL_IN",
+  "COLLATERAL_OUT",
+  "DEPOSIT",
+  "DONATION",
+  "FEE",
+  "GIFT_IN",
+  "GIFT_OUT",
+  "INCOME",
+  "LENDING_INCOME",
+  "LIQUIDATION",
+  "LOAN_REPAYMENT",
+  "LOST",
+  "MARGIN",
+  "MINING",
+  "SPEND",
+  "STAKING",
+  "STOLEN",
+  "TRADE",
+  "WITHDRAWAL",
+]);
 
 export function AddAddressInputSchema(): z.ZodObject<
   Properties<AddAddressInput>
@@ -85,6 +123,20 @@ export function AddBundleInputSchema(): z.ZodObject<
     addresses: z.array(z.string()),
     id: z.string(),
     name: z.string(),
+  });
+}
+
+export function AddCategoryRuleInputSchema(): z.ZodObject<
+  Properties<AddCategoryRuleInput>
+> {
+  return z.object({
+    asset: z.string().nullish(),
+    category: TxCategorySchema,
+    chainId: z.number().nullish(),
+    counterparty: z.string(),
+    direction: CategoryDirectionSchema,
+    id: z.string(),
+    label: z.string().nullish(),
   });
 }
 
@@ -138,6 +190,54 @@ export function BundleSchema(): z.ZodObject<Properties<Bundle>> {
   });
 }
 
+export function CategoryOverrideSchema(): z.ZodObject<
+  Properties<CategoryOverride>
+> {
+  return z.object({
+    __typename: z.literal("CategoryOverride").optional(),
+    category: TxCategorySchema,
+    eventId: z.string(),
+    giftAcquiredAt: z.iso.datetime().nullish(),
+    giftCost: z.string().nullish(),
+    sequenceIndex: z.number(),
+    wallet: z.string(),
+  });
+}
+
+export function CategoryOverrideInputSchema(): z.ZodObject<
+  Properties<CategoryOverrideInput>
+> {
+  return z.object({
+    category: TxCategorySchema,
+    eventId: z.string(),
+    giftAcquiredAt: z.iso.datetime().nullish(),
+    giftCost: z.string().nullish(),
+    sequenceIndex: z.number(),
+    wallet: z.string(),
+  });
+}
+
+export function CategoryRuleSchema(): z.ZodObject<Properties<CategoryRule>> {
+  return z.object({
+    __typename: z.literal("CategoryRule").optional(),
+    asset: z.string().nullish(),
+    category: TxCategorySchema,
+    chainId: z.number().nullish(),
+    counterparty: z.string(),
+    direction: CategoryDirectionSchema,
+    id: z.string(),
+    label: z.string().nullish(),
+  });
+}
+
+export function ClearEventCategoriesInputSchema(): z.ZodObject<
+  Properties<ClearEventCategoriesInput>
+> {
+  return z.object({
+    events: z.array(z.lazy(() => EventKeyInputSchema())),
+  });
+}
+
 export function ClearGrantInputSchema(): z.ZodObject<
   Properties<ClearGrantInput>
 > {
@@ -151,6 +251,14 @@ export function DeleteSnapshotInputSchema(): z.ZodObject<
 > {
   return z.object({
     id: z.string(),
+  });
+}
+
+export function EventKeyInputSchema(): z.ZodObject<Properties<EventKeyInput>> {
+  return z.object({
+    eventId: z.string(),
+    sequenceIndex: z.number(),
+    wallet: z.string(),
   });
 }
 
@@ -216,6 +324,8 @@ export function PortfolioStateSchema(): z.ZodObject<
     autoSnapshot: z.lazy(() => AutoSnapshotSchema()),
     baseCurrency: z.string(),
     bundles: z.array(z.lazy(() => BundleSchema())),
+    categoryOverrides: z.array(z.lazy(() => CategoryOverrideSchema())),
+    categoryRules: z.array(z.lazy(() => CategoryRuleSchema())),
     grant: z.lazy(() => GrantInfoSchema().nullish()),
     ignoredAssets: z.array(z.string()),
     lastCheck: z.lazy(() => ReconcilerCheckSchema().nullish()),
@@ -339,6 +449,14 @@ export function RemoveBundleInputSchema(): z.ZodObject<
   });
 }
 
+export function RemoveCategoryRuleInputSchema(): z.ZodObject<
+  Properties<RemoveCategoryRuleInput>
+> {
+  return z.object({
+    id: z.string(),
+  });
+}
+
 export function RemovePriceOverrideInputSchema(): z.ZodObject<
   Properties<RemovePriceOverrideInput>
 > {
@@ -362,6 +480,14 @@ export function SetAssetIgnoredInputSchema(): z.ZodObject<
   return z.object({
     asset: z.string(),
     ignored: z.boolean(),
+  });
+}
+
+export function SetEventCategoriesInputSchema(): z.ZodObject<
+  Properties<SetEventCategoriesInput>
+> {
+  return z.object({
+    overrides: z.array(z.lazy(() => CategoryOverrideInputSchema())),
   });
 }
 
@@ -471,6 +597,17 @@ export function UpdateBundleInputSchema(): z.ZodObject<
     addresses: z.array(z.string()).nullish(),
     id: z.string(),
     name: z.string().nullish(),
+  });
+}
+
+export function UpdateCategoryRuleInputSchema(): z.ZodObject<
+  Properties<UpdateCategoryRuleInput>
+> {
+  return z.object({
+    category: TxCategorySchema.nullish(),
+    direction: CategoryDirectionSchema.nullish(),
+    id: z.string(),
+    label: z.string().nullish(),
   });
 }
 

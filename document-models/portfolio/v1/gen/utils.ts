@@ -37,6 +37,8 @@ export const initialGlobalState: PortfolioGlobalState = {
   lastCheck: null,
   grant: null,
   bundles: [],
+  categoryRules: [],
+  categoryOverrides: [],
 };
 export const initialLocalState: PortfolioLocalState = {};
 

@@ -12,6 +12,13 @@ import type {
   RemoveBundleAction,
   UpdateBundleAction,
 } from "./bundles/actions.js";
+import type {
+  AddCategoryRuleAction,
+  ClearEventCategoriesAction,
+  RemoveCategoryRuleAction,
+  SetEventCategoriesAction,
+  UpdateCategoryRuleAction,
+} from "./categories/actions.js";
 import type { SetPortfolioDetailsAction } from "./identity/actions.js";
 import type { SetPositionsAction } from "./positions/actions.js";
 import type {
@@ -32,6 +39,7 @@ import type {
 
 import { portfolioAddressBookOperations } from "../src/reducers/address-book.js";
 import { portfolioBundlesOperations } from "../src/reducers/bundles.js";
+import { portfolioCategoriesOperations } from "../src/reducers/categories.js";
 import { portfolioIdentityOperations } from "../src/reducers/identity.js";
 import { portfolioPositionsOperations } from "../src/reducers/positions.js";
 import { portfolioPricingOperations } from "../src/reducers/pricing.js";
@@ -41,15 +49,19 @@ import { portfolioSnapshotsOperations } from "../src/reducers/snapshots.js";
 import {
   AddAddressInputSchema,
   AddBundleInputSchema,
+  AddCategoryRuleInputSchema,
+  ClearEventCategoriesInputSchema,
   ClearGrantInputSchema,
   DeleteSnapshotInputSchema,
   RecordCheckInputSchema,
   RecordResourcesInputSchema,
   RemoveAddressInputSchema,
   RemoveBundleInputSchema,
+  RemoveCategoryRuleInputSchema,
   RemovePriceOverrideInputSchema,
   SetAddressIgnoredInputSchema,
   SetAssetIgnoredInputSchema,
+  SetEventCategoriesInputSchema,
   SetGrantInputSchema,
   SetPortfolioDetailsInputSchema,
   SetPositionsInputSchema,
@@ -57,6 +69,7 @@ import {
   TakeSnapshotInputSchema,
   UpdateAddressInputSchema,
   UpdateBundleInputSchema,
+  UpdateCategoryRuleInputSchema,
 } from "./schema/zod.js";
 
 const schemaMemo = new Map<() => unknown, unknown>();
@@ -289,6 +302,66 @@ const stateReducer: StateReducer<PortfolioPHState> = (
       portfolioBundlesOperations.removeBundleOperation(
         state.global,
         action as RemoveBundleAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "ADD_CATEGORY_RULE": {
+      memoizedSchema(AddCategoryRuleInputSchema).parse(action.input);
+
+      portfolioCategoriesOperations.addCategoryRuleOperation(
+        state.global,
+        action as AddCategoryRuleAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "UPDATE_CATEGORY_RULE": {
+      memoizedSchema(UpdateCategoryRuleInputSchema).parse(action.input);
+
+      portfolioCategoriesOperations.updateCategoryRuleOperation(
+        state.global,
+        action as UpdateCategoryRuleAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "REMOVE_CATEGORY_RULE": {
+      memoizedSchema(RemoveCategoryRuleInputSchema).parse(action.input);
+
+      portfolioCategoriesOperations.removeCategoryRuleOperation(
+        state.global,
+        action as RemoveCategoryRuleAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "SET_EVENT_CATEGORIES": {
+      memoizedSchema(SetEventCategoriesInputSchema).parse(action.input);
+
+      portfolioCategoriesOperations.setEventCategoriesOperation(
+        state.global,
+        action as SetEventCategoriesAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "CLEAR_EVENT_CATEGORIES": {
+      memoizedSchema(ClearEventCategoriesInputSchema).parse(action.input);
+
+      portfolioCategoriesOperations.clearEventCategoriesOperation(
+        state.global,
+        action as ClearEventCategoriesAction,
         dispatch,
       );
 

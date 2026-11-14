@@ -178,6 +178,7 @@ export default function Editor({ children }: EditorProps) {
           {active === "history" && (
             <TransactionsSection
               driveId={driveId}
+              actions={portfolioActions}
               onOpenEvent={(eventId) =>
                 setSearchParams(
                   { page: "history", detail: `event:${slug(eventId)}` },

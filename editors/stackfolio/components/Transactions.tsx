@@ -1,10 +1,11 @@
 /**
- * The History page: the events table, an "Issues" sub-tab over the
+ * The History page: the events table, a "Needs a type" sub-tab (the review
+ * queue, rendered by the caller), an "Issues" sub-tab over the
  * reconciler's open check issues, CSV export of the filtered set, and
  * rows that open the event detail (the shell owns routing; this
  * component only reports intent through callbacks).
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   AccountRow,
   Asset,
@@ -57,7 +58,7 @@ export function eventsCsv(rows: EventRow[], symbolOf: (asset: string) => string)
   );
 }
 
-export type HistorySub = "events" | "issues";
+export type HistorySub = "events" | "queue" | "issues";
 
 export function Transactions({
   accounts,
@@ -71,6 +72,8 @@ export function Transactions({
   onOpenEvent,
   onOpenAccount,
   needsPriceCount,
+  queueCount,
+  queueView,
 }: {
   accounts: QueryState<AccountRow[]>;
   assets: QueryState<Asset[]>;
@@ -84,6 +87,10 @@ export function Transactions({
   onOpenAccount?: (address: string) => void;
   /** Events the books cannot value yet, across the drive. */
   needsPriceCount?: number;
+  /** Transactions waiting for a tax category. */
+  queueCount?: number;
+  /** The "Needs a type" sub-tab's content. */
+  queueView?: ReactNode;
 }) {
   const [search, setSearch] = useState("");
   const [showIgnored, setShowIgnored] = useState(false);
@@ -109,6 +116,15 @@ export function Transactions({
           </button>
           <button
             type="button"
+            data-sub="queue"
+            onClick={() => onSub?.("queue")}
+            className={`px-3 py-1.5 ${sub === "queue" ? "bg-primary font-medium text-primary-foreground" : "hover:bg-muted"}`}
+          >
+            Needs a type
+            {queueCount ? ` (${queueCount})` : ""}
+          </button>
+          <button
+            type="button"
             data-sub="issues"
             onClick={() => onSub?.("issues")}
             className={`px-3 py-1.5 ${sub === "issues" ? "bg-primary font-medium text-primary-foreground" : "hover:bg-muted"}`}
@@ -117,7 +133,7 @@ export function Transactions({
             {issues?.data && issues.data.length > 0 ? ` (${issues.data.length})` : ""}
           </button>
         </div>
-        {sub === "issues" ? null : (
+        {sub !== "events" ? null : (
           <>
             <div className="flex overflow-hidden rounded-lg border border-border text-xs">
               {TYPE_TABS.map((t) => (
@@ -209,7 +225,9 @@ export function Transactions({
         )}
       </div>
 
-      {sub === "issues" ? (
+      {sub === "queue" ? (
+        queueView
+      ) : sub === "issues" ? (
         <div className="mt-4 overflow-x-auto rounded-xl border border-border">
           <table className="w-full text-left text-xs">
             <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">

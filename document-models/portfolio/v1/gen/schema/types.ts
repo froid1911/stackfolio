@@ -223,6 +223,8 @@ export type PortfolioState = {
   priceOverrides: Array<PriceOverride>;
   resources: Maybe<ManagedResources>;
   snapshots: Array<Snapshot>;
+  /** Assets the user marked as not spam: the automatic spam call never flags them. */
+  trustedAssets: Array<Scalars["String"]["output"]>;
 };
 
 export type PositionAsset = {
@@ -311,6 +313,11 @@ export type SetAddressIgnoredInput = {
 export type SetAssetIgnoredInput = {
   asset: Scalars["String"]["input"];
   ignored: Scalars["Boolean"]["input"];
+};
+
+export type SetAssetTrustedInput = {
+  asset: Scalars["String"]["input"];
+  trusted: Scalars["Boolean"]["input"];
 };
 
 export type SetEventCategoriesInput = {

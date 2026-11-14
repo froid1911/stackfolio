@@ -103,4 +103,15 @@ export const portfolioCategoriesOperations: PortfolioCategoriesOperations = {
     const kept = overrides.filter((o) => !gone.has(keyOf(o)));
     overrides.splice(0, overrides.length, ...kept);
   },
+  setAssetTrustedOperation(state, action) {
+    if (!state.trustedAssets) state.trustedAssets = [];
+    if (action.input.trusted) {
+      if (!state.trustedAssets.includes(action.input.asset))
+        state.trustedAssets.push(action.input.asset);
+    } else {
+      state.trustedAssets = state.trustedAssets.filter(
+        (a) => a !== action.input.asset,
+      );
+    }
+  },
 };

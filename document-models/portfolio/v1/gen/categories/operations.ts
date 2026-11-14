@@ -8,6 +8,7 @@ import type {
   AddCategoryRuleAction,
   ClearEventCategoriesAction,
   RemoveCategoryRuleAction,
+  SetAssetTrustedAction,
   SetEventCategoriesAction,
   UpdateCategoryRuleAction,
 } from "./actions.js";
@@ -36,6 +37,11 @@ export interface PortfolioCategoriesOperations {
   clearEventCategoriesOperation: (
     state: PortfolioGlobalState,
     action: ClearEventCategoriesAction,
+    dispatch?: SignalDispatch,
+  ) => void;
+  setAssetTrustedOperation: (
+    state: PortfolioGlobalState,
+    action: SetAssetTrustedAction,
     dispatch?: SignalDispatch,
   ) => void;
 }

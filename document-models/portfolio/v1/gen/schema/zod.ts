@@ -43,6 +43,7 @@ import type {
   RemovePriceOverrideInput,
   SetAddressIgnoredInput,
   SetAssetIgnoredInput,
+  SetAssetTrustedInput,
   SetEventCategoriesInput,
   SetGrantInput,
   SetPortfolioDetailsInput,
@@ -334,6 +335,7 @@ export function PortfolioStateSchema(): z.ZodObject<
     priceOverrides: z.array(z.lazy(() => PriceOverrideSchema())),
     resources: z.lazy(() => ManagedResourcesSchema().nullish()),
     snapshots: z.array(z.lazy(() => SnapshotSchema())),
+    trustedAssets: z.array(z.string()),
   });
 }
 
@@ -480,6 +482,15 @@ export function SetAssetIgnoredInputSchema(): z.ZodObject<
   return z.object({
     asset: z.string(),
     ignored: z.boolean(),
+  });
+}
+
+export function SetAssetTrustedInputSchema(): z.ZodObject<
+  Properties<SetAssetTrustedInput>
+> {
+  return z.object({
+    asset: z.string(),
+    trusted: z.boolean(),
   });
 }
 

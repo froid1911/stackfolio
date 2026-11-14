@@ -25,6 +25,8 @@ type PortfolioState {
   addresses: [AddressEntry!]!
   priceOverrides: [PriceOverride!]!
   ignoredAssets: [String!]!
+  "Assets the user marked as not spam: the automatic spam call never flags them."
+  trustedAssets: [String!]!
   autoSnapshot: AutoSnapshot!
   snapshots: [Snapshot!]!
   positions: [WalletPositions!]!
@@ -412,4 +414,9 @@ input EventKeyInput {
   wallet: String!
   eventId: String!
   sequenceIndex: Int!
+}
+
+input SetAssetTrustedInput {
+  asset: String!
+  trusted: Boolean!
 }

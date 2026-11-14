@@ -20,10 +20,10 @@ export const documentModel: DocumentModelGlobalState = {
         },
         global: {
           schema:
-            'type PortfolioState {\n  name: String\n  baseCurrency: String!\n  addresses: [AddressEntry!]!\n  priceOverrides: [PriceOverride!]!\n  ignoredAssets: [String!]!\n  autoSnapshot: AutoSnapshot!\n  snapshots: [Snapshot!]!\n  positions: [WalletPositions!]!\n  resources: ManagedResources\n  lastCheck: ReconcilerCheck\n  grant: GrantInfo\n  bundles: [Bundle!]!\n  categoryRules: [CategoryRule!]!\n  categoryOverrides: [CategoryOverride!]!\n}\n\n"""\nA named group of the portfolio\'s wallets: every page can be filtered to it.\n"""\ntype Bundle {\n  id: OID!\n  name: String!\n  addresses: [String!]!\n}\n\ntype AddressEntry {\n  id: OID!\n  address: String!\n  chainId: Int!\n  label: String\n  ensName: String\n  tags: [String!]!\n  ignored: Boolean!\n  addedAt: DateTime!\n}\n\ntype PriceOverride {\n  asset: String!\n  price: String!\n  setAt: DateTime!\n}\n\ntype AutoSnapshot {\n  enabled: Boolean!\n  intervalHours: Int!\n}\n\ntype Snapshot {\n  id: OID!\n  timestamp: DateTime!\n  totalValue: String!\n  netWorth: String\n  liabilities: [SnapshotLiability!]\n  perLocation: [LocationValue!]!\n  perAsset: [AssetValue!]!\n}\n\ntype SnapshotLiability {\n  asset: String!\n  amount: String!\n}\n\ntype LocationValue {\n  location: String!\n  value: String!\n}\n\ntype AssetValue {\n  asset: String!\n  amount: String!\n  value: String!\n}\n\ntype WalletPositions {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionEntry!]!\n}\n\ntype PositionEntry {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAsset!]!\n  note: String\n}\n\ntype PositionAsset {\n  asset: String!\n  amount: String!\n}\n\nenum PositionKind {\n  SPOT\n  LP\n}\n\ntype ManagedResources {\n  connectionId: String!\n  workflowIds: [String!]!\n}\n\ntype ReconcilerCheck {\n  at: DateTime!\n  issues: [ReconcilerIssue!]!\n  fixes: [ReconcilerFix!]!\n}\n\ntype ReconcilerIssue {\n  code: String!\n  severity: IssueSeverity!\n  message: String!\n  accountId: String\n}\n\ntype ReconcilerFix {\n  code: String!\n  message: String!\n  at: DateTime!\n}\n\nenum IssueSeverity {\n  BLOCKING\n  WARNING\n}\n\ntype GrantInfo {\n  id: String!\n  name: String\n  grantedAt: DateTime\n}\n\n"""\nA counterparty rule: every matching transaction gets the category.\n"""\ntype CategoryRule {\n  id: OID!\n  counterparty: String!\n  chainId: Int\n  direction: CategoryDirection!\n  asset: String\n  category: TxCategory!\n  label: String\n}\n\n"""\nOne transaction\'s category, chosen by hand.\n"""\ntype CategoryOverride {\n  wallet: String!\n  eventId: String!\n  sequenceIndex: Int!\n  category: TxCategory!\n  giftCost: String\n  giftAcquiredAt: DateTime\n}\n\nenum CategoryDirection {\n  IN\n  OUT\n  ANY\n}\n\nenum TxCategory {\n  TRADE\n  SPEND\n  INCOME\n  STAKING\n  LENDING_INCOME\n  MINING\n  AIRDROP\n  AIRDROP_NON_TAXABLE\n  GIFT_IN\n  GIFT_OUT\n  DONATION\n  LOST\n  STOLEN\n  DEPOSIT\n  WITHDRAWAL\n  COLLATERAL_OUT\n  COLLATERAL_IN\n  BORROWING\n  LOAN_REPAYMENT\n  LIQUIDATION\n  FEE\n  MARGIN\n}',
+            'type PortfolioState {\n  name: String\n  baseCurrency: String!\n  addresses: [AddressEntry!]!\n  priceOverrides: [PriceOverride!]!\n  ignoredAssets: [String!]!\n  "Assets the user marked as not spam: the automatic spam call never flags them."\n  trustedAssets: [String!]!\n  autoSnapshot: AutoSnapshot!\n  snapshots: [Snapshot!]!\n  positions: [WalletPositions!]!\n  resources: ManagedResources\n  lastCheck: ReconcilerCheck\n  grant: GrantInfo\n  bundles: [Bundle!]!\n  categoryRules: [CategoryRule!]!\n  categoryOverrides: [CategoryOverride!]!\n}\n\n"""\nA named group of the portfolio\'s wallets: every page can be filtered to it.\n"""\ntype Bundle {\n  id: OID!\n  name: String!\n  addresses: [String!]!\n}\n\ntype AddressEntry {\n  id: OID!\n  address: String!\n  chainId: Int!\n  label: String\n  ensName: String\n  tags: [String!]!\n  ignored: Boolean!\n  addedAt: DateTime!\n}\n\ntype PriceOverride {\n  asset: String!\n  price: String!\n  setAt: DateTime!\n}\n\ntype AutoSnapshot {\n  enabled: Boolean!\n  intervalHours: Int!\n}\n\ntype Snapshot {\n  id: OID!\n  timestamp: DateTime!\n  totalValue: String!\n  netWorth: String\n  liabilities: [SnapshotLiability!]\n  perLocation: [LocationValue!]!\n  perAsset: [AssetValue!]!\n}\n\ntype SnapshotLiability {\n  asset: String!\n  amount: String!\n}\n\ntype LocationValue {\n  location: String!\n  value: String!\n}\n\ntype AssetValue {\n  asset: String!\n  amount: String!\n  value: String!\n}\n\ntype WalletPositions {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionEntry!]!\n}\n\ntype PositionEntry {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAsset!]!\n  note: String\n}\n\ntype PositionAsset {\n  asset: String!\n  amount: String!\n}\n\nenum PositionKind {\n  SPOT\n  LP\n}\n\ntype ManagedResources {\n  connectionId: String!\n  workflowIds: [String!]!\n}\n\ntype ReconcilerCheck {\n  at: DateTime!\n  issues: [ReconcilerIssue!]!\n  fixes: [ReconcilerFix!]!\n}\n\ntype ReconcilerIssue {\n  code: String!\n  severity: IssueSeverity!\n  message: String!\n  accountId: String\n}\n\ntype ReconcilerFix {\n  code: String!\n  message: String!\n  at: DateTime!\n}\n\nenum IssueSeverity {\n  BLOCKING\n  WARNING\n}\n\ntype GrantInfo {\n  id: String!\n  name: String\n  grantedAt: DateTime\n}\n\n"""\nA counterparty rule: every matching transaction gets the category.\n"""\ntype CategoryRule {\n  id: OID!\n  counterparty: String!\n  chainId: Int\n  direction: CategoryDirection!\n  asset: String\n  category: TxCategory!\n  label: String\n}\n\n"""\nOne transaction\'s category, chosen by hand.\n"""\ntype CategoryOverride {\n  wallet: String!\n  eventId: String!\n  sequenceIndex: Int!\n  category: TxCategory!\n  giftCost: String\n  giftAcquiredAt: DateTime\n}\n\nenum CategoryDirection {\n  IN\n  OUT\n  ANY\n}\n\nenum TxCategory {\n  TRADE\n  SPEND\n  INCOME\n  STAKING\n  LENDING_INCOME\n  MINING\n  AIRDROP\n  AIRDROP_NON_TAXABLE\n  GIFT_IN\n  GIFT_OUT\n  DONATION\n  LOST\n  STOLEN\n  DEPOSIT\n  WITHDRAWAL\n  COLLATERAL_OUT\n  COLLATERAL_IN\n  BORROWING\n  LOAN_REPAYMENT\n  LIQUIDATION\n  FEE\n  MARGIN\n}',
           examples: [],
           initialValue:
-            '{"name": null, "baseCurrency": "EUR", "addresses": [], "priceOverrides": [], "ignoredAssets": [], "autoSnapshot": {"enabled": false, "intervalHours": 24}, "snapshots": [], "positions": [], "resources": null, "lastCheck": null, "grant": null, "bundles": [], "categoryRules": [], "categoryOverrides": []}',
+            '{"name": null, "baseCurrency": "EUR", "addresses": [], "priceOverrides": [], "ignoredAssets": [], "trustedAssets": [], "autoSnapshot": {"enabled": false, "intervalHours": 24}, "snapshots": [], "positions": [], "resources": null, "lastCheck": null, "grant": null, "bundles": [], "categoryRules": [], "categoryOverrides": []}',
         },
       },
       modules: [
@@ -398,17 +398,17 @@ export const documentModel: DocumentModelGlobalState = {
                 },
                 {
                   id: "bc5468f8-9fec-411c-a8c3-7dd500b2479c",
-                  name: "DuplicateBundleNameError",
                   code: "DUPLICATE_BUNDLE_NAME",
-                  description: "Another bundle already has this name",
+                  name: "DuplicateBundleNameError",
                   template: "",
+                  description: "Another bundle already has this name",
                 },
                 {
                   id: "2cdd722d-689e-470c-9702-c441a5858d76",
-                  name: "UnknownBundleAddressError",
                   code: "UNKNOWN_BUNDLE_ADDRESS",
-                  description: "The address is not in the portfolio",
+                  name: "UnknownBundleAddressError",
                   template: "",
+                  description: "The address is not in the portfolio",
                 },
               ],
               schema:
@@ -422,23 +422,23 @@ export const documentModel: DocumentModelGlobalState = {
             {
               id: "d62fe1c8-7ea6-4421-914d-4e66ef305894",
               name: "REMOVE_BUNDLE",
-              description:
-                "Delete a bundle; its wallets stay in the portfolio.",
-              schema: "input RemoveBundleInput {\n  id: OID!\n}",
-              template: "Delete a bundle; its wallets stay in the portfolio.",
-              reducer:
-                "if (!state.bundles) state.bundles = [];\nconst index = state.bundles.findIndex((b) => b.id === action.input.id);\nif (index === -1) throw new BundleNotFoundError(`Bundle ${action.input.id} does not exist`);\nstate.bundles.splice(index, 1);",
+              scope: "global",
               errors: [
                 {
                   id: "02d19fc4-c099-4b19-a18b-7154018ec905",
-                  name: "BundleNotFoundError",
                   code: "BUNDLE_NOT_FOUND",
-                  description: "No bundle has this id",
+                  name: "BundleNotFoundError",
                   template: "",
+                  description: "No bundle has this id",
                 },
               ],
+              schema: "input RemoveBundleInput {\n  id: OID!\n}",
+              reducer:
+                "if (!state.bundles) state.bundles = [];\nconst index = state.bundles.findIndex((b) => b.id === action.input.id);\nif (index === -1) throw new BundleNotFoundError(`Bundle ${action.input.id} does not exist`);\nstate.bundles.splice(index, 1);",
               examples: [],
-              scope: "global",
+              template: "Delete a bundle; its wallets stay in the portfolio.",
+              description:
+                "Delete a bundle; its wallets stay in the portfolio.",
             },
           ],
           description: "Named groups of wallets the views filter by.",
@@ -446,8 +446,6 @@ export const documentModel: DocumentModelGlobalState = {
         {
           id: "mod-categories",
           name: "categories",
-          description:
-            "Tax categories: counterparty rules and per-transaction overrides.",
           operations: [
             {
               id: "op-add-category-rule",
@@ -552,7 +550,22 @@ export const documentModel: DocumentModelGlobalState = {
               examples: [],
               scope: "global",
             },
+            {
+              id: "op-set-asset-trusted",
+              name: "SET_ASSET_TRUSTED",
+              description: "Mark an asset as not spam, or take that back.",
+              schema:
+                "input SetAssetTrustedInput {\n  asset: String!\n  trusted: Boolean!\n}",
+              template: "Mark an asset as not spam, or take that back.",
+              reducer:
+                "if (!state.trustedAssets) state.trustedAssets = [];\nif (action.input.trusted) {\n  if (!state.trustedAssets.includes(action.input.asset)) state.trustedAssets.push(action.input.asset);\n} else {\n  state.trustedAssets = state.trustedAssets.filter((a) => a !== action.input.asset);\n}",
+              errors: [],
+              examples: [],
+              scope: "global",
+            },
           ],
+          description:
+            "Tax categories: counterparty rules and per-transaction overrides.",
         },
       ],
       version: 1,

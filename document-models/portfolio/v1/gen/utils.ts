@@ -30,6 +30,7 @@ export const initialGlobalState: PortfolioGlobalState = {
   addresses: [],
   priceOverrides: [],
   ignoredAssets: [],
+  trustedAssets: [],
   autoSnapshot: { enabled: false, intervalHours: 24 },
   snapshots: [],
   positions: [],

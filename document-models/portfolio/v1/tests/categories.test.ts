@@ -3,6 +3,7 @@ import {
   clearEventCategories,
   reducer,
   removeCategoryRule,
+  setAssetTrusted,
   setEventCategories,
   updateCategoryRule,
   utils,
@@ -188,5 +189,17 @@ describe("CategoriesOperations", () => {
     );
     expect(lastError(doc)).toBeUndefined();
     expect(doc.state.global.categoryOverrides).toEqual([]);
+  });
+
+  it("trusts and untrusts an asset once, old documents included", () => {
+    const old = utils.createDocument();
+    delete (old.state.global as { trustedAssets?: unknown }).trustedAssets;
+    const asset = "eip155:137/erc20:0x9e2d266d6c90f6c0d80a88159b15958f7135b8af";
+    let doc = reducer(old, setAssetTrusted({ asset, trusted: true }));
+    doc = reducer(doc, setAssetTrusted({ asset, trusted: true }));
+    expect(lastError(doc)).toBeUndefined();
+    expect(doc.state.global.trustedAssets).toEqual([asset]);
+    doc = reducer(doc, setAssetTrusted({ asset, trusted: false }));
+    expect(doc.state.global.trustedAssets).toEqual([]);
   });
 });

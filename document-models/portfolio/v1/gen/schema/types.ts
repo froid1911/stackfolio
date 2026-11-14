@@ -77,6 +77,16 @@ export type AddBundleInput = {
   name: Scalars["String"]["input"];
 };
 
+export type AddCategoryRuleInput = {
+  asset?: InputMaybe<Scalars["String"]["input"]>;
+  category: TxCategory;
+  chainId?: InputMaybe<Scalars["Int"]["input"]>;
+  counterparty: Scalars["String"]["input"];
+  direction: CategoryDirection;
+  id: Scalars["OID"]["input"];
+  label?: InputMaybe<Scalars["String"]["input"]>;
+};
+
 export type AddressEntry = {
   addedAt: Scalars["DateTime"]["output"];
   address: Scalars["String"]["output"];
@@ -112,12 +122,54 @@ export type Bundle = {
   name: Scalars["String"]["output"];
 };
 
+export type CategoryDirection = "ANY" | "IN" | "OUT";
+
+/** One transaction's category, chosen by hand. */
+export type CategoryOverride = {
+  category: TxCategory;
+  eventId: Scalars["String"]["output"];
+  giftAcquiredAt: Maybe<Scalars["DateTime"]["output"]>;
+  giftCost: Maybe<Scalars["String"]["output"]>;
+  sequenceIndex: Scalars["Int"]["output"];
+  wallet: Scalars["String"]["output"];
+};
+
+export type CategoryOverrideInput = {
+  category: TxCategory;
+  eventId: Scalars["String"]["input"];
+  giftAcquiredAt?: InputMaybe<Scalars["DateTime"]["input"]>;
+  giftCost?: InputMaybe<Scalars["String"]["input"]>;
+  sequenceIndex: Scalars["Int"]["input"];
+  wallet: Scalars["String"]["input"];
+};
+
+/** A counterparty rule: every matching transaction gets the category. */
+export type CategoryRule = {
+  asset: Maybe<Scalars["String"]["output"]>;
+  category: TxCategory;
+  chainId: Maybe<Scalars["Int"]["output"]>;
+  counterparty: Scalars["String"]["output"];
+  direction: CategoryDirection;
+  id: Scalars["OID"]["output"];
+  label: Maybe<Scalars["String"]["output"]>;
+};
+
+export type ClearEventCategoriesInput = {
+  events: Array<EventKeyInput>;
+};
+
 export type ClearGrantInput = {
   _empty?: InputMaybe<Scalars["Boolean"]["input"]>;
 };
 
 export type DeleteSnapshotInput = {
   id: Scalars["OID"]["input"];
+};
+
+export type EventKeyInput = {
+  eventId: Scalars["String"]["input"];
+  sequenceIndex: Scalars["Int"]["input"];
+  wallet: Scalars["String"]["input"];
 };
 
 export type FixInput = {
@@ -161,6 +213,8 @@ export type PortfolioState = {
   autoSnapshot: AutoSnapshot;
   baseCurrency: Scalars["String"]["output"];
   bundles: Array<Bundle>;
+  categoryOverrides: Array<CategoryOverride>;
+  categoryRules: Array<CategoryRule>;
   grant: Maybe<GrantInfo>;
   ignoredAssets: Array<Scalars["String"]["output"]>;
   lastCheck: Maybe<ReconcilerCheck>;
@@ -241,6 +295,10 @@ export type RemoveBundleInput = {
   id: Scalars["OID"]["input"];
 };
 
+export type RemoveCategoryRuleInput = {
+  id: Scalars["OID"]["input"];
+};
+
 export type RemovePriceOverrideInput = {
   asset: Scalars["String"]["input"];
 };
@@ -253,6 +311,10 @@ export type SetAddressIgnoredInput = {
 export type SetAssetIgnoredInput = {
   asset: Scalars["String"]["input"];
   ignored: Scalars["Boolean"]["input"];
+};
+
+export type SetEventCategoriesInput = {
+  overrides: Array<CategoryOverrideInput>;
 };
 
 export type SetGrantInput = {
@@ -311,6 +373,30 @@ export type TakeSnapshotInput = {
   totalValue: Scalars["String"]["input"];
 };
 
+export type TxCategory =
+  | "AIRDROP"
+  | "AIRDROP_NON_TAXABLE"
+  | "BORROWING"
+  | "COLLATERAL_IN"
+  | "COLLATERAL_OUT"
+  | "DEPOSIT"
+  | "DONATION"
+  | "FEE"
+  | "GIFT_IN"
+  | "GIFT_OUT"
+  | "INCOME"
+  | "LENDING_INCOME"
+  | "LIQUIDATION"
+  | "LOAN_REPAYMENT"
+  | "LOST"
+  | "MARGIN"
+  | "MINING"
+  | "SPEND"
+  | "STAKING"
+  | "STOLEN"
+  | "TRADE"
+  | "WITHDRAWAL";
+
 export type UpdateAddressInput = {
   ensName?: InputMaybe<Scalars["String"]["input"]>;
   id: Scalars["OID"]["input"];
@@ -322,6 +408,13 @@ export type UpdateBundleInput = {
   addresses?: InputMaybe<Array<Scalars["String"]["input"]>>;
   id: Scalars["OID"]["input"];
   name?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type UpdateCategoryRuleInput = {
+  category?: InputMaybe<TxCategory>;
+  direction?: InputMaybe<CategoryDirection>;
+  id: Scalars["OID"]["input"];
+  label?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type WalletPositions = {

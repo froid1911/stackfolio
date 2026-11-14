@@ -64,7 +64,7 @@ function walletDocument() {
           subtype: "NONE",
           asset: ETH,
           amount: "2000000000000000000",
-          counterparty: "0xfeed",
+          counterparty: "uniswap-v2",
           sequenceIndex: 0,
           valuation: price("2000"),
         },
@@ -76,7 +76,7 @@ function walletDocument() {
           subtype: "NONE",
           asset: ETH,
           amount: "1000000000000000000",
-          counterparty: "0xfeed",
+          counterparty: "uniswap-v2",
           sequenceIndex: 0,
           valuation: price("3000"),
         },
@@ -99,7 +99,7 @@ function walletDocument() {
           subtype: "NONE",
           asset: ETH,
           amount: "250000000000000000",
-          counterparty: "0xfeed",
+          counterparty: "uniswap-v2",
           sequenceIndex: 0,
         },
       ],
@@ -285,7 +285,7 @@ describe("portfolio-api accounting queries", () => {
     expect(await q.incomeByMonth()).toEqual([
       {
         wallet: W1,
-        bucket: "BLOCK_PRODUCTION",
+        bucket: "STAKING",
         month: "2026-03",
         amount: "15000000000",
       },
@@ -332,6 +332,25 @@ describe("portfolio-api accounting queries", () => {
     };
     expect(unpriced.rows.map((r) => r.eventId)).toEqual(["ev-4"]);
     expect(unpriced.total).toBe(1);
+  });
+
+  it("hands each event its tax category, and filters by it", async () => {
+    const { q } = await harness();
+    const page = (await q.events()) as {
+      rows: { eventId: string; category: string | null; categorySource: string | null }[];
+    };
+    const byId = new Map(page.rows.map((r) => [r.eventId, r]));
+    expect(byId.get("ev-2")).toMatchObject({ category: "TRADE", categorySource: "auto" });
+    expect(byId.get("ev-3")).toMatchObject({ category: "STAKING", categorySource: "auto" });
+
+    const staking = (await q.events({ categories: ["STAKING"] })) as {
+      rows: { eventId: string }[];
+      total: number;
+    };
+    expect(staking.rows.map((r) => r.eventId)).toEqual(["ev-3"]);
+    expect(staking.total).toBe(1);
+    const none = (await q.events({ categories: ["UNCLASSIFIED"] })) as { total: number };
+    expect(none.total).toBe(0);
   });
 
   it("leaves an ignored asset out of holdings and the not-ignored history", async () => {

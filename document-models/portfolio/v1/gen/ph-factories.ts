@@ -27,6 +27,8 @@ export function defaultGlobalState(): PortfolioGlobalState {
     lastCheck: null,
     grant: null,
     bundles: [],
+    categoryRules: [],
+    categoryOverrides: [],
   };
 }
 

@@ -16,9 +16,9 @@
           "initialValue": ""
         },
         "global": {
-          "schema": "type PortfolioState {\n  name: String\n  baseCurrency: String!\n  addresses: [AddressEntry!]!\n  priceOverrides: [PriceOverride!]!\n  ignoredAssets: [String!]!\n  autoSnapshot: AutoSnapshot!\n  snapshots: [Snapshot!]!\n  positions: [WalletPositions!]!\n  resources: ManagedResources\n  lastCheck: ReconcilerCheck\n  grant: GrantInfo\n  bundles: [Bundle!]!\n}\n\n\"\"\"\nA named group of the portfolio's wallets: every page can be filtered to it.\n\"\"\"\ntype Bundle {\n  id: OID!\n  name: String!\n  addresses: [String!]!\n}\n\ntype AddressEntry {\n  id: OID!\n  address: String!\n  chainId: Int!\n  label: String\n  ensName: String\n  tags: [String!]!\n  ignored: Boolean!\n  addedAt: DateTime!\n}\n\ntype PriceOverride {\n  asset: String!\n  price: String!\n  setAt: DateTime!\n}\n\ntype AutoSnapshot {\n  enabled: Boolean!\n  intervalHours: Int!\n}\n\ntype Snapshot {\n  id: OID!\n  timestamp: DateTime!\n  totalValue: String!\n  netWorth: String\n  liabilities: [SnapshotLiability!]\n  perLocation: [LocationValue!]!\n  perAsset: [AssetValue!]!\n}\n\ntype SnapshotLiability {\n  asset: String!\n  amount: String!\n}\n\ntype LocationValue {\n  location: String!\n  value: String!\n}\n\ntype AssetValue {\n  asset: String!\n  amount: String!\n  value: String!\n}\n\ntype WalletPositions {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionEntry!]!\n}\n\ntype PositionEntry {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAsset!]!\n  note: String\n}\n\ntype PositionAsset {\n  asset: String!\n  amount: String!\n}\n\nenum PositionKind {\n  SPOT\n  LP\n}\n\ntype ManagedResources {\n  connectionId: String!\n  workflowIds: [String!]!\n}\n\ntype ReconcilerCheck {\n  at: DateTime!\n  issues: [ReconcilerIssue!]!\n  fixes: [ReconcilerFix!]!\n}\n\ntype ReconcilerIssue {\n  code: String!\n  severity: IssueSeverity!\n  message: String!\n  accountId: String\n}\n\ntype ReconcilerFix {\n  code: String!\n  message: String!\n  at: DateTime!\n}\n\nenum IssueSeverity {\n  BLOCKING\n  WARNING\n}\n\ntype GrantInfo {\n  id: String!\n  name: String\n  grantedAt: DateTime\n}",
+          "schema": "type PortfolioState {\n  name: String\n  baseCurrency: String!\n  addresses: [AddressEntry!]!\n  priceOverrides: [PriceOverride!]!\n  ignoredAssets: [String!]!\n  autoSnapshot: AutoSnapshot!\n  snapshots: [Snapshot!]!\n  positions: [WalletPositions!]!\n  resources: ManagedResources\n  lastCheck: ReconcilerCheck\n  grant: GrantInfo\n  bundles: [Bundle!]!\n  categoryRules: [CategoryRule!]!\n  categoryOverrides: [CategoryOverride!]!\n}\n\n\"\"\"\nA named group of the portfolio's wallets: every page can be filtered to it.\n\"\"\"\ntype Bundle {\n  id: OID!\n  name: String!\n  addresses: [String!]!\n}\n\ntype AddressEntry {\n  id: OID!\n  address: String!\n  chainId: Int!\n  label: String\n  ensName: String\n  tags: [String!]!\n  ignored: Boolean!\n  addedAt: DateTime!\n}\n\ntype PriceOverride {\n  asset: String!\n  price: String!\n  setAt: DateTime!\n}\n\ntype AutoSnapshot {\n  enabled: Boolean!\n  intervalHours: Int!\n}\n\ntype Snapshot {\n  id: OID!\n  timestamp: DateTime!\n  totalValue: String!\n  netWorth: String\n  liabilities: [SnapshotLiability!]\n  perLocation: [LocationValue!]!\n  perAsset: [AssetValue!]!\n}\n\ntype SnapshotLiability {\n  asset: String!\n  amount: String!\n}\n\ntype LocationValue {\n  location: String!\n  value: String!\n}\n\ntype AssetValue {\n  asset: String!\n  amount: String!\n  value: String!\n}\n\ntype WalletPositions {\n  wallet: String!\n  chainId: Int!\n  fetchedAt: DateTime!\n  positions: [PositionEntry!]!\n}\n\ntype PositionEntry {\n  protocol: String!\n  kind: PositionKind!\n  assets: [PositionAsset!]!\n  note: String\n}\n\ntype PositionAsset {\n  asset: String!\n  amount: String!\n}\n\nenum PositionKind {\n  SPOT\n  LP\n}\n\ntype ManagedResources {\n  connectionId: String!\n  workflowIds: [String!]!\n}\n\ntype ReconcilerCheck {\n  at: DateTime!\n  issues: [ReconcilerIssue!]!\n  fixes: [ReconcilerFix!]!\n}\n\ntype ReconcilerIssue {\n  code: String!\n  severity: IssueSeverity!\n  message: String!\n  accountId: String\n}\n\ntype ReconcilerFix {\n  code: String!\n  message: String!\n  at: DateTime!\n}\n\nenum IssueSeverity {\n  BLOCKING\n  WARNING\n}\n\ntype GrantInfo {\n  id: String!\n  name: String\n  grantedAt: DateTime\n}\n\n\"\"\"\nA counterparty rule: every matching transaction gets the category.\n\"\"\"\ntype CategoryRule {\n  id: OID!\n  counterparty: String!\n  chainId: Int\n  direction: CategoryDirection!\n  asset: String\n  category: TxCategory!\n  label: String\n}\n\n\"\"\"\nOne transaction's category, chosen by hand.\n\"\"\"\ntype CategoryOverride {\n  wallet: String!\n  eventId: String!\n  sequenceIndex: Int!\n  category: TxCategory!\n  giftCost: String\n  giftAcquiredAt: DateTime\n}\n\nenum CategoryDirection {\n  IN\n  OUT\n  ANY\n}\n\nenum TxCategory {\n  TRADE\n  SPEND\n  INCOME\n  STAKING\n  LENDING_INCOME\n  MINING\n  AIRDROP\n  AIRDROP_NON_TAXABLE\n  GIFT_IN\n  GIFT_OUT\n  DONATION\n  LOST\n  STOLEN\n  DEPOSIT\n  WITHDRAWAL\n  COLLATERAL_OUT\n  COLLATERAL_IN\n  BORROWING\n  LOAN_REPAYMENT\n  LIQUIDATION\n  FEE\n  MARGIN\n}",
           "examples": [],
-          "initialValue": "{\"name\": null, \"baseCurrency\": \"EUR\", \"addresses\": [], \"priceOverrides\": [], \"ignoredAssets\": [], \"autoSnapshot\": {\"enabled\": false, \"intervalHours\": 24}, \"snapshots\": [], \"positions\": [], \"resources\": null, \"lastCheck\": null, \"grant\": null, \"bundles\": []}"
+          "initialValue": "{\"name\": null, \"baseCurrency\": \"EUR\", \"addresses\": [], \"priceOverrides\": [], \"ignoredAssets\": [], \"autoSnapshot\": {\"enabled\": false, \"intervalHours\": 24}, \"snapshots\": [], \"positions\": [], \"resources\": null, \"lastCheck\": null, \"grant\": null, \"bundles\": [], \"categoryRules\": [], \"categoryOverrides\": []}"
         }
       },
       "modules": [
@@ -310,62 +310,58 @@
         {
           "id": "3328b480-9be9-41fa-99de-8c7bb6da577b",
           "name": "bundles",
-          "description": "Named groups of wallets the views filter by.",
           "operations": [
             {
               "id": "565b98bc-f8a2-452c-aed6-abf368414d60",
               "name": "ADD_BUNDLE",
-              "description": "Group wallets under a name.",
-              "schema": "input AddBundleInput {\n  id: OID!\n  name: String!\n  addresses: [String!]!\n}",
-              "template": "Group wallets under a name.",
-              "reducer": "if (!state.bundles) state.bundles = [];\nconst name = action.input.name.trim();\nif (!name) throw new EmptyBundleError(\"A bundle needs a name\");\nif (state.bundles.some((b) => b.name.toLowerCase() === name.toLowerCase())) {\n  throw new DuplicateBundleNameError(`A bundle named ${name} exists`);\n}\nconst addresses = [...new Set(action.input.addresses.map((a) => a.toLowerCase()))];\nif (addresses.length === 0) throw new EmptyBundleError(\"A bundle needs at least one wallet\");\nconst known = new Set(state.addresses.map((a) => a.address));\nconst unknown = addresses.find((a) => !known.has(a));\nif (unknown) throw new UnknownBundleAddressError(`${unknown} is not in the portfolio`);\nstate.bundles.push({ id: action.input.id, name, addresses });",
+              "scope": "global",
               "errors": [
                 {
                   "id": "b20b3a2b-10b9-4be4-aa8c-196fde89a99a",
-                  "name": "EmptyBundleError",
                   "code": "EMPTY_BUNDLE",
-                  "description": "A bundle needs a name and at least one wallet",
-                  "template": ""
+                  "name": "EmptyBundleError",
+                  "template": "",
+                  "description": "A bundle needs a name and at least one wallet"
                 },
                 {
                   "id": "6b9b0c34-47c1-4da3-b1bf-81c9622f8ed2",
-                  "name": "DuplicateBundleNameError",
                   "code": "DUPLICATE_BUNDLE_NAME",
-                  "description": "Another bundle already has this name",
-                  "template": ""
+                  "name": "DuplicateBundleNameError",
+                  "template": "",
+                  "description": "Another bundle already has this name"
                 },
                 {
                   "id": "425b3d1a-bb05-4267-848b-5ce5e58c9642",
-                  "name": "UnknownBundleAddressError",
                   "code": "UNKNOWN_BUNDLE_ADDRESS",
-                  "description": "The address is not in the portfolio",
-                  "template": ""
+                  "name": "UnknownBundleAddressError",
+                  "template": "",
+                  "description": "The address is not in the portfolio"
                 }
               ],
+              "schema": "input AddBundleInput {\n  id: OID!\n  name: String!\n  addresses: [String!]!\n}",
+              "reducer": "if (!state.bundles) state.bundles = [];\nconst name = action.input.name.trim();\nif (!name) throw new EmptyBundleError(\"A bundle needs a name\");\nif (state.bundles.some((b) => b.name.toLowerCase() === name.toLowerCase())) {\n  throw new DuplicateBundleNameError(`A bundle named ${name} exists`);\n}\nconst addresses = [...new Set(action.input.addresses.map((a) => a.toLowerCase()))];\nif (addresses.length === 0) throw new EmptyBundleError(\"A bundle needs at least one wallet\");\nconst known = new Set(state.addresses.map((a) => a.address));\nconst unknown = addresses.find((a) => !known.has(a));\nif (unknown) throw new UnknownBundleAddressError(`${unknown} is not in the portfolio`);\nstate.bundles.push({ id: action.input.id, name, addresses });",
               "examples": [],
-              "scope": "global"
+              "template": "Group wallets under a name.",
+              "description": "Group wallets under a name."
             },
             {
               "id": "e457e404-265a-4351-ba46-88e4e0a2d293",
               "name": "UPDATE_BUNDLE",
-              "description": "Rename a bundle or change its wallets.",
-              "schema": "input UpdateBundleInput {\n  id: OID!\n  name: String\n  addresses: [String!]\n}",
-              "template": "Rename a bundle or change its wallets.",
-              "reducer": "if (!state.bundles) state.bundles = [];\nconst bundle = state.bundles.find((b) => b.id === action.input.id);\nif (!bundle) throw new BundleNotFoundError(`Bundle ${action.input.id} does not exist`);\nif (action.input.name != null) {\n  const name = action.input.name.trim();\n  if (!name) throw new EmptyBundleError(\"A bundle needs a name\");\n  if (state.bundles.some((b) => b.id !== bundle.id && b.name.toLowerCase() === name.toLowerCase())) {\n    throw new DuplicateBundleNameError(`A bundle named ${name} exists`);\n  }\n  bundle.name = name;\n}\nif (action.input.addresses != null) {\n  const addresses = [...new Set(action.input.addresses.map((a) => a.toLowerCase()))];\n  if (addresses.length === 0) throw new EmptyBundleError(\"A bundle needs at least one wallet\");\n  const known = new Set(state.addresses.map((a) => a.address));\n  const unknown = addresses.find((a) => !known.has(a));\n  if (unknown) throw new UnknownBundleAddressError(`${unknown} is not in the portfolio`);\n  bundle.addresses = addresses;\n}",
+              "scope": "global",
               "errors": [
                 {
                   "id": "3e245a4b-4da3-41ef-8d95-794d54cf1af2",
-                  "name": "BundleNotFoundError",
                   "code": "BUNDLE_NOT_FOUND",
-                  "description": "No bundle has this id",
-                  "template": ""
+                  "name": "BundleNotFoundError",
+                  "template": "",
+                  "description": "No bundle has this id"
                 },
                 {
                   "id": "5772e6ad-ebda-4e22-a7f0-66be2fdc1f16",
-                  "name": "EmptyBundleError",
                   "code": "EMPTY_BUNDLE",
-                  "description": "A bundle needs a name and at least one wallet",
-                  "template": ""
+                  "name": "EmptyBundleError",
+                  "template": "",
+                  "description": "A bundle needs a name and at least one wallet"
                 },
                 {
                   "id": "bc5468f8-9fec-411c-a8c3-7dd500b2479c",
@@ -382,8 +378,11 @@
                   "template": ""
                 }
               ],
+              "schema": "input UpdateBundleInput {\n  id: OID!\n  name: String\n  addresses: [String!]\n}",
+              "reducer": "if (!state.bundles) state.bundles = [];\nconst bundle = state.bundles.find((b) => b.id === action.input.id);\nif (!bundle) throw new BundleNotFoundError(`Bundle ${action.input.id} does not exist`);\nif (action.input.name != null) {\n  const name = action.input.name.trim();\n  if (!name) throw new EmptyBundleError(\"A bundle needs a name\");\n  if (state.bundles.some((b) => b.id !== bundle.id && b.name.toLowerCase() === name.toLowerCase())) {\n    throw new DuplicateBundleNameError(`A bundle named ${name} exists`);\n  }\n  bundle.name = name;\n}\nif (action.input.addresses != null) {\n  const addresses = [...new Set(action.input.addresses.map((a) => a.toLowerCase()))];\n  if (addresses.length === 0) throw new EmptyBundleError(\"A bundle needs at least one wallet\");\n  const known = new Set(state.addresses.map((a) => a.address));\n  const unknown = addresses.find((a) => !known.has(a));\n  if (unknown) throw new UnknownBundleAddressError(`${unknown} is not in the portfolio`);\n  bundle.addresses = addresses;\n}",
               "examples": [],
-              "scope": "global"
+              "template": "Rename a bundle or change its wallets.",
+              "description": "Rename a bundle or change its wallets."
             },
             {
               "id": "d62fe1c8-7ea6-4421-914d-4e66ef305894",
@@ -401,6 +400,101 @@
                   "template": ""
                 }
               ],
+              "examples": [],
+              "scope": "global"
+            }
+          ],
+          "description": "Named groups of wallets the views filter by."
+        },
+        {
+          "id": "mod-categories",
+          "name": "categories",
+          "description": "Tax categories: counterparty rules and per-transaction overrides.",
+          "operations": [
+            {
+              "id": "op-add-category-rule",
+              "name": "ADD_CATEGORY_RULE",
+              "description": "Give every transaction with a counterparty a category.",
+              "schema": "input AddCategoryRuleInput {\n  id: OID!\n  counterparty: String!\n  chainId: Int\n  direction: CategoryDirection!\n  asset: String\n  category: TxCategory!\n  label: String\n}",
+              "template": "Give every transaction with a counterparty a category.",
+              "reducer": "const counterparty = action.input.counterparty.trim().toLowerCase();\nif (!/^0x[0-9a-f]{40}$/.test(counterparty)) {\n  throw new InvalidCounterpartyError(`${action.input.counterparty} is not an address`);\n}\nif (!state.categoryRules) state.categoryRules = [];\nstate.categoryRules.push({\n  id: action.input.id,\n  counterparty,\n  chainId: action.input.chainId ?? null,\n  direction: action.input.direction,\n  asset: action.input.asset ?? null,\n  category: action.input.category,\n  label: action.input.label?.trim() || null,\n});",
+              "errors": [
+                {
+                  "id": "err-invalid-counterparty",
+                  "name": "InvalidCounterpartyError",
+                  "code": "INVALID_COUNTERPARTY",
+                  "description": "The counterparty is not an address.",
+                  "template": ""
+                }
+              ],
+              "examples": [],
+              "scope": "global"
+            },
+            {
+              "id": "op-update-category-rule",
+              "name": "UPDATE_CATEGORY_RULE",
+              "description": "Change a rule's category, direction or label.",
+              "schema": "input UpdateCategoryRuleInput {\n  id: OID!\n  category: TxCategory\n  direction: CategoryDirection\n  label: String\n}",
+              "template": "Change a rule's category, direction or label.",
+              "reducer": "const rule = (state.categoryRules ?? []).find((r) => r.id === action.input.id);\nif (!rule) throw new CategoryRuleNotFoundError(`Rule ${action.input.id} does not exist`);\nif (action.input.category != null) rule.category = action.input.category;\nif (action.input.direction != null) rule.direction = action.input.direction;\nif (action.input.label != null) rule.label = action.input.label.trim() || null;",
+              "errors": [
+                {
+                  "id": "err-rule-not-found-update",
+                  "name": "CategoryRuleNotFoundError",
+                  "code": "CATEGORY_RULE_NOT_FOUND",
+                  "description": "No rule has this id.",
+                  "template": ""
+                }
+              ],
+              "examples": [],
+              "scope": "global"
+            },
+            {
+              "id": "op-remove-category-rule",
+              "name": "REMOVE_CATEGORY_RULE",
+              "description": "Remove a rule.",
+              "schema": "input RemoveCategoryRuleInput {\n  id: OID!\n}",
+              "template": "Remove a rule.",
+              "reducer": "const rules = state.categoryRules ?? [];\nconst index = rules.findIndex((r) => r.id === action.input.id);\nif (index === -1) throw new CategoryRuleNotFoundError(`Rule ${action.input.id} does not exist`);\nrules.splice(index, 1);",
+              "errors": [
+                {
+                  "id": "err-rule-not-found-remove",
+                  "name": "CategoryRuleNotFoundError",
+                  "code": "CATEGORY_RULE_NOT_FOUND",
+                  "description": "No rule has this id.",
+                  "template": ""
+                }
+              ],
+              "examples": [],
+              "scope": "global"
+            },
+            {
+              "id": "op-set-event-categories",
+              "name": "SET_EVENT_CATEGORIES",
+              "description": "Set the category of one or many transactions by hand (upsert by wallet, event and sequence).",
+              "schema": "input SetEventCategoriesInput {\n  overrides: [CategoryOverrideInput!]!\n}\n\ninput CategoryOverrideInput {\n  wallet: String!\n  eventId: String!\n  sequenceIndex: Int!\n  category: TxCategory!\n  giftCost: String\n  giftAcquiredAt: DateTime\n}",
+              "template": "Set the category of one or many transactions by hand (upsert by wallet, event and sequence).",
+              "reducer": "if (!state.categoryOverrides) state.categoryOverrides = [];\nconst overrides = state.categoryOverrides;\nconst keyOf = (o: { wallet: string; eventId: string; sequenceIndex: number }) => `${o.wallet.toLowerCase()}|${o.eventId}|${o.sequenceIndex}`;\nfor (const o of action.input.overrides) {\n  if ((o.giftCost != null || o.giftAcquiredAt != null) && o.category !== \"GIFT_IN\") {\n    throw new InvalidGiftBasisError(\"Gift cost and date belong on a GIFT_IN override only\");\n  }\n  if (o.giftCost != null && !/^(0|[1-9][0-9]*)(\\.[0-9]+)?$/.test(o.giftCost)) {\n    throw new InvalidGiftBasisError(`Gift cost ${o.giftCost} is not a decimal`);\n  }\n}\nfor (const o of action.input.overrides) {\n  const next = { wallet: o.wallet.toLowerCase(), eventId: o.eventId, sequenceIndex: o.sequenceIndex, category: o.category, giftCost: o.giftCost ?? null, giftAcquiredAt: o.giftAcquiredAt ?? null };\n  const index = overrides.findIndex((held) => keyOf(held) === keyOf(next));\n  if (index === -1) overrides.push(next);\n  else overrides[index] = next;\n}",
+              "errors": [
+                {
+                  "id": "err-invalid-gift-basis",
+                  "name": "InvalidGiftBasisError",
+                  "code": "INVALID_GIFT_BASIS",
+                  "description": "Gift cost must be a decimal; gift fields only on GIFT_IN.",
+                  "template": ""
+                }
+              ],
+              "examples": [],
+              "scope": "global"
+            },
+            {
+              "id": "op-clear-event-categories",
+              "name": "CLEAR_EVENT_CATEGORIES",
+              "description": "Drop hand-chosen categories, so the rules and defaults apply again.",
+              "schema": "input ClearEventCategoriesInput {\n  events: [EventKeyInput!]!\n}\n\ninput EventKeyInput {\n  wallet: String!\n  eventId: String!\n  sequenceIndex: Int!\n}",
+              "template": "Drop hand-chosen categories, so the rules and defaults apply again.",
+              "reducer": "const keyOf = (o: { wallet: string; eventId: string; sequenceIndex: number }) => `${o.wallet.toLowerCase()}|${o.eventId}|${o.sequenceIndex}`;\nconst gone = new Set(action.input.events.map(keyOf));\nstate.categoryOverrides = (state.categoryOverrides ?? []).filter((o) => !gone.has(keyOf(o)));",
+              "errors": [],
               "examples": [],
               "scope": "global"
             }

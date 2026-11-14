@@ -32,6 +32,8 @@ type PortfolioState {
   lastCheck: ReconcilerCheck
   grant: GrantInfo
   bundles: [Bundle!]!
+  categoryRules: [CategoryRule!]!
+  categoryOverrides: [CategoryOverride!]!
 }
 
 """
@@ -148,6 +150,62 @@ type GrantInfo {
   id: String!
   name: String
   grantedAt: DateTime
+}
+
+"""
+A counterparty rule: every matching transaction gets the category.
+"""
+type CategoryRule {
+  id: OID!
+  counterparty: String!
+  chainId: Int
+  direction: CategoryDirection!
+  asset: String
+  category: TxCategory!
+  label: String
+}
+
+"""
+One transaction's category, chosen by hand.
+"""
+type CategoryOverride {
+  wallet: String!
+  eventId: String!
+  sequenceIndex: Int!
+  category: TxCategory!
+  giftCost: String
+  giftAcquiredAt: DateTime
+}
+
+enum CategoryDirection {
+  IN
+  OUT
+  ANY
+}
+
+enum TxCategory {
+  TRADE
+  SPEND
+  INCOME
+  STAKING
+  LENDING_INCOME
+  MINING
+  AIRDROP
+  AIRDROP_NON_TAXABLE
+  GIFT_IN
+  GIFT_OUT
+  DONATION
+  LOST
+  STOLEN
+  DEPOSIT
+  WITHDRAWAL
+  COLLATERAL_OUT
+  COLLATERAL_IN
+  BORROWING
+  LOAN_REPAYMENT
+  LIQUIDATION
+  FEE
+  MARGIN
 }
 
 # identity
@@ -308,4 +366,50 @@ input UpdateBundleInput {
 
 input RemoveBundleInput {
   id: OID!
+}
+
+# categories
+
+input AddCategoryRuleInput {
+  id: OID!
+  counterparty: String!
+  chainId: Int
+  direction: CategoryDirection!
+  asset: String
+  category: TxCategory!
+  label: String
+}
+
+input UpdateCategoryRuleInput {
+  id: OID!
+  category: TxCategory
+  direction: CategoryDirection
+  label: String
+}
+
+input RemoveCategoryRuleInput {
+  id: OID!
+}
+
+input SetEventCategoriesInput {
+  overrides: [CategoryOverrideInput!]!
+}
+
+input CategoryOverrideInput {
+  wallet: String!
+  eventId: String!
+  sequenceIndex: Int!
+  category: TxCategory!
+  giftCost: String
+  giftAcquiredAt: DateTime
+}
+
+input ClearEventCategoriesInput {
+  events: [EventKeyInput!]!
+}
+
+input EventKeyInput {
+  wallet: String!
+  eventId: String!
+  sequenceIndex: Int!
 }

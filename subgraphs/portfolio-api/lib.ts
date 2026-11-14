@@ -441,6 +441,22 @@ export function attachValuations<T extends { eventId: string; sequenceIndex: num
   });
 }
 
+/** Each leg's tax category from the books, merged onto ledger rows. */
+export function attachCategories<
+  T extends { address: string; eventId: string; sequenceIndex: number },
+>(
+  rows: T[],
+  categories: { wallet: string; eventId: string; sequenceIndex: number; category: string; source: string }[],
+): (T & { category: string | null; categorySource: string | null })[] {
+  const byLeg = new Map(
+    categories.map((c) => [`${c.wallet.toLowerCase()}\u0000${c.eventId}\u0000${c.sequenceIndex}`, c]),
+  );
+  return rows.map((row) => {
+    const found = byLeg.get(`${row.address.toLowerCase()}\u0000${row.eventId}\u0000${row.sequenceIndex}`);
+    return { ...row, category: found?.category ?? null, categorySource: found?.source ?? null };
+  });
+}
+
 /**
  * Why the books could not value a leg, merged onto ledger rows: "value"
  * (the leg has no price; pricing it fixes it) wins over "basis" (no cost

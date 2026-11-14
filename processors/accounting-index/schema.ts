@@ -28,6 +28,12 @@ export interface AddressRow {
   address: string;
 }
 
+/** An asset the portfolio ignores: its events stay out of the books. */
+export interface IgnoredAssetRow {
+  document_id: string;
+  asset: string;
+}
+
 export interface AssetRow {
   document_id: string;
   asset: string;
@@ -96,6 +102,7 @@ export interface UnpricedRow {
 export interface DB {
   acc_events: EventRow;
   acc_addresses: AddressRow;
+  acc_ignored_assets: IgnoredAssetRow;
   acc_assets: AssetRow;
   lots: LotRow;
   realized: RealizedRow;

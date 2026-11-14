@@ -24,6 +24,7 @@ import {
 import {
   foldInputHash,
   portfolioAddressRows,
+  portfolioIgnoredAssetRows,
   registryAssetRows,
   rowKey,
   toFoldEvents,
@@ -175,6 +176,10 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
             documentId,
             portfolioAddressRows(documentId, parsed),
           );
+          await this.writeIgnoredAssets(
+            documentId,
+            portfolioIgnoredAssetRows(documentId, parsed),
+          );
           break;
         }
         default: {
@@ -259,6 +264,32 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
     }
   }
 
+  private async writeIgnoredAssets(
+    documentId: string,
+    rows: { document_id: string; asset: string }[],
+  ): Promise<void> {
+    const stored = await this.relationalDb
+      .selectFrom("acc_ignored_assets")
+      .selectAll()
+      .where("document_id", "=", documentId)
+      .execute();
+    const { deletes, writes } = planDiff(stored, rows, (row) => row.asset);
+    for (const asset of deletes) {
+      await this.relationalDb
+        .deleteFrom("acc_ignored_assets")
+        .where("document_id", "=", documentId)
+        .where("asset", "=", asset)
+        .execute();
+    }
+    for (let at = 0; at < writes.length; at += BATCH) {
+      await this.relationalDb
+        .insertInto("acc_ignored_assets")
+        .values(writes.slice(at, at + BATCH))
+        .onConflict((oc) => oc.columns(["document_id", "asset"]).doNothing())
+        .execute();
+    }
+  }
+
   private async writeAssets(documentId: string, rows: AssetRow[]): Promise<void> {
     const stored = await this.relationalDb
       .selectFrom("acc_assets")
@@ -300,11 +331,15 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       .selectFrom("acc_assets")
       .select(["asset", "decimals"])
       .execute();
+    const ignored = (
+      await this.relationalDb.selectFrom("acc_ignored_assets").select("asset").execute()
+    ).map((row) => row.asset);
 
     const { inputHash, ctxHash } = foldInputHash(
       events,
       addresses.map((row) => row.address),
       assets.map((row) => [row.asset, row.decimals] as [string, number]),
+      ignored,
     );
     const checkpoint = await this.relationalDb
       .selectFrom("fold_checkpoint")
@@ -333,7 +368,7 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       knownAddresses,
       decimals,
     };
-    const state: FoldState = foldAll(toFoldEvents(events), ctx);
+    const state: FoldState = foldAll(toFoldEvents(events, new Set(ignored)), ctx);
     // One transaction: readers never see the tables mid-rewrite, and a
     // failed write keeps the last good books instead of emptying them.
     await this.relationalDb.transaction().execute(async (db) => {

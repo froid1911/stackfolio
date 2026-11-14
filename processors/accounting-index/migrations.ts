@@ -35,6 +35,14 @@ export async function up(db: Kysely<DB>): Promise<void> {
     .execute();
 
   await db.schema
+    .createTable("acc_ignored_assets")
+    .addColumn("document_id", "varchar(255)", (col) => col.notNull())
+    .addColumn("asset", "text", (col) => col.notNull())
+    .addPrimaryKeyConstraint("acc_ignored_assets_pk", ["document_id", "asset"])
+    .ifNotExists()
+    .execute();
+
+  await db.schema
     .createTable("acc_addresses")
     .addColumn("document_id", "varchar(255)", (col) => col.notNull())
     .addColumn("address", "varchar(128)", (col) => col.notNull())
@@ -177,6 +185,7 @@ export async function down(db: Kysely<DB>): Promise<void> {
     "lots",
     "acc_assets",
     "acc_addresses",
+    "acc_ignored_assets",
     "acc_events",
   ] as const) {
     await db.schema.dropTable(table).ifExists().execute();

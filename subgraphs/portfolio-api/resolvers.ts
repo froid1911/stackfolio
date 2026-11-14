@@ -25,6 +25,16 @@ export const getResolvers = (
 ): Record<string, unknown> => {
   const query = (driveId: string) =>
     PortfolioIndex.query(driveId, subgraph.relationalDb);
+  /** The portfolio's ignored assets, as the accounting index stages them. */
+  const ignoredAssetsOf = async (driveId: string): Promise<Set<string>> => {
+    try {
+      const rows = await accountingQuery(driveId).selectFrom("acc_ignored_assets").select("asset").execute();
+      return new Set(rows.map((r) => r.asset));
+    } catch {
+      // A store from before the table: nothing is ignored yet.
+      return new Set();
+    }
+  };
   const accountingQuery = (driveId: string) =>
     AccountingIndex.query(driveId, subgraph.relationalDb);
 
@@ -96,6 +106,8 @@ export const getResolvers = (
               .select(["address", "label", "ens_name"])
               .execute(),
           ]);
+        // Assets the portfolio ignores (spam, unlisted tokens) hold nothing.
+        const ignoredAssets = await ignoredAssetsOf(args.driveId);
 
         const decimals: Record<string, number> = {};
         const symbols: Record<string, string> = {};
@@ -114,7 +126,9 @@ export const getResolvers = (
           }
         }
 
-        const ledgerEvents: HoldingsInput["events"] = events.map((e) => ({
+        const ledgerEvents: HoldingsInput["events"] = events
+          .filter((e) => !ignoredAssets.has(e.asset))
+          .map((e) => ({
           asset: e.asset,
           address: e.address,
           amount: e.amount,
@@ -134,7 +148,11 @@ export const getResolvers = (
         // Token balances read from the chain replace the ledger's net the
         // same way: a sum of transfers drifts wherever the scan missed one
         // (swaps, repayments, bridges), a balanceOf does not.
-        nativeBalances.push(...accounts.flatMap((a) => tokenBalancesOf(a.address, a.token_balances)));
+        nativeBalances.push(
+          ...accounts
+            .flatMap((a) => tokenBalancesOf(a.address, a.token_balances))
+            .filter((b) => !ignoredAssets.has(b.asset)),
+        );
 
         // Prices: one newest answer per asset (newestPrices).
         const rows = holdingsFromRows({
@@ -188,6 +206,7 @@ export const getResolvers = (
       ) => {
         const ids = await driveFileIds(subgraph, args.driveId, ctx);
         if (!ids || ids.length === 0) return { rows: [], total: 0 };
+        const ignoredAssets = args.ignored === false ? await ignoredAssetsOf(args.driveId) : new Set<string>();
         // Valuations live in the accounting namespace: the "needs a price"
         // filter is resolved there first, then applied to the ledger page.
         const acc = accountingQuery(args.driveId);
@@ -232,6 +251,10 @@ export const getResolvers = (
           )
           .$if(args.ignored !== undefined, (qb) =>
             qb.where("ignored", "=", args.ignored as boolean),
+          )
+          // The not-ignored view leaves the portfolio's ignored assets out too.
+          .$if(args.ignored === false && ignoredAssets.size > 0, (qb) =>
+            qb.where("asset", "not in", [...ignoredAssets]),
           )
           .$if(Boolean(args.from), (qb) =>
             qb.where("timestamp", ">=", args.from as string),

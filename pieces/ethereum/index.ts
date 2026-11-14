@@ -13,6 +13,7 @@ import { ethereumImportPricesToBookAction } from "./lib/actions/import-prices-to
 import { ethereumPinPricesAction } from "./lib/actions/pin-prices.js";
 import { ethereumFetchWithdrawalsAction } from "./lib/actions/fetch-withdrawals.js";
 import { ethereumImportStakingToDocAction } from "./lib/actions/import-staking-to-doc.js";
+import { ethereumImportWithdrawalsToWalletsAction } from "./lib/actions/import-withdrawals-to-wallets.js";
 import { ethereumImportTokensToRegistryAction } from "./lib/actions/import-tokens-to-registry.js";
 import { ethereumRegisterMissingAssetsAction } from "./lib/actions/register-missing-assets.js";
 import { ethereumScanAccountLogsAction } from "./lib/actions/scan-account-logs.js";
@@ -61,6 +62,7 @@ export const ethereum = createPiece({
     ethereumImportPricesToBookAction,
     ethereumPinPricesAction,
     ethereumFetchWithdrawalsAction,
+    ethereumImportWithdrawalsToWalletsAction,
     ethereumFetchPositionsAction,
     ethereumHoldingsFromLedgerAction,
     ethereumSnapshotPortfolioAction,

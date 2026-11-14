@@ -68,5 +68,10 @@ export function usePortfolioActions(id: string | undefined) {
       dispatch([portfolioActions.setPriceOverride(input)]),
     removePriceOverride: (asset: string) =>
       dispatch([portfolioActions.removePriceOverride({ asset })]),
+    addBundle: (input: { id: string; name: string; addresses: string[] }) =>
+      dispatch([portfolioActions.addBundle(input)]),
+    updateBundle: (input: { id: string; name?: string; addresses?: string[] }) =>
+      dispatch([portfolioActions.updateBundle(input)]),
+    removeBundle: (id: string) => dispatch([portfolioActions.removeBundle({ id })]),
   };
 }

@@ -4,13 +4,20 @@
  * specific counterparty rule, then a default derived from what the scan and
  * the decoder know, else UNCLASSIFIED. Rows are grouped by transaction hash -
  * a decoded leg is "<hash>-<log>", a generic row "<hash>".
+ *
+ * Two defaults need the whole ledger: a token no wallet of the portfolio ever
+ * moved in a transaction it paid gas for, and that has no price, is SPAM
+ * (pushed airdrops, planted transfers); a receipt from a known airdrop claim
+ * contract is AIRDROP_NON_TAXABLE.
  */
+import { airdropDistributor } from "./airdrops.js";
+
 export type TxCategory =
   | "TRADE" | "SPEND" | "INCOME" | "STAKING" | "LENDING_INCOME" | "MINING"
   | "AIRDROP" | "AIRDROP_NON_TAXABLE" | "GIFT_IN" | "GIFT_OUT" | "DONATION"
   | "LOST" | "STOLEN" | "DEPOSIT" | "WITHDRAWAL" | "COLLATERAL_OUT"
   | "COLLATERAL_IN" | "BORROWING" | "LOAN_REPAYMENT" | "LIQUIDATION" | "FEE"
-  | "MARGIN" | "UNCLASSIFIED";
+  | "MARGIN" | "SPAM" | "UNCLASSIFIED";
 export type CategorySource = "override" | "rule" | "auto" | "unclassified";
 
 export interface ClassifyEvent {
@@ -44,6 +51,10 @@ export interface ClassifyContext {
   rules: CategoryRuleLike[];
   /** overrideKey(wallet, eventId, sequenceIndex) -> override. */
   overrides: Map<string, CategoryOverrideLike>;
+  /** Assets with a price anywhere in the ledger; absent, nothing is spam. */
+  pricedAssets?: ReadonlySet<string>;
+  /** Assets the user marked "not spam". */
+  trustedAssets?: ReadonlySet<string>;
 }
 export interface Classified {
   category: TxCategory;
@@ -69,6 +80,38 @@ export const txHashOf = (eventIdentifier: string): string => {
 
 export const overrideKey = (wallet: string, eventId: string, sequenceIndex: number): string =>
   `${wallet.toLowerCase()}|${eventId}|${sequenceIndex}`;
+
+/** (wallet, transaction) pairs the wallet paid gas for: it signed them. */
+export function signedTransactions(events: ClassifyEvent[]): Set<string> {
+  const signed = new Set<string>();
+  for (const event of events) {
+    if (event.subtype === "FEE") {
+      signed.add(`${event.wallet.toLowerCase()}|${txHashOf(event.eventIdentifier)}`);
+    }
+  }
+  return signed;
+}
+
+/** ERC-20s no wallet ever moved in a transaction it signed, with no price. */
+function spamAssets(events: ClassifyEvent[], ctx: ClassifyContext): Set<string> {
+  const priced = ctx.pricedAssets;
+  if (!priced) return new Set();
+  const signed = signedTransactions(events);
+  const candidates = new Set<string>();
+  const moved = new Set<string>();
+  for (const event of events) {
+    if (!event.asset.includes("/erc20:")) continue;
+    candidates.add(event.asset);
+    if (signed.has(`${event.wallet.toLowerCase()}|${txHashOf(event.eventIdentifier)}`)) {
+      moved.add(event.asset);
+    }
+  }
+  return new Set(
+    [...candidates].filter(
+      (asset) => !moved.has(asset) && !priced.has(asset) && !ctx.trustedAssets?.has(asset),
+    ),
+  );
+}
 
 const SUBTYPE_DEFAULT: Partial<Record<string, TxCategory>> = {
   DEPOSIT_ASSET: "COLLATERAL_OUT",
@@ -110,6 +153,9 @@ function derived(event: ClassifyEvent, direction: "in" | "out", ctx: ClassifyCon
     return BigInt(event.amount) >= EXIT_WEI ? "COLLATERAL_IN" : "STAKING";
   }
   if (event.subtype === "WITHDRAWAL" && direction === "in") return "COLLATERAL_IN";
+  if (direction === "in" && airdropDistributor(event.chainId, event.counterparty)) {
+    return "AIRDROP_NON_TAXABLE";
+  }
   const bySubtype = SUBTYPE_DEFAULT[event.subtype];
   if (bySubtype) return bySubtype;
   if (event.type === "STAKING") return "STAKING";
@@ -127,11 +173,13 @@ function derived(event: ClassifyEvent, direction: "in" | "out", ctx: ClassifyCon
 }
 
 export function classify(events: ClassifyEvent[], ctx: ClassifyContext): Map<string, Classified> {
-  // Per (transaction, wallet): which assets went out and came in, for trades.
+  const spam = spamAssets(events, ctx);
+  // Per (transaction, wallet): which assets went out and came in, for trades
+  // (spam planted into a transaction makes no trade).
   const flows = new Map<string, { out: Set<string>; in: Set<string> }>();
   for (const event of events) {
     const direction = DIRECTION[event.type];
-    if (!direction || event.subtype === "FEE") continue;
+    if (!direction || event.subtype === "FEE" || spam.has(event.asset)) continue;
     const key = `${txHashOf(event.eventIdentifier)}|${event.wallet.toLowerCase()}`;
     const flow = flows.get(key) ?? { out: new Set<string>(), in: new Set<string>() };
     flow[direction].add(event.asset);
@@ -154,6 +202,10 @@ export function classify(events: ClassifyEvent[], ctx: ClassifyContext): Map<str
     const rule = ruleFor(event, direction, ctx.rules);
     if (rule) {
       result.set(key, { category: rule.category as TxCategory, source: "rule", giftCost: null, giftAcquiredAt: null });
+      continue;
+    }
+    if (spam.has(event.asset)) {
+      result.set(key, { category: "SPAM", source: "auto", giftCost: null, giftAcquiredAt: null });
       continue;
     }
     const flow = flows.get(`${txHashOf(event.eventIdentifier)}|${event.wallet.toLowerCase()}`);

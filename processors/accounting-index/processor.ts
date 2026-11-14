@@ -10,6 +10,7 @@
  * equals replaying the edited ledger from genesis.
  */
 import { RelationalDbProcessor } from "@powerhousedao/shared/processors";
+import type { Kysely } from "kysely";
 import type { OperationWithContext } from "document-model";
 import type { DocumentReader } from "../shared/delivery.js";
 import { stateFetcher } from "../shared/delivery.js";
@@ -327,8 +328,11 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       decimals,
     };
     const state: FoldState = foldAll(toFoldEvents(events), ctx);
-    await this.writeFoldTables(state);
-    await this.relationalDb
+    // One transaction: readers never see the tables mid-rewrite, and a
+    // failed write keeps the last good books instead of emptying them.
+    await this.relationalDb.transaction().execute(async (db) => {
+    await this.writeFoldTables(db, state);
+    await db
       .insertInto("fold_checkpoint")
       .values({
         id: "fold",
@@ -346,11 +350,12 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
         })),
       )
       .execute();
+    });
   }
 
-  private async writeFoldTables(state: FoldState): Promise<void> {
+  private async writeFoldTables(db: Kysely<DB>, state: FoldState): Promise<void> {
     for (const table of ["lots", "realized", "income", "pnl_month", "acc_unpriced"] as const) {
-      await this.relationalDb.deleteFrom(table).execute();
+      await db.deleteFrom(table).execute();
     }
     for (const lots of state.lots.values()) {
       const rows = lots.map((lot) => ({
@@ -362,7 +367,7 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
         unit_cost: formatScaled((lot.cost * 100000000n) / lot.quantity),
       }));
       for (let at = 0; at < rows.length; at += BATCH) {
-        await this.relationalDb
+        await db
           .insertInto("lots")
           .values(rows.slice(at, at + BATCH))
           .execute();
@@ -382,7 +387,7 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       consumed: JSON.stringify(row.consumed),
     }));
     for (let at = 0; at < realized.length; at += BATCH) {
-      await this.relationalDb
+      await db
         .insertInto("realized")
         .values(realized.slice(at, at + BATCH))
         .execute();
@@ -392,7 +397,7 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       return { wallet, bucket, month, amount: amount.toString() };
     });
     for (let at = 0; at < income.length; at += BATCH) {
-      await this.relationalDb
+      await db
         .insertInto("income")
         .values(income.slice(at, at + BATCH))
         .execute();
@@ -410,7 +415,7 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       };
     });
     for (let at = 0; at < months.length; at += BATCH) {
-      await this.relationalDb
+      await db
         .insertInto("pnl_month")
         .values(months.slice(at, at + BATCH))
         .execute();
@@ -433,7 +438,7 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
         reason: leg.reason,
       }));
     for (let at = 0; at < gaps.length; at += BATCH) {
-      await this.relationalDb
+      await db
         .insertInto("acc_unpriced")
         .values(gaps.slice(at, at + BATCH))
         .execute();

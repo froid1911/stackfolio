@@ -18,6 +18,7 @@ import {
   reducer as walletReducer,
   utils as walletUtils,
 } from "document-models/wallet-account/v1";
+import { sql } from "kysely";
 import { describe, expect, it } from "vitest";
 
 import { up } from "./migrations.js";
@@ -303,6 +304,26 @@ describe("accounting-index", () => {
     expect(after[0].input_hash).not.toBe(before[0].input_hash);
     const realized = await db.selectFrom("realized").selectAll().execute();
     expect(realized[0].pnl).toBe("200000000000");
+  });
+
+  it("keeps the last good books when a refold cannot be written", async () => {
+    const { db, processor } = await harness();
+    const wallet = walletDocument();
+    await indexAll(processor, wallet);
+    const before = await db.selectFrom("fold_checkpoint").selectAll().execute();
+    // Stand-in for a row the table refuses (it was a too-narrow column).
+    await db.schema
+      .alterTable("realized")
+      .addCheckConstraint("refuse_edit", sql`pnl <> '200000000000'`)
+      .execute();
+
+    await expect(processor.onOperations(replay(editedWallet(wallet)))).rejects.toThrow();
+
+    const realized = await db.selectFrom("realized").selectAll().execute();
+    expect(realized.map((r) => r.pnl)).toEqual(["100000000000"]);
+    expect(await db.selectFrom("pnl_month").selectAll().execute()).toHaveLength(2);
+    const after = await db.selectFrom("fold_checkpoint").selectAll().execute();
+    expect(after[0].input_hash).toBe(before[0].input_hash);
   });
 
   it("keeps the checkpoint when nothing changed", async () => {

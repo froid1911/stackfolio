@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { fetchFxRates, fetchUsdCloses, llamaKey, noonOf } from "./llama.js";
+import { fetchFxRates, fetchUsdCloses, llamaFallback, llamaKey, noonOf } from "./llama.js";
 
 const json = (body: unknown, status = 200) =>
   ({ ok: status < 400, status, json: async () => body }) as Response;
@@ -22,6 +22,26 @@ describe("llamaKey", () => {
   it("falls back to a registry CoinGecko id, else has no key", () => {
     expect(llamaKey("eip155:999999/erc20:0xabc", "some-coin")).toBe("coingecko:some-coin");
     expect(llamaKey("eip155:999999/erc20:0xabc")).toBeNull();
+  });
+});
+
+describe("llamaFallback", () => {
+  it("names the canonical coin where a contract's history starts late", () => {
+    // POL only trades from its 2023-24 rename; MATIC carries the years before.
+    expect(llamaFallback("eip155:137/slip44:60")).toBe("coingecko:matic-network");
+    expect(llamaFallback("eip155:137/erc20:0x8F3CF7AD23CD3CADBD9735AFF958023239C6A063")).toBe("coingecko:dai");
+    expect(llamaFallback("eip155:137/erc20:0x28424507fefb6f7f8e9d3860f56504e4e5f5f390")).toBe(
+      "coingecko:ethereum", // amWETH: 1:1 with its underlying
+    );
+    expect(llamaFallback("eip155:42161/erc20:0xff970a61a04b1ca14834a43f5de4533ebddb5cc")).toBe(
+      "coingecko:usd-coin",
+    );
+  });
+
+  it("has none for unknown contracts, mainnet ether or other ids", () => {
+    expect(llamaFallback("eip155:137/erc20:0x1111111111111111111111111111111111111111")).toBeNull();
+    expect(llamaFallback("eip155:1/slip44:60")).toBeNull();
+    expect(llamaFallback("bip122:000000000019d6689c085ae165831e93/slip44:0")).toBeNull();
   });
 });
 

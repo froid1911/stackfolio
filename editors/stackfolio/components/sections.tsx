@@ -3,6 +3,7 @@ import {
   useDocumentSafe,
   useNodesInSelectedDrive,
   useSearchParams,
+  useSelectedDrive,
   useSetSearchParams,
 } from "@powerhousedao/reactor-browser";
 import {
@@ -45,6 +46,7 @@ import {
 import { AddAccountForm } from "./Setup.js";
 import { AddressBookView } from "./AddressBookView.js";
 import { Bundles } from "./Bundles.js";
+import { openWallet, walletName } from "../lib/wallets.js";
 import { generateId } from "document-model";
 import type { Detail } from "../lib/detail.js";
 import type { usePortfolioActions } from "../lib/mutations.js";
@@ -415,6 +417,10 @@ export function AddressBookSection({
     doc as { state?: { global?: { addresses?: unknown } } } | undefined
   )?.state?.global;
   const { bundles } = useScope();
+  const [drive] = useSelectedDrive();
+  const driveId = drive.header.id;
+  const accounts = useAccounts(driveId);
+  const [openError, setOpenError] = useState<string | null>(null);
   const entries = (Array.isArray(global?.addresses) ? global.addresses : []) as Array<{
     id: string;
     address: string;
@@ -438,7 +444,23 @@ export function AddressBookSection({
       }))}
       loading={doc === undefined}
       portfolioReady={actions.ready}
-      onAdd={actions.addAddress}
+      onAdd={(draft) => {
+        actions.addAddress(draft);
+        // An address the drive has no wallet for is opened as one, as the
+        // setup wizard does: the address book's entries are what it scans.
+        const address = draft.address.trim().toLowerCase();
+        const held = (accounts.data ?? []).some(
+          (a) => a.address === address && a.chainId === draft.chainId,
+        );
+        if (held || !accounts.data) return;
+        const label = draft.label?.trim() || draft.ensName?.trim() || null;
+        openWallet(driveId, {
+          address,
+          chainId: draft.chainId,
+          label,
+          name: walletName(address, label, null),
+        }).catch((cause: unknown) => setOpenError(cause instanceof Error ? cause.message : String(cause)));
+      }}
       onUpdate={actions.updateAddress}
       onRemove={actions.removeAddress}
       onIgnore={actions.setAddressIgnored}
@@ -448,6 +470,9 @@ export function AddressBookSection({
           : undefined
       }
     />
+    {openError && (
+      <p className="px-6 text-xs text-red-700">The address was saved, but its wallet could not be opened: {openError}</p>
+    )}
     <Bundles
       bundles={bundles}
       wallets={[...new Map(entries.map((e) => [e.address, e.label ?? null])).entries()].map(

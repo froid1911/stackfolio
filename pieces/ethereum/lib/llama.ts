@@ -58,6 +58,68 @@ export function llamaKey(identifier: string, coingeckoId?: string | null): strin
   return coingeckoId ? `coingecko:${coingeckoId}` : null;
 }
 
+/**
+ * The coin a contract tracks one to one, for the days DefiLlama has no
+ * history for the contract itself: its records of bridged tokens and Aave
+ * aTokens begin in 2024-25. Keys are DefiLlama "<chain>:<contract>"; each
+ * was checked against DefiLlama's own symbol for the contract.
+ */
+const CANONICAL: Record<string, string> = {
+  // Polygon: bridged majors
+  "polygon:0x8f3cf7ad23cd3cadbd9735aff958023239c6a063": "dai",
+  "polygon:0x2791bca1f2de4661ed88a30c99a7a9449aa84174": "usd-coin", // USDC.e
+  "polygon:0x3c499c542cef5e3811e1192ce70d8cc03d5c3359": "usd-coin",
+  "polygon:0xc2132d05d31c914a87c6611c10748aeb04b58e8f": "tether",
+  "polygon:0x7ceb23fd6bc0add59e62ac25578270cff1b9f619": "ethereum", // WETH
+  "polygon:0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6": "wrapped-bitcoin",
+  "polygon:0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270": "matic-network", // WMATIC
+  // Polygon: Aave v2 (am*) and v3 (aPol*) aTokens, one to one with the asset
+  "polygon:0x27f8d03b3a2196956ed754badc28d73be8830a6e": "dai",
+  "polygon:0x1a13f4ca1d028320a707d99520abfefca3998b7f": "usd-coin",
+  "polygon:0x28424507fefb6f7f8e9d3860f56504e4e5f5f390": "ethereum",
+  "polygon:0x60d55f02a771d515e077c9c2403a1ef324885cec": "tether",
+  "polygon:0x8df3aad3a84da6b69a4da8aec3ea40d9091b2ac4": "matic-network",
+  "polygon:0x5c2ed810328349100a66b82b78a1791b101c9d61": "wrapped-bitcoin",
+  "polygon:0xe50fa9b3c56ffb159cb0fca61f5c9d750e8128c8": "ethereum",
+  "polygon:0x625e7708f30ca75bfd92586e17077590c60eb4cd": "usd-coin",
+  "polygon:0x82e64f49ed5ec1bc6e43dad4fc8af9bb3a2312ee": "dai",
+  "polygon:0x6ab707aca953edaefbc4fd23ba73294241490620": "tether",
+  "polygon:0x6d80113e533a2c0fe82eabd35f1875dcea89ea97": "matic-network",
+  // Arbitrum, Optimism, Base
+  "arbitrum:0xff970a61a04b1ca14834a43f5de4533ebddb5cc": "usd-coin", // USDC.e
+  "arbitrum:0xaf88d065e77c8cc2239327c5edb3a432268e5831": "usd-coin",
+  "arbitrum:0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9": "tether",
+  "arbitrum:0x82af49447d8a07e3bd95bd0d56f35241523fbab1": "ethereum",
+  "arbitrum:0xda10009cbd5d07dd0cecc66161fc93d7c9000da1": "dai",
+  "optimism:0x7f5c764cbc14f9669b88837ca1490cca17c31607": "usd-coin",
+  "optimism:0x4200000000000000000000000000000000000006": "ethereum",
+  "optimism:0xda10009cbd5d07dd0cecc66161fc93d7c9000da1": "dai",
+  "base:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": "usd-coin",
+  "base:0x4200000000000000000000000000000000000006": "ethereum",
+};
+
+/** The coin a native identifier stood for before its current one existed. */
+const NATIVE_PREDECESSOR: Record<number, string> = {
+  137: "matic-network", // POL from the 2023-24 rename; MATIC before it
+};
+
+/**
+ * A second DefiLlama key for days the first has no price for: the coin a
+ * contract tracks one to one, or a native coin's predecessor. Null when
+ * there is none.
+ */
+export function llamaFallback(identifier: string): string | null {
+  const token = /^eip155:(\d+)\/erc20:(0x[0-9a-fA-F]+)$/.exec(identifier);
+  if (token) {
+    const chain = LLAMA_CHAIN[Number(token[1])];
+    const coin = chain ? CANONICAL[`${chain}:${token[2].toLowerCase()}`] : undefined;
+    return coin ? `coingecko:${coin}` : null;
+  }
+  const native = /^eip155:(\d+)\/slip44:60$/.exec(identifier);
+  const coin = native ? NATIVE_PREDECESSOR[Number(native[1])] : undefined;
+  return coin ? `coingecko:${coin}` : null;
+}
+
 /** Unix seconds at 12:00 UTC of a "YYYY-MM-DD" day: the daily price's anchor. */
 export function noonOf(day: string): number {
   return Date.parse(`${day}T12:00:00Z`) / 1000;

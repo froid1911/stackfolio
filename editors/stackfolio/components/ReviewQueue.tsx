@@ -2,8 +2,8 @@
  * "Needs a type": the transactions the books leave out until someone says
  * what they were, grouped by counterparty and direction, most EUR first.
  * One choice per group becomes a rule ("always for this address") or a
- * hand-picked category for just these legs; a suspected airdrop can be
- * thrown out as spam. The books re-fold on their own afterwards.
+ * hand-picked category for just these legs; a suspected airdrop (a token
+ * pushed to a wallet that never held it) can be thrown out as spam. The books re-fold on their own afterwards.
  */
 import { useState } from "react";
 import type { Queue, QueueGroup, QueryState } from "../lib/graphql.js";
@@ -71,7 +71,9 @@ function GroupRow({
   onOpenEvents: (keys: string[]) => void;
   onSaved: () => void;
 }) {
-  const [category, setCategory] = useState(group.suspectedAirdrop ? "AIRDROP_NON_TAXABLE" : "");
+  // The airdrop flag is a hint, never a default: a first receipt of a real
+  // token (a withdrawal from an exchange) looks the same on chain.
+  const [category, setCategory] = useState("");
   const [label, setLabel] = useState(group.counterpartyLabel ?? "");
   const ruleable = isAddress(group.counterparty);
   const everyLeg = group.events.length >= group.count;

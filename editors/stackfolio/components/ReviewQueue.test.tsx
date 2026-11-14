@@ -77,10 +77,17 @@ const button = (scope: HTMLElement, text: string) =>
   [...scope.querySelectorAll("button")].find((b) => b.textContent?.startsWith(text)) as HTMLButtonElement;
 
 describe("ReviewQueue", () => {
-  it("preselects a non-taxable airdrop for a suspected airdrop and makes it a rule", () => {
+  it("marks a suspected airdrop without choosing for the user, then makes the choice a rule", () => {
     render();
     const airdrop = group(`${DISPERSE}|IN`);
-    expect((airdrop.querySelector("select") as HTMLSelectElement).value).toBe("AIRDROP_NON_TAXABLE");
+    expect(airdrop.textContent).toContain("suspected airdrop");
+    const select = airdrop.querySelector("select") as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(button(airdrop, "Always for this address").disabled).toBe(true);
+    act(() => {
+      select.value = "AIRDROP_NON_TAXABLE";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     act(() => button(airdrop, "Always for this address").click());
     expect(actions.addCategoryRule).toHaveBeenCalledWith(
       expect.objectContaining({ counterparty: DISPERSE, direction: "IN", category: "AIRDROP_NON_TAXABLE" }),

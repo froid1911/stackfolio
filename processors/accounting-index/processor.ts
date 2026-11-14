@@ -48,7 +48,9 @@ export const ACCOUNTING_DOCUMENT_TYPES = [
 const FOLLOWED = new Set<string>(ACCOUNTING_DOCUMENT_TYPES);
 // 2: the fold lists its unpriced legs (acc_unpriced); a stored v1
 // checkpoint refolds once to fill the table.
-const FOLD_VERSION = 2;
+// 3: beacon withdrawals book as staking income; protocol principal
+// withdrawals stay off the books.
+const FOLD_VERSION = 3;
 const CURRENCY = "EUR";
 const BATCH = 200;
 

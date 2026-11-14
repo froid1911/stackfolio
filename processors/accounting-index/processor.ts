@@ -48,7 +48,9 @@ export const ACCOUNTING_DOCUMENT_TYPES = [
 const FOLLOWED = new Set<string>(ACCOUNTING_DOCUMENT_TYPES);
 // 2: the fold lists its unpriced legs (acc_unpriced); a stored v1
 // checkpoint refolds once to fill the table.
-const FOLD_VERSION = 2;
+// 3: beacon withdrawals book as staking income; protocol principal
+// withdrawals stay off the books.
+const FOLD_VERSION = 3;
 const CURRENCY = "EUR";
 const BATCH = 200;
 
@@ -93,6 +95,9 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
 
   override async initAndUpgrade(): Promise<void> {
     await up(this.relationalDb);
+    // A new FOLD_VERSION must take effect without waiting for the ledger
+    // to change; with matching hashes and version this is a no-op.
+    await this.recomputeFold();
   }
 
   /** Test and teardown helper: removes every table this index created. */

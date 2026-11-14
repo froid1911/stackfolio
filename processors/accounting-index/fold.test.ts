@@ -249,6 +249,58 @@ describe("accounting fold", () => {
     expect(lotsTotal(state, W1, ETH)).toBe(3200000000000000n);
   });
 
+  it("books a beacon withdrawal as staking income, not a self-transfer", () => {
+    // The consensus layer has no sender: the importer names the wallet
+    // itself as counterparty, which read as a move between own wallets.
+    const state = foldAll(
+      [
+        event({
+          id: "w1",
+          type: "STAKING",
+          subtype: "WITHDRAWAL",
+          amount: "12000000000000000",
+          counterparty: W1,
+        }),
+      ],
+      ctx,
+    );
+    expect(state.income.get(`${W1}|STAKING|2026-01`)?.toString()).toBe(
+      "2400000000", // 0.012 ETH * 2000 = 24 EUR scaled 1e8
+    );
+    expect(month(state, W1, "income")).toBe(2400000000n);
+    expect(lotsTotal(state, W1, ETH)).toBe(12000000000000000n);
+  });
+
+  it("takes principal back out of a protocol as its deposit went in: off the books", () => {
+    const FARM = "0x3333333333333333333333333333333333333333";
+    const state = foldAll(
+      [
+        event({ id: "buy", amount: "5000000000000000000" }),
+        event({
+          id: "in",
+          type: "SPEND",
+          subtype: "DEPOSIT_ASSET",
+          amount: "5000000000000000000",
+          counterparty: FARM,
+          timestamp: "2026-01-16T10:00:00.000Z",
+        }),
+        event({
+          id: "out",
+          type: "STAKING",
+          subtype: "WITHDRAWAL",
+          amount: "5000000000000000000",
+          counterparty: FARM,
+          timestamp: "2026-01-17T10:00:00.000Z",
+        }),
+      ],
+      ctx,
+    );
+    expect(state.income.size).toBe(0);
+    expect(month(state, W1, "income")).toBe(0n);
+    // The 5 bought stay; the round trip through the farm adds nothing.
+    expect(lotsTotal(state, W1, ETH)).toBe(5000000000000000000n);
+  });
+
   it("excludes ignored rows", () => {
     const state = foldAll(
       [

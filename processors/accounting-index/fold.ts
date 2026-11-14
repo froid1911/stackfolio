@@ -366,10 +366,17 @@ export function foldGroup(
 
   for (const event of receives) {
     if (NOISE_SUBTYPES.has(event.subtype)) continue;
+    // A wallet is never its own transfer partner: a beacon withdrawal has
+    // no sender, so the importer names the wallet itself.
+    const fromSelf = event.counterparty?.toLowerCase() === event.wallet.toLowerCase();
+    // Principal back out of a staking contract mirrors its DEPOSIT_ASSET,
+    // which never left the books: neither income nor a new lot.
+    if (event.type === "STAKING" && event.subtype === "WITHDRAWAL" && !fromSelf) continue;
     const agg = monthAgg(state, event.wallet, monthOf(event.timestamp));
     const quantity = BigInt(event.amount);
     const priced = legValue(event, ctx);
     const selfTransfer =
+      !fromSelf &&
       event.counterparty != null &&
       ctx.knownAddresses.has(event.counterparty.toLowerCase());
 

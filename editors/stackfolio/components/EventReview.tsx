@@ -162,8 +162,9 @@ export function EventReview({
         <Note status={priceStatus} />
       </div>
 
-      <div className="grid gap-2">
-        <p className="text-sm font-medium">Kind</p>
+      {/* What the decoder saw; the tax category above is what the books use. */}
+      <details className="grid gap-2">
+        <summary className="cursor-pointer text-sm font-medium">Kind (raw type)</summary>
         <div className="flex flex-wrap items-end gap-2">
           <label className="grid gap-1">
             <span className="text-muted-foreground">Type</span>
@@ -187,7 +188,7 @@ export function EventReview({
           </button>
         </div>
         <Note status={kindStatus} />
-      </div>
+      </details>
 
       <div className="grid gap-2">
         <label className="grid gap-1">

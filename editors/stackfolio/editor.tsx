@@ -198,6 +198,7 @@ export default function Editor({ children }: EditorProps) {
               {eventDetail.id ? (
                 <EventDetail
                   driveId={driveId}
+                  actions={portfolioActions}
                   currency={currency}
                   eventId={eventDetail.id}
                   onClose={closeDetail}

@@ -73,5 +73,15 @@ export function usePortfolioActions(id: string | undefined) {
     updateBundle: (input: { id: string; name?: string; addresses?: string[] }) =>
       dispatch([portfolioActions.updateBundle(input)]),
     removeBundle: (id: string) => dispatch([portfolioActions.removeBundle({ id })]),
+    setEventCategories: (input: Parameters<typeof portfolioActions.setEventCategories>[0]) =>
+      dispatch([portfolioActions.setEventCategories(input)]),
+    clearEventCategories: (input: Parameters<typeof portfolioActions.clearEventCategories>[0]) =>
+      dispatch([portfolioActions.clearEventCategories(input)]),
+    addCategoryRule: (input: Parameters<typeof portfolioActions.addCategoryRule>[0]) =>
+      dispatch([portfolioActions.addCategoryRule(input)]),
+    setAssetIgnored: (assets: string[], ignored: boolean) =>
+      dispatch(assets.map((asset) => portfolioActions.setAssetIgnored({ asset, ignored }))),
+    setAssetTrusted: (asset: string, trusted: boolean) =>
+      dispatch([portfolioActions.setAssetTrusted({ asset, trusted })]),
   };
 }

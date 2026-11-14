@@ -132,11 +132,11 @@ describe("workflowDrift", () => {
       steps: specFacts(spec).steps.slice(0, -1),
     };
     const drift = workflowDrift(spec, trimmed, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
-    expect(drift.differences).toEqual(["the step pin was missing"]);
+    expect(drift.differences).toEqual(["the step balances was missing"]);
     // An appended step is chained to the last one: without the edge the
     // engine skips it on every run (pin never ran on live wallets).
     expect(drift.actions.map((a) => a.type)).toEqual(["ADD_STEP", "ADD_EDGE"]);
-    expect(drift.actions[1]?.input).toMatchObject({ from: "step-1", to: "n1", port: "next" });
+    expect(drift.actions[1]?.input).toMatchObject({ from: "step-2", to: "n1", port: "next" });
   });
 
   it("wires a step nothing leads to", () => {
@@ -210,8 +210,8 @@ describe("workflowDrift", () => {
     const scrambled = { ...specFacts(spec), steps: specFacts(spec).steps.slice().reverse() };
     const drift = workflowDrift(spec, scrambled, "2026-11-11T00:00:00.000Z", newIds(), CONNS);
     expect(drift.differences[0]).toMatch(/rebuilt after the trigger/);
-    expect(drift.actions.filter((a) => a.type === "REMOVE_STEP")).toHaveLength(3);
-    expect(drift.actions.filter((a) => a.type === "ADD_STEP")).toHaveLength(3);
+    expect(drift.actions.filter((a) => a.type === "REMOVE_STEP")).toHaveLength(4);
+    expect(drift.actions.filter((a) => a.type === "ADD_STEP")).toHaveLength(4);
     const first = drift.actions.find((a) => a.type === "ADD_EDGE");
     expect(first?.input).toMatchObject({ from: "trigger" });
   });

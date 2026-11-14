@@ -44,7 +44,9 @@ describe("specs", () => {
       "fetch-etherscan-recent",
       "import-events-to-wallet-account",
       "pin-prices",
+      "fetch-token-balances",
     ]);
+    expect(spec.steps[3].config).toEqual({ accountDocumentId: "w1" });
     const importStep = spec.steps[1].config;
     expect(importStep).toMatchObject({
       scanProgressJson: {
@@ -205,6 +207,8 @@ describe("specs", () => {
       "ADD_STEP",
       "ADD_STEP",
       "ADD_STEP",
+      "ADD_STEP",
+      "ADD_EDGE",
       "ADD_EDGE",
       "ADD_EDGE",
       "ADD_EDGE",

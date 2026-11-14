@@ -81,6 +81,16 @@ export type WorkflowSpec = {
 
 /** The price pinning step both wallet walks run after their import;
  * CoinGecko answers no bitcoin rows, so bitcoin wallets skip it. */
+function tokenBalancesStep(walletDocumentId: string): StepSpec {
+  return {
+    name: "balances",
+    piece: "ethereum",
+    action: "fetch-token-balances",
+    timeoutSeconds: 60,
+    config: { accountDocumentId: walletDocumentId },
+  };
+}
+
 function pinStep(walletDocumentId: string): StepSpec {
   return {
     name: "pin",
@@ -196,6 +206,11 @@ export function liveEtherscanSpec(
       // Price what just landed; CoinGecko has no bitcoin rows, so the
       // bitcoin wallets skip the step.
       ...(provider === "bitcoin" ? [] : [pinStep(walletDocumentId)]),
+      // Token balances from the chain: holdings use them instead of the
+      // ledger's sum of transfers, which drifts wherever the scan missed
+      // one. Last, so existing workflows only gain a tail step. Bitcoin
+      // has no tokens.
+      ...(provider === "bitcoin" ? [] : [tokenBalancesStep(walletDocumentId)]),
     ],
   };
 }

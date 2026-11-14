@@ -71,6 +71,11 @@ describe("classify", () => {
     expect(result.get(overrideKey(W, "i", 9))?.category).toBe("TRADE");
   });
 
+  it("calls a decoded swap leg a trade even when its other side is missing", () => {
+    expect(one(ev({ id: "s", counterparty: "uniswap-v2" }))?.category).toBe("TRADE");
+    expect(one(ev({ id: "t", type: "RECEIVE", counterparty: "curve" }))?.category).toBe("TRADE");
+  });
+
   it("applies the most specific matching rule, newest first among equals", () => {
     const rules = [
       { id: "r1", counterparty: BINANCE, chainId: null, direction: "ANY", asset: null, category: "GIFT_OUT", label: null },

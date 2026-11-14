@@ -114,6 +114,12 @@ function derived(event: ClassifyEvent, direction: "in" | "out", ctx: ClassifyCon
   if (bySubtype) return bySubtype;
   if (event.type === "STAKING") return "STAKING";
   if (event.type === "TRADE" || trade) return "TRADE";
+  // A decoder claims swap legs as subtype NONE with the protocol's id (not
+  // an address) as counterparty: a trade even when the other leg is an
+  // internal transfer the scan never saw.
+  if (event.subtype === "NONE" && event.counterparty && !event.counterparty.startsWith("0x")) {
+    return "TRADE";
+  }
   if (event.counterparty && !fromSelf && ctx.knownAddresses.has(event.counterparty.toLowerCase())) {
     return direction === "out" ? "WITHDRAWAL" : "DEPOSIT";
   }

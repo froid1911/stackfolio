@@ -133,7 +133,13 @@ describe("specs", () => {
       ["registry", "document-get"],
       ["prices", "fetch-prices"],
       ["import", "import-prices-to-book"],
+      ["unlisted", "ignore-unlisted-tokens"],
     ]);
+    expect(spec.steps[4].config).toEqual({
+      portfolioDocumentId: resources.portfolioDocumentId,
+      registryDocumentId: resources.registryDocumentId,
+      priceBookDocumentId: resources.priceBookDocumentId,
+    });
     expect(spec.trigger).toEqual({ kind: "interval", seconds: 3600 });
   });
 

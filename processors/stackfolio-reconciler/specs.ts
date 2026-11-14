@@ -393,6 +393,19 @@ export function pricesSpec(resources: PortfolioResources): WorkflowSpec {
           errorMessage: "{{steps.prices.output.error}}",
         },
       },
+      {
+        // Tokens no price source knows - spam airdrops, poisoning fakes -
+        // are ignored, so they stay out of holdings, history and the books.
+        name: "unlisted",
+        piece: "ethereum",
+        action: "ignore-unlisted-tokens",
+        timeoutSeconds: 120,
+        config: {
+          portfolioDocumentId: resources.portfolioDocumentId,
+          registryDocumentId: resources.registryDocumentId,
+          priceBookDocumentId: resources.priceBookDocumentId,
+        },
+      },
     ],
   };
 }

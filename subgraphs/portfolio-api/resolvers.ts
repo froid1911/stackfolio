@@ -8,6 +8,7 @@ import {
   attachGaps,
   attachValuations,
   holdingsFromRows,
+  tokenBalancesOf,
   newestPrices,
   unitCostPerWhole,
   type HoldingsInput,
@@ -89,7 +90,7 @@ export const getResolvers = (
               .select(["asset", "price"])
               .execute(),
             query(args.driveId).selectFrom("accounts").where("document_id", "in", ids)
-              .select(["address", "chain_id", "native_balance"])
+              .select(["address", "chain_id", "native_balance", "token_balances"])
               .execute(),
             query(args.driveId).selectFrom("address_labels").where("document_id", "in", ids)
               .select(["address", "label", "ens_name"])
@@ -130,6 +131,10 @@ export const getResolvers = (
             address: a.address,
             amount: a.native_balance as string,
           }));
+        // Token balances read from the chain replace the ledger's net the
+        // same way: a sum of transfers drifts wherever the scan missed one
+        // (swaps, repayments, bridges), a balanceOf does not.
+        nativeBalances.push(...accounts.flatMap((a) => tokenBalancesOf(a.address, a.token_balances)));
 
         // Prices: one newest answer per asset (newestPrices).
         const rows = holdingsFromRows({

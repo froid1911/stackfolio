@@ -198,8 +198,17 @@ export async function up(db: Kysely<DB>): Promise<void> {
     .addColumn("backfill_state", "varchar(16)")
     .addColumn("native_balance", amount)
     .addColumn("native_balance_block", "integer")
+    .addColumn("token_balances", "text")
     .ifNotExists()
     .execute();
+  // Stores created before token balances were read lack the column; the
+  // builder keeps the drive's schema, and a second start finds it there.
+  const accountColumns = (await db.introspection.getTables()).find(
+    (table) => table.name === "accounts",
+  )?.columns;
+  if (accountColumns && !accountColumns.some((c) => c.name === "token_balances")) {
+    await db.schema.alterTable("accounts").addColumn("token_balances", "text").execute();
+  }
 
   await db.schema
     .createTable("check_issues")

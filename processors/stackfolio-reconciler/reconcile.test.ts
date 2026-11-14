@@ -34,6 +34,7 @@ const wallet = (
     redecode: null,
     cursor: null,
     nativeBalance: null,
+    tokenBalances: null,
     bitcoinXpub: null,
     label: null,
     ...over,

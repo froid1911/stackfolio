@@ -122,6 +122,8 @@ export interface AccountRow {
   backfill_state: string | null;
   native_balance: string | null;
   native_balance_block: number | null;
+  /** JSON [{asset, amount}] of the last chain reading, or null. */
+  token_balances: string | null;
 }
 
 export interface CheckIssueRow {

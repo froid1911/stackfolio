@@ -257,6 +257,7 @@ export class PortfolioIndex extends RelationalDbProcessor<DB> {
             backfill_state: eb.ref("excluded.backfill_state"),
             native_balance: eb.ref("excluded.native_balance"),
             native_balance_block: eb.ref("excluded.native_balance_block"),
+            token_balances: eb.ref("excluded.token_balances"),
           })),
         )
         .execute();

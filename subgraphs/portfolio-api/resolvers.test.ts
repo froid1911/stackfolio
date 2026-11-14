@@ -392,7 +392,8 @@ describe("portfolio-api accounting queries", () => {
         count: 2,
         value: "600",
         assets: [ETH],
-        suspectedAirdrop: true,
+        // Pushed and priced, but a native coin is never an airdrop.
+        suspectedAirdrop: false,
         events: [`${W1}|e5|0`, `${W1}|e6|0`],
       }),
     ]);

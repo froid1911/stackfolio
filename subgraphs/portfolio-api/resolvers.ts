@@ -396,6 +396,7 @@ export const getResolvers = (
             "e.event_id as eventId",
             "e.sequence_index as sequenceIndex",
             "e.event_identifier as eventIdentifier",
+            "e.timestamp as timestamp",
             "e.type as type",
             "e.asset as asset",
             "e.amount as amount",
@@ -428,7 +429,15 @@ export const getResolvers = (
             .filter((row) => row.label)
             .map((row) => [row.address.toLowerCase(), row.label as string] as const),
         );
-        const queue = queueGroups(legs, signed, decimals);
+        const firsts = await acc
+          .selectFrom("acc_events")
+          .where("document_id", "in", ids)
+          .where("asset", "in", [...new Set(legs.map((leg) => leg.asset))])
+          .select((eb) => ["wallet", "asset", eb.fn.min("timestamp").as("first")])
+          .groupBy(["wallet", "asset"])
+          .execute();
+        const firstSeen = new Map(firsts.map((f) => [`${f.wallet}|${f.asset}`, String(f.first)]));
+        const queue = queueGroups(legs, signed, decimals, firstSeen);
         return {
           ...queue,
           groups: queue.groups.map((group) => ({

@@ -10,6 +10,7 @@ const leg = (over: Partial<QueueLeg>): QueueLeg => ({
   eventId: "e",
   sequenceIndex: 0,
   eventIdentifier: TX,
+  timestamp: "2026-05-01T00:00:00.000Z",
   type: "RECEIVE",
   asset: TOKEN,
   amount: "1000000000000000000",
@@ -41,11 +42,22 @@ describe("queueGroups", () => {
     expect(out.groups[1].events).toEqual([`${W}|a|0`, `${W}|b|0`]);
   });
 
-  it("flags an inbound, unsigned, priced group from an address as a suspected airdrop", () => {
-    expect(queueGroups([leg({})], new Set(), decimals).groups[0].suspectedAirdrop).toBe(true);
-    expect(queueGroups([leg({})], new Set([`${W}|${TX}`]), decimals).groups[0].suspectedAirdrop).toBe(false);
-    expect(queueGroups([leg({ price: null })], new Set(), decimals).groups[0].suspectedAirdrop).toBe(false);
-    expect(queueGroups([leg({ counterparty: "uniswap-v2" })], new Set(), decimals).groups[0].suspectedAirdrop).toBe(false);
+  it("flags a pushed, priced token the wallet never held before as a suspected airdrop", () => {
+    const first = new Map([[`${W}|${TOKEN}`, "2026-05-01T00:00:00.000Z"]]);
+    const flag = (over: Partial<QueueLeg>, signed = new Set<string>(), seen = first) =>
+      queueGroups([leg(over)], signed, decimals, seen).groups[0].suspectedAirdrop;
+    expect(flag({})).toBe(true);
+    expect(flag({}, new Set([`${W}|${TX}`]))).toBe(false);
+    expect(flag({ price: null })).toBe(false);
+    expect(flag({ counterparty: "uniswap-v2" })).toBe(false);
+    // Held before: a withdrawal from an exchange, not an airdrop.
+    expect(flag({}, new Set(), new Map([[`${W}|${TOKEN}`, "2025-01-01T00:00:00.000Z"]]))).toBe(false);
+    // A native coin is never an airdrop.
+    const eth = "eip155:1/slip44:60";
+    expect(
+      queueGroups([leg({ asset: eth })], new Set(), new Map([[eth, 18]]), new Map([[`${W}|${eth}`, "2026-05-01T00:00:00.000Z"]]))
+        .groups[0].suspectedAirdrop,
+    ).toBe(false);
   });
 
   it("values a fractional price and leaves foreign-currency prices out", () => {

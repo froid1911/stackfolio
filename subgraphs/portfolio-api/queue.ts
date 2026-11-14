@@ -10,6 +10,7 @@ export interface QueueLeg {
   eventId: string;
   sequenceIndex: number;
   eventIdentifier: string;
+  timestamp: string;
   type: string;
   asset: string;
   amount: string;
@@ -50,13 +51,17 @@ function format(scaled: bigint): string {
 
 /**
  * Group the queue's legs. `signed` holds "wallet|txHash" for transactions a
- * wallet paid gas for: an inbound group none of whose legs was signed, all
- * priced, from an address, is a suspected airdrop.
+ * wallet paid gas for; `firstSeen` maps "wallet|asset" to the wallet's
+ * earliest event of that asset. An inbound group from an address is a
+ * suspected airdrop when every leg is a priced ERC-20 the wallet did not
+ * sign for and had never seen before: an exchange withdrawal also arrives
+ * unsigned and priced, but rarely as a token the wallet never held.
  */
 export function queueGroups(
   legs: QueueLeg[],
   signed: Set<string>,
   decimals: Map<string, number>,
+  firstSeen: Map<string, string> = new Map(),
 ): { total: number; value: string | null; groups: QueueGroup[] } {
   const groups = new Map<string, QueueGroup & { scaled: bigint | null; pushed: boolean }>();
   let total: bigint | null = null;
@@ -81,7 +86,14 @@ export function queueGroups(
       group.events.push(`${leg.wallet}|${leg.eventId}|${leg.sequenceIndex}`);
     }
     const value = legValue(leg, decimals);
-    if (value === null || signed.has(`${leg.wallet}|${txHashOf(leg.eventIdentifier)}`)) {
+    const novel =
+      leg.asset.includes("/erc20:") &&
+      firstSeen.get(`${leg.wallet}|${leg.asset}`) === leg.timestamp;
+    if (
+      value === null ||
+      !novel ||
+      signed.has(`${leg.wallet}|${txHashOf(leg.eventIdentifier)}`)
+    ) {
       group.pushed = false;
     }
     if (value !== null) {

@@ -117,8 +117,8 @@ GTC: about EUR 50k) sit unclassified among them.
   spam: category `SPAM`, source `auto`; not booked, not in the queue, not in any
   total. Native assets are never spam.
 - **Spam (by hand):** "Mark as spam" ignores the asset (existing
-  `ignoredAssets`). "Not spam" adds it to a new `trustedAssets` list (ops
-  TRUST_ASSET / UNTRUST_ASSET), which the automatic rule never flags.
+  `ignoredAssets`). "Not spam" adds it to a new `trustedAssets` list (op
+  SET_ASSET_TRUSTED, mirroring SET_ASSET_IGNORED), which the automatic rule never flags.
 - **Known airdrop claims:** a receipt from a known claim contract
   (`processors/shared/airdrops.ts`: UNI MerkleDistributor, Arbitrum
   TokenDistributor, ENS token, ParaSwap PSP, Gitcoin GTC distributors, each

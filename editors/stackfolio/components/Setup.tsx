@@ -1,6 +1,5 @@
 import {
   addDocument,
-  getPHStore,
   useDocumentById,
   useNodesInSelectedDrive,
   useSelectedDrive,
@@ -8,10 +7,10 @@ import {
 import { generateId } from "document-model";
 import { actions as connectionActions } from "@powerhousedao/workflow/document-models/connection";
 import { actions as portfolioActions } from "document-models/portfolio";
-import { actions as walletActions } from "document-models/wallet-account";
 import { useEffect, useRef, useState } from "react";
 import { gql } from "../lib/gql.js";
 import { planSetup } from "../lib/setup.js";
+import { openWallet, walletName } from "../lib/wallets.js";
 
 const DEFAULT_RPC = "http://127.0.0.1:8545";
 const DEFAULT_BEACON = "http://127.0.0.1:5052";
@@ -379,10 +378,7 @@ export function AddAccountForm({
     if (!document || !address || active.size === 0) return;
     const label = ens.trim() || null;
     const chainName = (id: number) => EVM_CHAINS.find((c) => c.id === id)?.name ?? `${id}`;
-    const nameOf = (id: number) => {
-      const base = label ?? `${address.slice(0, 6)}…${address.slice(-4)}`;
-      return id === 1 ? base : `${base} (${chainName(id)})`;
-    };
+    const nameOf = (id: number) => walletName(address, label, id === 1 ? null : chainName(id));
     const timestamp = new Date().toISOString();
     dispatch(
       [...active].map((chainId) =>
@@ -397,26 +393,9 @@ export function AddAccountForm({
       ),
     );
     for (const chainId of [...active].sort((a, b) => a - b)) {
-      const created = await addDocument(
-        drive.header.id,
-        nameOf(chainId),
-        "stackfolio/wallet-account",
-      );
-      const details = walletActions.setAccountDetails({
-        address,
-        chainId,
-        label: label ?? undefined,
-      });
-      // The wallet document arrives through the store; bind on first sight.
-      await bindWallet(created.id, details);
+      await openWallet(drive.header.id, { address, chainId, label, name: nameOf(chainId) });
     }
     onDone();
-  }
-
-  async function bindWallet(walletId: string, action: unknown) {
-    const client = getPHStore()?.reactorClient;
-    if (!client) throw new Error("The reactor is not ready");
-    await client.write.execute(walletId, "main", [action as never]);
   }
 
   return (

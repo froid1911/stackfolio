@@ -12,6 +12,7 @@ import type {
   SetBackfillStateAction,
   SetNativeBalanceAction,
   SetRedecodeStateAction,
+  SetTokenBalancesAction,
 } from "./cursor/actions.js";
 import type {
   ImportEventsAction,
@@ -43,6 +44,7 @@ import {
   SetIgnoredInputSchema,
   SetNativeBalanceInputSchema,
   SetRedecodeStateInputSchema,
+  SetTokenBalancesInputSchema,
   SetWalletXpubInputSchema,
 } from "./schema/zod.js";
 
@@ -228,6 +230,18 @@ const stateReducer: StateReducer<WalletAccountPHState> = (
       walletAccountCursorOperations.setRedecodeStateOperation(
         state.global,
         action as SetRedecodeStateAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "SET_TOKEN_BALANCES": {
+      memoizedSchema(SetTokenBalancesInputSchema).parse(action.input);
+
+      walletAccountCursorOperations.setTokenBalancesOperation(
+        state.global,
+        action as SetTokenBalancesAction,
         dispatch,
       );
 

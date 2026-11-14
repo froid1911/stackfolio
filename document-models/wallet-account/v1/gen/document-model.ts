@@ -20,10 +20,10 @@ export const documentModel: DocumentModelGlobalState = {
         },
         global: {
           schema:
-            "type WalletAccountState {\n  address: String!\n  chainId: Int!\n  label: String\n  ignored: Boolean!\n  ledger: [LedgerEvent!]!\n  cursor: ScanCursor\n  backfill: BackfillState\n  redecode: BackfillState\n  nativeBalance: NativeBalance\n  bitcoinXpub: String\n  ensNames: [EnsName!]!\n}\n\ntype LedgerEvent {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  counterpartyLabel: String\n  notes: String\n  ignored: Boolean!\n  source: EventSource!\n  importBatch: String\n  valuation: Valuation\n}\n\ntype Valuation {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}\n\ntype EnsName {\n  name: String!\n  owned: Boolean!\n}\n\ntype ScanCursor {\n  lastLogsBlock: Int\n  lastNativeScanBlock: Int\n  lastEventTimestamp: DateTime\n  lastRunAt: DateTime\n}\n\ntype BackfillState {\n  state: BackfillPhase!\n  startBlock: Int\n  nextBlock: Int\n}\n\ntype NativeBalance {\n  amount: String!\n  blockNumber: Int!\n  observedAt: DateTime!\n}\n\nenum EventType {\n  SPEND\n  RECEIVE\n  TRADE\n  TRANSFER\n  STAKING\n  MIGRATE\n  INFORMATIONAL\n}\n\nenum EventSubtype {\n  NONE\n  FEE\n  APPROVE\n  WITHDRAWAL\n  BLOCK_PRODUCTION\n  SPAM\n  AIRDROP\n  DONATE\n  DEPOSIT_ASSET\n  REMOVE_ASSET\n  BORROW\n  REPAY\n  LIQUIDATION\n  YIELD\n  LP_MINT\n  LP_BURN\n  NAME_REGISTRATION\n  BRIDGE\n}\n\nenum EventSource {\n  CHAIN\n  MANUAL\n}\n\nenum ValuationSource {\n  COINGECKO\n  DEFILLAMA\n  MANUAL\n  UNPRICED\n}\n\nenum ValuationGranularity {\n  DAY\n  NONE\n}\n\nenum BackfillPhase {\n  IDLE\n  LOGS\n  NATIVE\n  DONE\n}",
+            'type WalletAccountState {\n  address: String!\n  chainId: Int!\n  label: String\n  ignored: Boolean!\n  ledger: [LedgerEvent!]!\n  cursor: ScanCursor\n  backfill: BackfillState\n  redecode: BackfillState\n  nativeBalance: NativeBalance\n  tokenBalances: TokenBalances\n  bitcoinXpub: String\n  ensNames: [EnsName!]!\n}\n\ntype LedgerEvent {\n  id: OID!\n  eventIdentifier: String!\n  sequenceIndex: Int!\n  timestamp: DateTime!\n  type: EventType!\n  subtype: EventSubtype!\n  asset: String!\n  amount: String!\n  counterparty: String\n  counterpartyLabel: String\n  notes: String\n  ignored: Boolean!\n  source: EventSource!\n  importBatch: String\n  valuation: Valuation\n}\n\ntype Valuation {\n  unit: String!\n  price: String!\n  source: ValuationSource!\n  granularity: ValuationGranularity!\n  pinnedAt: DateTime!\n}\n\ntype EnsName {\n  name: String!\n  owned: Boolean!\n}\n\ntype ScanCursor {\n  lastLogsBlock: Int\n  lastNativeScanBlock: Int\n  lastEventTimestamp: DateTime\n  lastRunAt: DateTime\n}\n\ntype BackfillState {\n  state: BackfillPhase!\n  startBlock: Int\n  nextBlock: Int\n}\n\ntype NativeBalance {\n  amount: String!\n  blockNumber: Int!\n  observedAt: DateTime!\n}\n\nenum EventType {\n  SPEND\n  RECEIVE\n  TRADE\n  TRANSFER\n  STAKING\n  MIGRATE\n  INFORMATIONAL\n}\n\nenum EventSubtype {\n  NONE\n  FEE\n  APPROVE\n  WITHDRAWAL\n  BLOCK_PRODUCTION\n  SPAM\n  AIRDROP\n  DONATE\n  DEPOSIT_ASSET\n  REMOVE_ASSET\n  BORROW\n  REPAY\n  LIQUIDATION\n  YIELD\n  LP_MINT\n  LP_BURN\n  NAME_REGISTRATION\n  BRIDGE\n}\n\nenum EventSource {\n  CHAIN\n  MANUAL\n}\n\nenum ValuationSource {\n  COINGECKO\n  DEFILLAMA\n  MANUAL\n  UNPRICED\n}\n\nenum ValuationGranularity {\n  DAY\n  NONE\n}\n\nenum BackfillPhase {\n  IDLE\n  LOGS\n  NATIVE\n  DONE\n}\n\n"""\nToken balances read from the chain at one block: every token the ledger has\ntouched, zeros included, so an observed balance replaces the ledger\'s net.\n"""\ntype TokenBalances {\n  blockNumber: Int!\n  observedAt: DateTime!\n  balances: [TokenBalance!]!\n}\n\ntype TokenBalance {\n  asset: String!\n  amount: String!\n}',
           examples: [],
           initialValue:
-            '{"address":"","chainId":0,"label":null,"ignored":false,"ledger":[],"cursor":null,"backfill":null,"redecode":null,"nativeBalance":null,"bitcoinXpub":null,"ensNames":[]}',
+            '{"address": "", "chainId": 0, "label": null, "ignored": false, "ledger": [], "cursor": null, "backfill": null, "redecode": null, "nativeBalance": null, "bitcoinXpub": null, "ensNames": [], "tokenBalances": null}',
         },
       },
       modules: [
@@ -147,18 +147,18 @@ export const documentModel: DocumentModelGlobalState = {
               errors: [
                 {
                   id: "replaceEmpty",
-                  name: "EmptyReplacementError",
                   code: "INVALID_INPUT",
+                  name: "EmptyReplacementError",
+                  template: "",
                   description:
                     "A replacement must remove or add at least one event.",
-                  template: "",
                 },
                 {
                   id: "replaceInvalidAmount",
-                  name: "InvalidAmountError",
                   code: "INVALID_AMOUNT",
-                  description: "An added event amount is not a decimal.",
+                  name: "InvalidAmountError",
                   template: "",
+                  description: "An added event amount is not a decimal.",
                 },
               ],
               schema:
@@ -247,10 +247,10 @@ export const documentModel: DocumentModelGlobalState = {
               errors: [
                 {
                   id: "pinValuationsInvalid",
-                  name: "InvalidValuationError",
                   code: "INVALID_INPUT",
-                  description: "A valuation lacks a decimal price or a unit.",
+                  name: "InvalidValuationError",
                   template: "",
+                  description: "A valuation lacks a decimal price or a unit.",
                 },
               ],
               schema:
@@ -334,14 +334,45 @@ export const documentModel: DocumentModelGlobalState = {
             {
               id: "setRedecodeState",
               name: "SET_REDECODE_STATE",
-              description:
-                "The re-walk cursor that re-decodes an imported history against the protocol registry; DONE retires the retrofit.",
+              scope: "global",
+              errors: [],
               schema:
                 "input SetRedecodeStateInput {\n  state: BackfillPhase!\n  startBlock: Int\n  nextBlock: Int\n}",
-              template: "Set the re-decode walk cursor.",
               reducer:
                 "state.redecode = {\n  state: action.input.state,\n  startBlock: action.input.startBlock ?? null,\n  nextBlock: action.input.nextBlock ?? null,\n};",
-              errors: [],
+              examples: [],
+              template: "Set the re-decode walk cursor.",
+              description:
+                "The re-walk cursor that re-decodes an imported history against the protocol registry; DONE retires the retrofit.",
+            },
+            {
+              id: "abf81d7c-d384-44ea-902e-fd0073087bec",
+              name: "SET_TOKEN_BALANCES",
+              description:
+                "Record the token balances read from the chain at a block; replaces the previous reading.",
+              schema:
+                "input SetTokenBalancesInput {\n  blockNumber: Int!\n  observedAt: DateTime!\n  balances: [TokenBalanceInput!]!\n}\n\ninput TokenBalanceInput {\n  asset: String!\n  amount: String!\n}",
+              template:
+                "Record the token balances read from the chain at a block; replaces the previous reading.",
+              reducer:
+                "if (state.tokenBalances && action.input.blockNumber < state.tokenBalances.blockNumber) {\n  throw new TokenBalancesStaleError(`A reading at block ${action.input.blockNumber} is older than block ${state.tokenBalances.blockNumber}`);\n}\nfor (const b of action.input.balances) {\n  if (!/^(0|[1-9][0-9]*)$/.test(b.amount)) throw new InvalidTokenBalanceError(`${b.asset}: ${b.amount} is not a token amount`);\n}\nstate.tokenBalances = {\n  blockNumber: action.input.blockNumber,\n  observedAt: action.input.observedAt,\n  balances: action.input.balances.map((b) => ({ asset: b.asset, amount: b.amount })),\n};",
+              errors: [
+                {
+                  id: "485442ad-090b-44ca-9ff7-911ea4d34ed8",
+                  name: "TokenBalancesStaleError",
+                  code: "TOKEN_BALANCES_STALE",
+                  description:
+                    "A reading from an older block than the stored one",
+                  template: "",
+                },
+                {
+                  id: "b511d260-6a39-4ecd-abd5-b60bb51c155e",
+                  name: "InvalidTokenBalanceError",
+                  code: "INVALID_TOKEN_BALANCE",
+                  description: "A balance that is not a non-negative integer",
+                  template: "",
+                },
+              ],
               examples: [],
               scope: "global",
             },

@@ -2,6 +2,8 @@ import type { WalletAccountCursorOperations } from "document-models/wallet-accou
 import {
   BalanceStaleError,
   CursorRegressionError,
+  InvalidTokenBalanceError,
+  TokenBalancesStaleError,
 } from "../../gen/cursor/error.js";
 
 export const walletAccountCursorOperations: WalletAccountCursorOperations = {
@@ -66,6 +68,30 @@ export const walletAccountCursorOperations: WalletAccountCursorOperations = {
       amount: action.input.amount,
       blockNumber: action.input.blockNumber,
       observedAt: action.input.observedAt,
+    };
+  },
+  setTokenBalancesOperation(state, action) {
+    if (
+      state.tokenBalances &&
+      action.input.blockNumber < state.tokenBalances.blockNumber
+    ) {
+      throw new TokenBalancesStaleError(
+        `A reading at block ${action.input.blockNumber} is older than block ${state.tokenBalances.blockNumber}`,
+      );
+    }
+    for (const b of action.input.balances) {
+      if (!/^(0|[1-9][0-9]*)$/.test(b.amount))
+        throw new InvalidTokenBalanceError(
+          `${b.asset}: ${b.amount} is not a token amount`,
+        );
+    }
+    state.tokenBalances = {
+      blockNumber: action.input.blockNumber,
+      observedAt: action.input.observedAt,
+      balances: action.input.balances.map((b) => ({
+        asset: b.asset,
+        amount: b.amount,
+      })),
     };
   },
 };

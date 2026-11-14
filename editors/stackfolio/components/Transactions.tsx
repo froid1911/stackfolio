@@ -19,6 +19,7 @@ import { formatUnitPrice } from "../lib/assets.js";
 import { direction } from "../lib/review.js";
 import { toCsv } from "../lib/csv.js";
 import { short } from "./Dashboard.js";
+import { CATEGORY_CHOICES, CATEGORY_LABEL, SOURCE_LABEL } from "../lib/categories.js";
 
 const TYPE_TABS: { id: string; label: string; types?: string[] }[] = [
   { id: "all", label: "All" },
@@ -34,6 +35,7 @@ const EVENT_HEADERS = [
   "timestamp",
   "type",
   "subtype",
+  "category",
   "asset",
   "amount",
   "counterparty",
@@ -49,6 +51,7 @@ export function eventsCsv(rows: EventRow[], symbolOf: (asset: string) => string)
       e.timestamp,
       e.type,
       e.subtype,
+      e.category ?? "",
       symbolOf(e.asset),
       e.amount,
       e.counterpartyLabel ?? e.counterparty,
@@ -169,6 +172,27 @@ export function Transactions({
                 <option key={a.identifier} value={a.identifier}>
                   {a.symbol}
                 </option>
+              ))}
+            </select>
+            <select
+              aria-label="Tax category"
+              className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+              value={filter.categories?.[0] ?? ""}
+              onChange={(e) =>
+                setFilter({ ...filter, categories: e.target.value ? [e.target.value] : undefined, offset: 0 })
+              }
+            >
+              <option value="">All categories</option>
+              <option value="UNCLASSIFIED">{CATEGORY_LABEL.UNCLASSIFIED}</option>
+              <option value="SPAM">{CATEGORY_LABEL.SPAM}</option>
+              {CATEGORY_CHOICES.map(({ group, options }) => (
+                <optgroup key={group} label={group}>
+                  {options.map((o) => (
+                    <option key={o} value={o}>
+                      {CATEGORY_LABEL[o]}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             <input
@@ -319,6 +343,7 @@ export function Transactions({
                 <tr>
                   <th className="px-3 py-2">When</th>
                   <th className="px-3 py-2">Kind</th>
+                  <th className="px-3 py-2">Category</th>
                   <th className="px-3 py-2 text-right">Amount</th>
                   <th className="px-3 py-2 text-right">Price</th>
                   <th className="px-3 py-2">Counterparty</th>
@@ -358,6 +383,24 @@ export function Transactions({
                         </span>
                         {e.source === "MANUAL" && (
                           <span className="ml-1 text-[10px] text-muted-foreground">manual</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2">
+                        {e.category && (
+                          <span
+                            data-category={e.category}
+                            title={SOURCE_LABEL[e.categorySource ?? ""] ?? undefined}
+                            className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                              e.category === "UNCLASSIFIED"
+                                ? "border-warning/50 text-warning"
+                                : e.category === "SPAM"
+                                  ? "border-border text-muted-foreground line-through"
+                                  : "border-border"
+                            }`}
+                          >
+                            {CATEGORY_LABEL[e.category] ?? e.category}
+                            {e.categorySource === "override" || e.categorySource === "rule" ? " •" : ""}
+                          </span>
                         )}
                       </td>
                       <td
@@ -418,7 +461,7 @@ export function Transactions({
                 })}
                 {rows.length === 0 && !page.loading && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
                       No events match these filters yet.
                     </td>
                   </tr>

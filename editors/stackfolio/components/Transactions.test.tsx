@@ -200,9 +200,33 @@ describe("Transactions history page", () => {
     expect(host.querySelector("td script")).toBeNull();
   });
 
+  it("badges each row's tax category and filters by it", () => {
+    const spam = { ...EVENT, eventId: "ev-3", category: "SPAM", categorySource: "auto" };
+    const setFilter = vi.fn();
+    render({ page: ok<EventsPage>({ rows: [EVENT, spam], total: 2 }), setFilter });
+    const badges = [...host.querySelectorAll("[data-category]")];
+    expect(badges.map((b) => b.textContent)).toEqual(["Unclassified", "Spam"]);
+    expect(badges[1].getAttribute("title")).toBe("automatic");
+    const select = host.querySelector('select[aria-label="Tax category"]') as HTMLSelectElement;
+    act(() => {
+      select.value = "UNCLASSIFIED";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ categories: ["UNCLASSIFIED"], offset: 0 }));
+  });
+
+  it("shows the review queue in its sub-tab with the waiting count", () => {
+    const onSub = vi.fn();
+    render({ sub: "queue", queueCount: 7, queueView: <p>the queue</p>, onSub });
+    expect(buttons("Needs a type (7)")).toHaveLength(1);
+    expect(host.textContent).toContain("the queue");
+    expect(host.querySelector("tbody")).toBeNull();
+  });
+
   it("eventsCsv quotes per RFC and guards the formula note", () => {
     const csv = eventsCsv([EVENT], (a) => (a.includes("dai") ? "DAI" : a));
-    expect(csv).toContain("timestamp,type,subtype,asset,amount,counterparty,account,notes\r\n");
+    expect(csv).toContain("timestamp,type,subtype,category,asset,amount,counterparty,account,notes\r\n");
+    expect(csv).toContain(",UNCLASSIFIED,");
     expect(csv).toContain("'=SUM(A1)");
     expect(csv).toContain("100000000000000000000");
   });

@@ -77,7 +77,7 @@ describe("sameReading", () => {
 
 describe("readTokenBalances", () => {
   it("reads every token at one block, in chunks, leaving failed calls out", async () => {
-    const tokens = Array.from({ length: 301 }, (_, i) => ({
+    const tokens: { asset: string; contract: `0x${string}` }[] = Array.from({ length: 301 }, (_, i) => ({
       asset: `t${i}`,
       contract: `0x${i.toString(16).padStart(40, "0")}`,
     }));

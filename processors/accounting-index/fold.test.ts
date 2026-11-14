@@ -21,6 +21,8 @@ const ctx: FoldContext = {
     [ETH, 18],
     [USDC, 6],
   ]),
+  rules: [],
+  overrides: new Map(),
 };
 
 const event = (overrides: Partial<FoldEvent> & { id: string }): FoldEvent => ({
@@ -32,7 +34,8 @@ const event = (overrides: Partial<FoldEvent> & { id: string }): FoldEvent => ({
   subtype: "NONE",
   asset: ETH,
   amount: "1000000000000000000",
-  counterparty: null,
+  // A decoded swap leg: classified TRADE unless a test says otherwise.
+  counterparty: "uniswap-v2",
   ignored: false,
   valuation: { unit: "EUR", price: "2000", source: "COINGECKO" },
   ...overrides,
@@ -151,13 +154,13 @@ describe("accounting fold", () => {
         timestamp: "2026-01-16T10:00:00.000Z",
         type: "SPEND",
         amount: "1000000000000000000",
-        counterparty: "0xfeed",
+        counterparty: "uniswap-v2",
       }),
       event({
         id: "e3",
         timestamp: "2026-01-17T10:00:00.000Z",
         amount: "2500000000000000000",
-        counterparty: "0xfeed",
+        counterparty: "uniswap-v2",
       }),
       event({
         id: "e4",
@@ -184,7 +187,7 @@ describe("accounting fold", () => {
           id: "e1",
           type: "SPEND",
           amount: "1000000000000000000",
-          counterparty: "0xfeed", // no lot behind it
+          counterparty: "uniswap-v2", // no lot behind it
         }),
         event({
           id: "e2",
@@ -207,7 +210,7 @@ describe("accounting fold", () => {
   it("records which legs it could not value, and why", () => {
     const state = foldAll(
       [
-        event({ id: "e1", type: "SPEND", counterparty: "0xfeed" }), // no lot: no cost basis
+        event({ id: "e1", type: "SPEND", counterparty: "uniswap-v2" }), // no lot: no cost basis
         event({ id: "e2", timestamp: "2026-01-16T10:00:00.000Z", valuation: null }), // no value
         event({ id: "e3", timestamp: "2026-01-17T10:00:00.000Z" }), // priced: not listed
       ],
@@ -242,7 +245,7 @@ describe("accounting fold", () => {
       ],
       ctx,
     );
-    expect(state.income.get(`${W1}|BLOCK_PRODUCTION|2026-01`)?.toString()).toBe(
+    expect(state.income.get(`${W1}|STAKING|2026-01`)?.toString()).toBe(
       "640000000", // 0.0032 ETH * 2000 = 6.4 EUR scaled 1e8
     );
     expect(month(state, W1, "income")).toBe(640000000n);
@@ -287,8 +290,11 @@ describe("accounting fold", () => {
       ctx,
     );
     expect(state.income.size).toBe(0);
-    expect(month(state, W1, "income")).toBe(0n);
-    expect(lotsTotal(state, W1, ETH)).toBe(32010000000000000000n);
+    expect(month(state, W1, "income") ?? 0n).toBe(0n);
+    // Collateral coming home: the 32 ETH deposit never left the books, so
+    // the exit opens no second lot.
+    expect(lotsTotal(state, W1, ETH)).toBe(0n);
+    expect(state.categories.get(`${W1}|exit|0`)?.category).toBe("COLLATERAL_IN");
   });
 
   it("takes principal back out of a protocol as its deposit went in: off the books", () => {
@@ -329,7 +335,7 @@ describe("accounting fold", () => {
           id: "e2",
           type: "SPEND",
           amount: "2000000000000000000",
-          counterparty: "0xfeed",
+          counterparty: "uniswap-v2",
           ignored: true,
         }),
       ],
@@ -347,7 +353,7 @@ describe("accounting fold", () => {
         timestamp: "2026-01-16T10:00:00.000Z",
         type: "SPEND",
         amount: "1000000000000000000",
-        counterparty: "0xfeed",
+        counterparty: "uniswap-v2",
       }),
     ];
     const once = foldAll(base, ctx);
@@ -370,7 +376,7 @@ describe("accounting fold", () => {
           id: "e2",
           type: "SPEND",
           amount: "1000000000000000000",
-          counterparty: "0xfeed",
+          counterparty: "uniswap-v2",
         }),
       ],
       ctx,
@@ -394,5 +400,82 @@ describe("accounting fold", () => {
       ["early", "early2"],
       ["late"],
     ]);
+  });
+});
+
+describe("books by tax category", () => {
+  const STRANGER = "0x9999999999999999999999999999999999999999";
+  const withOverride = (key: [string, string, number], category: string, gift: Partial<{ giftCost: string; giftAcquiredAt: string }> = {}) => ({
+    ...ctx,
+    overrides: new Map([[`${key[0]}|${key[1]}|${key[2]}`, { category, giftCost: gift.giftCost ?? null, giftAcquiredAt: gift.giftAcquiredAt ?? null }]]),
+  });
+  const buy = event({ id: "buy", amount: "2000000000000000000", type: "RECEIVE", counterparty: "uniswap-v2" });
+  const buyCtx = (extra: ReturnType<typeof withOverride>) => ({
+    ...extra,
+    overrides: new Map([...extra.overrides, [`${W1}|buy|0`, { category: "TRADE", giftCost: null, giftAcquiredAt: null }]]),
+  });
+
+  it("does not book an unclassified transfer to a stranger", () => {
+    const state = foldAll([event({ id: "x", type: "SPEND", counterparty: STRANGER })], ctx);
+    expect(state.realized).toEqual([]);
+    expect(state.unpricedLegs).toEqual([]);
+    expect(state.categories.get(`${W1}|x|0`)?.category).toBe("UNCLASSIFIED");
+  });
+
+  it("realizes a sale and stamps each consumed leg with its acquisition date", () => {
+    const sell = event({ id: "sell", type: "SPEND", counterparty: STRANGER, amount: "1000000000000000000", timestamp: "2026-03-01T00:00:00.000Z" });
+    const state = foldAll([buy, sell], buyCtx(withOverride([W1, "sell", 0], "TRADE")));
+    expect(state.realized).toHaveLength(1);
+    expect(state.realized[0].consumed[0].acquiredAt).toBe("2026-01-15T10:00:00.000Z");
+  });
+
+  it("lets a gift out leave the books with no gain, as a departure", () => {
+    const gift = event({ id: "g", type: "SPEND", counterparty: STRANGER, amount: "1000000000000000000" });
+    const state = foldAll([buy, gift], buyCtx(withOverride([W1, "g", 0], "GIFT_OUT")));
+    expect(state.realized).toEqual([]);
+    expect(state.departures).toEqual([
+      expect.objectContaining({ category: "GIFT_OUT", quantity: "1000000000000000000", cost: "200000000000" }),
+    ]);
+    expect(lotsTotal(state, W1, ETH)).toBe(1000000000000000000n);
+  });
+
+  it("takes over a received gift's cost and date", () => {
+    const gift = event({ id: "g", type: "RECEIVE", counterparty: STRANGER, amount: "1000000000000000000" });
+    const state = foldAll([gift], withOverride([W1, "g", 0], "GIFT_IN", { giftCost: "1500", giftAcquiredAt: "2021-05-01T00:00:00.000Z" }));
+    const lot = state.lots.get(`${W1}|${ETH}`)?.[0];
+    expect(lot).toMatchObject({ cost: 150000000000n, acquiredAt: "2021-05-01T00:00:00.000Z" });
+    expect(state.income.size).toBe(0);
+  });
+
+  it("counts a gift in without the giver's cost as a basis gap at cost 0", () => {
+    const gift = event({ id: "g", type: "RECEIVE", counterparty: STRANGER });
+    const state = foldAll([gift], withOverride([W1, "g", 0], "GIFT_IN"));
+    expect(state.lots.get(`${W1}|${ETH}`)?.[0].cost).toBe(0n);
+    expect(state.unpricedLegs.map((l) => l.reason)).toEqual(["basis"]);
+  });
+
+  it("books a liquidation as a sale of the collateral", () => {
+    const seized = event({ id: "liq", type: "SPEND", subtype: "LIQUIDATION", counterparty: "aave-v3", amount: "1000000000000000000", valuation: { unit: "EUR", price: "1500", source: "COINGECKO" } });
+    const state = foldAll([buy, seized], buyCtx({ ...ctx, overrides: new Map() }));
+    expect(state.realized).toHaveLength(1);
+    expect(state.realized[0].pnl).toBe("-50000000000"); // 1500 - 2000
+  });
+
+  it("opens a borrowed lot at market without income, and repays at cost without gain", () => {
+    const borrow = event({ id: "b", type: "RECEIVE", subtype: "BORROW", asset: USDC, amount: "1000000000", counterparty: "aave-v3", valuation: { unit: "EUR", price: "0.9", source: "COINGECKO" } });
+    const repay = event({ id: "r", type: "SPEND", subtype: "REPAY", asset: USDC, amount: "1000000000", counterparty: "aave-v3", timestamp: "2026-02-01T00:00:00.000Z", valuation: { unit: "EUR", price: "0.95", source: "COINGECKO" } });
+    const state = foldAll([borrow, repay], ctx);
+    expect(state.income.size).toBe(0);
+    expect(state.realized).toEqual([]);
+    expect(state.departures).toEqual([expect.objectContaining({ category: "LOAN_REPAYMENT", cost: "90000000000" })]);
+    expect(state.lots.get(`${W1}|${USDC}`)).toBeUndefined();
+  });
+
+  it("books non-taxable airdrops at cost 0 and taxable ones as income", () => {
+    const a = event({ id: "a", type: "RECEIVE", subtype: "AIRDROP", counterparty: STRANGER });
+    expect(foldAll([a], ctx).income.get(`${W1}|AIRDROP|2026-01`)).toBe(200000000000n);
+    const n = foldAll([a], withOverride([W1, "a", 0], "AIRDROP_NON_TAXABLE"));
+    expect(n.income.size).toBe(0);
+    expect(n.lots.get(`${W1}|${ETH}`)?.[0].cost).toBe(0n);
   });
 });

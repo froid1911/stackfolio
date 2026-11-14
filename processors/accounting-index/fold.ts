@@ -11,6 +11,15 @@
  * consumption never drifts.
  */
 
+import {
+  classify,
+  DIRECTION,
+  overrideKey,
+  type CategoryOverrideLike,
+  type CategoryRuleLike,
+  type Classified,
+} from "../shared/categories.js";
+
 export const PRICE_SCALE = 8;
 
 export interface FoldValuation {
@@ -41,6 +50,10 @@ export interface FoldContext {
   knownAddresses: Set<string>;
   /** Asset identifier -> token decimals. Unknown assets cannot be priced. */
   decimals: Map<string, number>;
+  /** The portfolio's counterparty rules, oldest first. */
+  rules: CategoryRuleLike[];
+  /** overrideKey(wallet, eventId, sequenceIndex) -> hand-chosen category. */
+  overrides: Map<string, CategoryOverrideLike>;
 }
 
 export interface Lot {
@@ -50,12 +63,26 @@ export interface Lot {
   cost: bigint;
   sourceEventId: string;
   sourceSeq: number;
+  /** When the units were acquired: the holding period runs from here. */
+  acquiredAt: string;
 }
 
 export interface ConsumedLeg {
   sourceEventId: string;
   quantity: string;
   cost: string;
+  acquiredAt: string;
+}
+
+/** Units that left the books with no gain or loss, listed for the report. */
+export interface Departure {
+  wallet: string;
+  asset: string;
+  timestamp: string;
+  category: "GIFT_OUT" | "DONATION" | "LOST" | "STOLEN" | "LOAN_REPAYMENT";
+  quantity: string;
+  cost: string;
+  eventId: string;
 }
 
 export interface RealizedRow {
@@ -102,6 +129,9 @@ export interface FoldState {
   unpriced: { in: number; out: number };
   /** One entry per counted gap, in fold order. */
   unpricedLegs: UnpricedLeg[];
+  departures: Departure[];
+  /** overrideKey(wallet, eventId, sequenceIndex) -> resolved tax category. */
+  categories: Map<string, Classified>;
 }
 
 export function emptyFoldState(): FoldState {
@@ -112,6 +142,8 @@ export function emptyFoldState(): FoldState {
     months: new Map(),
     unpriced: { in: 0, out: 0 },
     unpricedLegs: [],
+    departures: [],
+    categories: new Map(),
   };
 }
 
@@ -134,36 +166,14 @@ function gap(state: FoldState, agg: MonthAgg, event: FoldEvent, reason: Unpriced
   });
 }
 
-/** Protocol mechanics whose value the holdings view tracks and the
- * accounting fold must not double count (or price without a market). */
-const NOISE_SUBTYPES = new Set([
-  "DEPOSIT_ASSET",
-  "REMOVE_ASSET",
-  "LP_MINT",
-  "LP_BURN",
-  "BORROW",
-  "REPAY",
-  "LIQUIDATION",
-  "NAME_REGISTRATION",
-  "BRIDGE",
-  "APPROVE",
-  "SPAM",
-]);
-
-/** The ejection balance: a beacon withdrawal this large is the stake. */
-const EXIT_WEI = 16_000_000_000_000_000_000n;
-
-const INCOME_SUBTYPES = new Map<string, string>([
-  ["YIELD", "YIELD"],
-  ["AIRDROP", "AIRDROP"],
-  ["BLOCK_PRODUCTION", "BLOCK_PRODUCTION"],
-]);
-
-const SIGNED: Record<string, 1 | -1 | undefined> = {
-  RECEIVE: 1,
-  STAKING: 1,
-  SPEND: -1,
-};
+/** Categories booked as a sale out and a purchase in, at market value. */
+const DISPOSALS = new Set(["TRADE", "SPEND", "LIQUIDATION"]);
+/** Out: units leave at cost with no gain or loss. */
+const DEPARTURES = new Set(["GIFT_OUT", "DONATION", "LOST", "STOLEN", "LOAN_REPAYMENT"]);
+/** In: §22 Nr. 3 income at market value, bucketed by category. */
+const INCOME = new Set(["INCOME", "STAKING", "LENDING_INCOME", "MINING", "AIRDROP"]);
+/** Between own wallets or accounts: the lots travel with their basis. */
+const MOVES = new Set(["DEPOSIT", "WITHDRAWAL"]);
 
 const parsePrice = (value: string): bigint | null => {
   if (!/^-?(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(value)) return null;
@@ -236,6 +246,7 @@ function consumeFcfs(
       sourceEventId: lot.sourceEventId,
       quantity: take.toString(),
       cost: takeCost.toString(),
+      acquiredAt: lot.acquiredAt,
     });
     if (lot.quantity > take) {
       kept.push({
@@ -255,6 +266,7 @@ function openLot(
   event: FoldEvent,
   quantity: bigint,
   cost: bigint,
+  acquiredAt: string = event.timestamp,
 ): void {
   const key = `${event.wallet}|${event.asset}`;
   const lots = state.lots.get(key) ?? [];
@@ -265,28 +277,25 @@ function openLot(
     cost,
     sourceEventId: event.id,
     sourceSeq: event.sequenceIndex,
+    acquiredAt,
   });
   state.lots.set(key, lots);
 }
 
-/**
- * Fold one eventIdentifier group (all wallets' rows sharing the identifier,
- * in sequence order). Groups carry swaps and transfers: legs of one group
- * are paired against each other before touching the open lots.
- */
+/** Basis a move carried out of a wallet, lot by lot so each part keeps its
+ * acquisition date, waiting for the group's inflow on another wallet. */
 interface Carry {
-  wallet: string;
   asset: string;
-  quantity: bigint;
-  cost: bigint;
+  parts: Array<{ quantity: bigint; cost: bigint; acquiredAt: string }>;
   event: FoldEvent;
 }
 
 /**
  * Fold one eventIdentifier group (all wallets' rows sharing the identifier,
- * in sequence order). Groups carry swaps and transfers: a move out of one
- * wallet pairs with the matching move into another before either side
- * touches the open lots, so the cost basis travels with the tokens.
+ * in sequence order) by each leg's tax category. A move out of one wallet
+ * pairs with the matching move into another before either side touches the
+ * open lots, so the cost basis and the holding period travel with the
+ * tokens. Unclassified legs are not booked: they wait in the review queue.
  */
 export function foldGroup(
   state: FoldState,
@@ -294,27 +303,32 @@ export function foldGroup(
   ctx: FoldContext,
 ): FoldState {
   const legs = group.filter((event) => !event.ignored);
-  const spends = legs.filter((event) => SIGNED[event.type] === -1);
-  const receives = legs.filter((event) => SIGNED[event.type] === 1);
+  const spends = legs.filter((event) => DIRECTION[event.type] === "out");
+  const receives = legs.filter((event) => DIRECTION[event.type] === "in");
+  const categoryOf = (event: FoldEvent) =>
+    state.categories.get(
+      overrideKey(event.wallet, event.id, event.sequenceIndex),
+    );
   const carried: Carry[] = [];
 
   for (const event of spends) {
-    if (NOISE_SUBTYPES.has(event.subtype)) continue;
+    const kind = categoryOf(event)?.category ?? "UNCLASSIFIED";
+    const fee = kind === "FEE";
+    if (!fee && !MOVES.has(kind) && !DISPOSALS.has(kind) && !DEPARTURES.has(kind)) {
+      // Collateral, margin and unclassified legs are not booked.
+      continue;
+    }
     const agg = monthAgg(state, event.wallet, monthOf(event.timestamp));
     const quantity = BigInt(event.amount);
-    const priced = legValue(event, ctx);
-    const selfTransfer =
-      event.counterparty != null &&
-      ctx.knownAddresses.has(event.counterparty.toLowerCase());
-
     const basis = consumeFcfs(state, event.wallet, event.asset, quantity);
     if (basis.consumed < quantity) {
       gap(state, agg, event, "basis");
     }
 
-    if (event.subtype === "FEE") {
+    if (fee) {
       // A fee leaves at cost and books its value as an expense; the
       // round-trip's PnL stays with the lots, only the fee is spent.
+      const priced = legValue(event, ctx);
       if (priced) {
         agg.expense += priced.value;
       } else {
@@ -323,21 +337,39 @@ export function foldGroup(
       continue;
     }
 
-    if (selfTransfer) {
-      // Move: the basis waits for this group's inflow (another wallet of
-      // the portfolio) or re-opens on this wallet when nothing pairs it.
+    if (MOVES.has(kind)) {
+      // The basis waits for this group's inflow (another wallet of the
+      // portfolio) or re-opens on this wallet when nothing pairs it.
       if (basis.consumed > 0n) {
         carried.push({
-          wallet: event.wallet,
           asset: event.asset,
-          quantity: basis.consumed,
-          cost: basis.cost,
+          parts: basis.legs.map((leg) => ({
+            quantity: BigInt(leg.quantity),
+            cost: BigInt(leg.cost),
+            acquiredAt: leg.acquiredAt,
+          })),
           event,
         });
       }
       continue;
     }
 
+    if (DEPARTURES.has(kind)) {
+      // A gift, a donation, a loss or a loan repayment: no sale, so no
+      // gain or loss; the report lists it apart.
+      state.departures.push({
+        wallet: event.wallet,
+        asset: event.asset,
+        timestamp: event.timestamp,
+        category: kind as Departure["category"],
+        quantity: basis.consumed.toString(),
+        cost: basis.cost.toString(),
+        eventId: event.id,
+      });
+      continue;
+    }
+
+    const priced = legValue(event, ctx);
     if (!priced) {
       // Quantity leaves at cost; the disposal value is unknown and is
       // counted, never guessed as zero.
@@ -368,78 +400,74 @@ export function foldGroup(
   }
 
   for (const event of receives) {
-    if (NOISE_SUBTYPES.has(event.subtype)) continue;
-    // A wallet is never its own transfer partner: a beacon withdrawal has
-    // no sender, so the importer names the wallet itself.
-    const fromSelf = event.counterparty?.toLowerCase() === event.wallet.toLowerCase();
-    // Principal back out of a staking contract mirrors its DEPOSIT_ASSET,
-    // which never left the books: neither income nor a new lot.
-    if (event.type === "STAKING" && event.subtype === "WITHDRAWAL" && !fromSelf) continue;
-    const agg = monthAgg(state, event.wallet, monthOf(event.timestamp));
+    const classified = categoryOf(event);
+    const kind = classified?.category ?? "UNCLASSIFIED";
     const quantity = BigInt(event.amount);
-    const priced = legValue(event, ctx);
-    const selfTransfer =
-      !fromSelf &&
-      event.counterparty != null &&
-      ctx.knownAddresses.has(event.counterparty.toLowerCase());
 
-    if (selfTransfer) {
-      // Pair with a carried-out basis of the same asset, oldest first.
-      let remaining = quantity;
-      for (const carry of carried) {
-        if (remaining === 0n) break;
-        if (carry.asset !== event.asset || carry.quantity === 0n) continue;
-        const take =
-          carry.quantity <= remaining ? carry.quantity : remaining;
-        const cost = (carry.cost * take) / carry.quantity;
-        carry.quantity -= take;
-        carry.cost -= cost;
-        remaining -= take;
-        openLot(state, event, take, cost);
+    if (kind === "AIRDROP_NON_TAXABLE") {
+      openLot(state, event, quantity, 0n);
+      continue;
+    }
+    if (kind === "GIFT_IN") {
+      // The gift takes over the giver's cost and date (§23 Abs. 1 S. 3);
+      // without them the lot opens at 0 and the gap is counted.
+      const cost =
+        classified?.giftCost != null ? parsePrice(classified.giftCost) : null;
+      if (cost === null) {
+        gap(state, monthAgg(state, event.wallet, monthOf(event.timestamp)), event, "basis");
       }
-      if (remaining === quantity) {
-        // Nothing carried it: an inflow from a known wallet with no
-        // visible outflow opens at market like any other receipt.
-        if (!priced) {
-          gap(state, agg, event, "value");
-          continue;
-        }
-        openLot(state, event, quantity, priced.value);
-      } else if (remaining > 0n) {
-        // Partial pairing: the rest is an ordinary market-priced inflow.
-        if (priced) {
-          openLot(state, event, remaining, priced.value);
-        } else {
-          gap(state, agg, event, "value");
-        }
-      }
+      openLot(state, event, quantity, cost ?? 0n, classified?.giftAcquiredAt ?? event.timestamp);
       continue;
     }
 
+    const move = MOVES.has(kind);
+    if (!move && !DISPOSALS.has(kind) && !INCOME.has(kind) && kind !== "BORROWING") {
+      // Collateral coming back, margin and unclassified legs: not booked.
+      continue;
+    }
+    const agg = monthAgg(state, event.wallet, monthOf(event.timestamp));
+    let remaining = quantity;
+    if (move) {
+      // Pair with a carried-out basis of the same asset, oldest first.
+      for (const carry of carried) {
+        if (carry.asset !== event.asset) continue;
+        for (const part of carry.parts) {
+          if (remaining === 0n) break;
+          if (part.quantity === 0n) continue;
+          const take = part.quantity <= remaining ? part.quantity : remaining;
+          const cost = (part.cost * take) / part.quantity;
+          part.quantity -= take;
+          part.cost -= cost;
+          remaining -= take;
+          openLot(state, event, take, cost, part.acquiredAt);
+        }
+      }
+      // Nothing (or not all of it) was carried: an inflow from an own
+      // wallet or account with no visible outflow opens at market.
+      if (remaining === 0n) continue;
+    }
+
+    const priced = legValue(event, ctx);
     if (!priced) {
       gap(state, agg, event, "value");
       continue;
     }
-    // A beacon withdrawal of 16 ETH or more is an exit: below that a
-    // validator is ejected, so no reward skim gets there. The stake comes
-    // home as a lot, never as income.
-    const exit = fromSelf && event.subtype === "WITHDRAWAL" && quantity >= EXIT_WEI;
-    const incomeBucket = exit
-      ? undefined
-      : (INCOME_SUBTYPES.get(event.subtype) ??
-        (event.type === "STAKING" ? "STAKING" : undefined));
-    if (incomeBucket) {
-      const key = `${event.wallet}|${incomeBucket}|${monthOf(event.timestamp)}`;
-      state.income.set(key, (state.income.get(key) ?? 0n) + priced.value);
-      agg.income += priced.value;
+    const value = (priced.value * remaining) / quantity;
+    if (INCOME.has(kind)) {
+      const key = `${event.wallet}|${kind}|${monthOf(event.timestamp)}`;
+      state.income.set(key, (state.income.get(key) ?? 0n) + value);
+      agg.income += value;
     }
-    openLot(state, event, quantity, priced.value);
+    // Purchases, income and borrowed units all open at market value.
+    openLot(state, event, remaining, value);
   }
 
   for (const carry of carried) {
     // A move nobody paired: the tokens never left the wallet's books.
-    if (carry.quantity > 0n) {
-      openLot(state, carry.event, carry.quantity, carry.cost);
+    for (const part of carry.parts) {
+      if (part.quantity > 0n) {
+        openLot(state, carry.event, part.quantity, part.cost, part.acquiredAt);
+      }
     }
   }
   return state;
@@ -470,6 +498,19 @@ export function groupEvents(events: FoldEvent[]): FoldEvent[][] {
 
 export function foldAll(events: FoldEvent[], ctx: FoldContext): FoldState {
   const state = emptyFoldState();
+  state.categories = classify(
+    events
+      .filter((event) => !event.ignored)
+      .map((event) => ({
+        ...event,
+        chainId: Number(/^eip155:(\d+)\//.exec(event.asset)?.[1] ?? 1),
+      })),
+    {
+      knownAddresses: ctx.knownAddresses,
+      rules: ctx.rules,
+      overrides: ctx.overrides,
+    },
+  );
   for (const group of groupEvents(events)) foldGroup(state, group, ctx);
   return state;
 }
@@ -486,6 +527,8 @@ export function serializeFold(state: FoldState): string {
       })),
     ]),
     realized: state.realized,
+    departures: state.departures,
+    categories: [...state.categories.entries()],
     income: [...state.income.entries()].map(
       ([key, value]) => [key, value.toString()] as [string, string],
     ),
@@ -514,9 +557,14 @@ interface SerializedFold {
       cost: string;
       sourceEventId: string;
       sourceSeq: number;
+      /** Absent in checkpoints written before holding periods. */
+      acquiredAt?: string;
     }>,
   ][];
   realized: RealizedRow[];
+  /** Absent in checkpoints written before tax categories. */
+  departures?: Departure[];
+  categories?: [string, Classified][];
   income: [string, string][];
   months: [
     string,
@@ -546,6 +594,7 @@ export function deserializeFold(json: string): FoldState {
         cost: BigInt(lot.cost),
         sourceEventId: lot.sourceEventId,
         sourceSeq: lot.sourceSeq,
+        acquiredAt: lot.acquiredAt ?? "",
       })),
     );
   }
@@ -564,5 +613,7 @@ export function deserializeFold(json: string): FoldState {
   }
   state.unpriced = parsed.unpriced;
   state.unpricedLegs = parsed.unpricedLegs ?? [];
+  state.departures = parsed.departures ?? [];
+  state.categories = new Map(parsed.categories ?? []);
   return state;
 }

@@ -89,7 +89,7 @@ const walletDocument = (spendPrice = "3000") => {
           subtype: "NONE",
           asset: ETH,
           amount: "2000000000000000000",
-          counterparty: "0xfeed",
+          counterparty: "uniswap-v2",
           sequenceIndex: 0,
           valuation: price("2000"),
         },
@@ -101,7 +101,7 @@ const walletDocument = (spendPrice = "3000") => {
           subtype: "NONE",
           asset: ETH,
           amount: "1000000000000000000",
-          counterparty: "0xfeed",
+          counterparty: "uniswap-v2",
           sequenceIndex: 0,
           valuation: price(spendPrice),
         },
@@ -180,7 +180,7 @@ const editedWallet = (wallet: TestDocument) =>
           subtype: "NONE",
           asset: ETH,
           amount: "1000000000000000000",
-          counterparty: "0xfeed",
+          counterparty: "uniswap-v2",
           sequenceIndex: 0,
           valuation: price("4000"),
         },
@@ -216,7 +216,7 @@ describe("accounting-index", () => {
       pnl: "100000000000",
     });
     expect(JSON.parse(realized[0].consumed)).toEqual([
-      { sourceEventId: "ev-1", quantity: "1000000000000000000", cost: "200000000000" },
+      { sourceEventId: "ev-1", quantity: "1000000000000000000", cost: "200000000000", acquiredAt: "2026-01-10T10:00:00.000Z" },
     ]);
 
     const months = await db
@@ -279,7 +279,7 @@ describe("accounting-index", () => {
             subtype: "NONE",
             asset: ETH,
             amount: "2000000000000000000",
-            counterparty: "0xfeed",
+            counterparty: "uniswap-v2",
             sequenceIndex: 0,
             valuation: price("2000"),
           },
@@ -418,7 +418,7 @@ describe("accounting-index", () => {
             subtype: "NONE",
             asset: ETH,
             amount: "1000000000000000000",
-            counterparty: "0xfeed",
+            counterparty: "uniswap-v2",
             sequenceIndex: 0,
             valuation: price("2000"),
           },

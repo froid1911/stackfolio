@@ -367,6 +367,8 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       currency: CURRENCY,
       knownAddresses,
       decimals,
+      rules: [],
+      overrides: new Map(),
     };
     const state: FoldState = foldAll(toFoldEvents(events, new Set(ignored)), ctx);
     // One transaction: readers never see the tables mid-rewrite, and a

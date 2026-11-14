@@ -168,6 +168,7 @@ export const getResolvers = (
           driveId: string;
           ids?: string[];
           address?: string;
+          addresses?: string[];
           asset?: string;
           types?: string[];
           ignored?: boolean;
@@ -214,6 +215,9 @@ export const getResolvers = (
           )
           .$if(Boolean(args.address), (qb) =>
             qb.where("address", "=", args.address as string),
+          )
+          .$if(Boolean(args.addresses?.length), (qb) =>
+            qb.where("address", "in", args.addresses as string[]),
           )
           .$if(Boolean(args.asset), (qb) =>
             qb.where("asset", "=", args.asset as string),

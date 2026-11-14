@@ -330,6 +330,14 @@ describe("portfolio-api accounting queries", () => {
     expect(unpriced.total).toBe(1);
   });
 
+  it("narrows events to a bundle's wallets", async () => {
+    const { q } = await harness();
+    const mine = (await q.events({ addresses: [W1] })) as { total: number };
+    expect(mine.total).toBe(4);
+    const others = (await q.events({ addresses: [W2] })) as { total: number };
+    expect(others.total).toBe(0);
+  });
+
   it("summarises unpriced events per month", async () => {
     const { q } = await harness();
     expect(await q.unpricedSummary()).toEqual([

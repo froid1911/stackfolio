@@ -4,7 +4,7 @@ import { ethereumAuth } from "../auth.js";
 import { globalState, toGlobalAction } from "../reactor.js";
 import { parseJsonish } from "../jsonish.js";
 import { toDecimal } from "../history.js";
-import { fetchFxRates, fetchUsdCloses, llamaKey } from "../llama.js";
+import { fetchFxRates, fetchUsdCloses, llamaFallback, llamaKey } from "../llama.js";
 import { WALLET_ACCOUNT_TYPE } from "./import-events-to-wallet-account.js";
 
 interface LedgerRow {
@@ -19,10 +19,12 @@ interface LedgerRow {
 /** An UNPRICED pin is retried once it is this old: coverage grows. */
 const RETRY_AFTER_MS = 7 * 24 * 3600 * 1000;
 /**
- * Pins made before this instant came from a CoinGecko call that read the
- * wrong field and answered UNPRICED for every row; they are retried now.
+ * Pins made before this instant are retried now: until 00:00 a CoinGecko
+ * call read the wrong field and answered UNPRICED for every row, and until
+ * 12:30 days a contract's history did not reach had no canonical-coin
+ * fallback (Polygon and Arbitrum bridged tokens, aTokens, pre-POL MATIC).
  */
-const REPIN_BEFORE = "2026-11-14T00:00:00.000Z";
+const REPIN_BEFORE = "2026-11-14T12:30:00.000Z";
 
 export const ethereumPinPricesAction = createAction({
   // DefiLlama and Frankfurter need no key; the piece's connection is
@@ -124,6 +126,20 @@ export const ethereumPinPricesAction = createAction({
     }
     const { prices, failed } = await fetchUsdCloses(requests, { fetchImpl: doFetch });
 
+    // Days the contract's own key answered without a price get a second
+    // try under the coin it tracks one to one (or a native's predecessor).
+    const fallbackRequests = new Map<string, string[]>();
+    for (const row of open) {
+      const key = keyOf(row);
+      const fallback = llamaFallback(row.asset);
+      if (!fallback || (key && (failed.has(key) || prices.has(`${key}|${dayOf(row)}`)))) continue;
+      fallbackRequests.set(fallback, [...(fallbackRequests.get(fallback) ?? []), dayOf(row)]);
+    }
+    const second =
+      fallbackRequests.size > 0
+        ? await fetchUsdCloses(fallbackRequests, { fetchImpl: doFetch })
+        : { prices: new Map<string, number>(), failed: new Set<string>() };
+
     let priced = 0;
     let unpriced = 0;
     let retry = 0;
@@ -134,7 +150,14 @@ export const ethereumPinPricesAction = createAction({
         retry += 1; // the source did not answer: pin nothing, next run tries again
         continue;
       }
-      const usd = key ? prices.get(`${key}|${dayOf(row)}`) : undefined;
+      const fallback = llamaFallback(row.asset);
+      const usd =
+        (key ? prices.get(`${key}|${dayOf(row)}`) : undefined) ??
+        (fallback ? second.prices.get(`${fallback}|${dayOf(row)}`) : undefined);
+      if (usd === undefined && fallback && second.failed.has(fallback)) {
+        retry += 1; // the fallback source did not answer: try again next run
+        continue;
+      }
       const fx = rate(dayOf(row));
       const price = usd !== undefined && fx !== null ? toDecimal(usd * fx) : null;
       if (price === null) unpriced += 1;

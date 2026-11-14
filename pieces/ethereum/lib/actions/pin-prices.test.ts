@@ -131,11 +131,57 @@ describe("pin-prices", () => {
   });
 
   it("leaves a fresh UNPRICED pin alone until it is a week old", async () => {
-    const fresh = { ...stuck, pinnedAt: "2026-11-14T00:00:00.000Z" };
+    const fresh = { ...stuck, pinnedAt: "2026-11-15T00:00:00.000Z" };
     get.mockResolvedValue(walletDoc([event("e9", USDT, "2021-03-01T09:00:00.000Z", fresh)]));
-    const result = (await run({ fetchImpl: apis() })) as { priced: number };
+    const result = (await run({ fetchImpl: apis(), now: "2026-11-20T00:00:00.000Z" })) as { priced: number };
     expect(execute).not.toHaveBeenCalled();
     expect(result.priced).toBe(0);
+  });
+
+  it("prices a day the contract has no history for from its canonical coin", async () => {
+    const POLYGON_DAI = "eip155:137/erc20:0x8f3cf7ad23cd3cadbd9735aff958023239c6a063";
+    const POL = "eip155:137/slip44:60";
+    get.mockResolvedValue(
+      walletDoc([
+        event("p1", POLYGON_DAI, "2021-03-01T10:00:00.000Z", null),
+        event("p2", POL, "2021-03-01T11:00:00.000Z", null),
+      ]),
+    );
+    const asked: string[][] = [];
+    const fetchImpl = apis({
+      llama: (coins) => {
+        asked.push(Object.keys(coins).sort());
+        // The contract and POL keys answer without a price for 2021;
+        // the canonical coins have one.
+        return json({
+          coins: {
+            "coingecko:dai": { prices: [{ timestamp: noonOf("2021-03-01"), price: 1.001, confidence: 0.99 }] },
+            "coingecko:matic-network": { prices: [{ timestamp: noonOf("2021-03-01"), price: 0.4, confidence: 0.99 }] },
+          },
+        });
+      },
+    });
+    const result = (await run({ fetchImpl })) as { priced: number; unpriced: number };
+    expect(asked).toEqual([
+      ["coingecko:polygon-ecosystem-token", "polygon:0x8f3cf7ad23cd3cadbd9735aff958023239c6a063"],
+      ["coingecko:dai", "coingecko:matic-network"],
+    ]);
+    expect(Number(pinned().get("p1")?.price)).toBeCloseTo(1.001 * 0.82967, 6);
+    expect(Number(pinned().get("p2")?.price)).toBeCloseTo(0.4 * 0.82967, 6);
+    expect(pinned().get("p2")).toMatchObject({ source: "DEFILLAMA" });
+    expect(result).toMatchObject({ priced: 2, unpriced: 0 });
+  });
+
+  it("retries next run when the canonical coin's request fails", async () => {
+    const POL = "eip155:137/slip44:60";
+    get.mockResolvedValue(walletDoc([event("p2", POL, "2021-03-01T11:00:00.000Z", null)]));
+    let call = 0;
+    const fetchImpl = apis({
+      llama: () => (call++ === 0 ? json({ coins: {} }) : json({ message: "Too Many Requests" }, 429)),
+    });
+    const result = (await run({ fetchImpl })) as { priced: number; retry: number };
+    expect(execute).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ priced: 0, retry: 1 });
   });
 
   it("caps a run at max rows, never-valued rows first, oldest first", async () => {

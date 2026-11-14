@@ -38,6 +38,7 @@ import { Prices } from "./Prices.js";
 import { Staking } from "./Staking.js";
 import { Transactions } from "./Transactions.js";
 import { ReviewQueue } from "./ReviewQueue.js";
+import { UnclassifiedNotice } from "./UnclassifiedNotice.js";
 import { parseEventKey } from "../lib/categories.js";
 import { Pnl } from "./Pnl.js";
 import {
@@ -154,7 +155,13 @@ export function PnlSection({
   const book = usePortfolioBook(list);
   const setSearchParams = useSetSearchParams();
   const { wallets } = useScope();
+  const queue = useClassificationQueue(driveId, addressesOf(wallets).addresses);
   return (
+    <>
+    <UnclassifiedNotice
+      queue={queue}
+      onOpen={() => setSearchParams((prev) => ({ ...prev, page: "history", sub: "queue" }))}
+    />
     <Pnl
       driveId={driveId}
       currency={book.currency}
@@ -165,6 +172,7 @@ export function PnlSection({
         setSearchParams({ tab: "transactions", ids: ids.join(",") })
       }
     />
+    </>
   );
 }
 
@@ -211,6 +219,8 @@ export function DashboardSection({
   const assets = useAssets(driveId);
   const { stack, walletHoldings } = useStack(driveId);
   const recent = useEventsPage(driveId, { first: 6, ...addressesOf(wallets) });
+  const queue = useClassificationQueue(driveId, addressesOf(wallets).addresses);
+  const setSearchParams = useSetSearchParams();
   // Issues name the wallet document; ones about no wallet stay in view.
   const accountAddress = new Map((accounts.data ?? []).map((a) => [a.documentId, a.address]));
   const allIssues = useIssues(driveId);
@@ -224,6 +234,11 @@ export function DashboardSection({
           ),
         };
   return (
+    <>
+    <UnclassifiedNotice
+      queue={queue}
+      onOpen={() => setSearchParams((prev) => ({ ...prev, page: "history", sub: "queue" }))}
+    />
     <Dashboard
       portfolioDocumentId={id}
       totals={totals}
@@ -244,6 +259,7 @@ export function DashboardSection({
           : undefined
       }
     />
+    </>
   );
 }
 

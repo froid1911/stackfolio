@@ -271,6 +271,26 @@ describe("accounting fold", () => {
     expect(lotsTotal(state, W1, ETH)).toBe(12000000000000000n);
   });
 
+  it("books a validator exit as returned principal, not income", () => {
+    // A validator below 16 ETH is ejected, so a reward skim never reaches
+    // it; a withdrawal that large is the stake coming home.
+    const state = foldAll(
+      [
+        event({
+          id: "exit",
+          type: "STAKING",
+          subtype: "WITHDRAWAL",
+          amount: "32010000000000000000",
+          counterparty: W1,
+        }),
+      ],
+      ctx,
+    );
+    expect(state.income.size).toBe(0);
+    expect(month(state, W1, "income")).toBe(0n);
+    expect(lotsTotal(state, W1, ETH)).toBe(32010000000000000000n);
+  });
+
   it("takes principal back out of a protocol as its deposit went in: off the books", () => {
     const FARM = "0x3333333333333333333333333333333333333333";
     const state = foldAll(

@@ -150,6 +150,9 @@ const NOISE_SUBTYPES = new Set([
   "SPAM",
 ]);
 
+/** The ejection balance: a beacon withdrawal this large is the stake. */
+const EXIT_WEI = 16_000_000_000_000_000_000n;
+
 const INCOME_SUBTYPES = new Map<string, string>([
   ["YIELD", "YIELD"],
   ["AIRDROP", "AIRDROP"],
@@ -417,9 +420,14 @@ export function foldGroup(
       gap(state, agg, event, "value");
       continue;
     }
-    const incomeBucket =
-      INCOME_SUBTYPES.get(event.subtype) ??
-      (event.type === "STAKING" ? "STAKING" : undefined);
+    // A beacon withdrawal of 16 ETH or more is an exit: below that a
+    // validator is ejected, so no reward skim gets there. The stake comes
+    // home as a lot, never as income.
+    const exit = fromSelf && event.subtype === "WITHDRAWAL" && quantity >= EXIT_WEI;
+    const incomeBucket = exit
+      ? undefined
+      : (INCOME_SUBTYPES.get(event.subtype) ??
+        (event.type === "STAKING" ? "STAKING" : undefined));
     if (incomeBucket) {
       const key = `${event.wallet}|${incomeBucket}|${monthOf(event.timestamp)}`;
       state.income.set(key, (state.income.get(key) ?? 0n) + priced.value);

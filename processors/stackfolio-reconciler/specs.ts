@@ -502,7 +502,10 @@ export function stakingSpec(
  * own workflow, not steps on staking-daily: the reconciler only appends
  * missing steps, and that chain grows conditionally (auto-snapshot).
  */
-export function withdrawalsSpec(stakingDocumentId: string): WorkflowSpec {
+export function withdrawalsSpec(
+  stakingDocumentId: string,
+  walletDocumentIds: string[],
+): WorkflowSpec {
   return {
     key: "withdrawals-daily",
     displayName: "Withdrawals daily",
@@ -525,6 +528,18 @@ export function withdrawalsSpec(stakingDocumentId: string): WorkflowSpec {
           balancesJson: [],
           withdrawalsJson: "{{steps.withdrawals.output.withdrawals}}",
           ranAt: firedAt,
+        },
+      },
+      {
+        // Every stored withdrawal into the wallet it paid, so P&L books
+        // each reward once; the wallet skips what it already holds.
+        name: "wallets",
+        piece: "ethereum",
+        action: "import-withdrawals-to-wallets",
+        config: {
+          stakingDocumentId,
+          walletDocumentIdsJson: walletDocumentIds,
+          importedAt: firedAt,
         },
       },
     ],

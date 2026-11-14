@@ -159,13 +159,18 @@ describe("specs", () => {
   });
 
   it("withdrawals run daily as their own workflow, fetch then import", () => {
-    const spec = withdrawalsSpec("staking-1");
+    const spec = withdrawalsSpec("staking-1", ["w1", "w2"]);
     expect(spec.key).toBe("withdrawals-daily");
     expect(spec.trigger).toEqual({ kind: "interval", seconds: 86_400 });
     expect(spec.steps.map((s) => [s.name, s.action])).toEqual([
       ["withdrawals", "fetch-withdrawals"],
       ["import", "import-staking-to-doc"],
+      ["wallets", "import-withdrawals-to-wallets"],
     ]);
+    expect(spec.steps[2].config).toMatchObject({
+      stakingDocumentId: "staking-1",
+      walletDocumentIdsJson: ["w1", "w2"],
+    });
     expect(spec.steps[1].config).toMatchObject({
       stakingDocumentId: "staking-1",
       validatorsJson: [],

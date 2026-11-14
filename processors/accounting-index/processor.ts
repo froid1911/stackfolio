@@ -50,7 +50,8 @@ const FOLLOWED = new Set<string>(ACCOUNTING_DOCUMENT_TYPES);
 // checkpoint refolds once to fill the table.
 // 3: beacon withdrawals book as staking income; protocol principal
 // withdrawals stay off the books.
-const FOLD_VERSION = 3;
+// 4: a beacon withdrawal of 16 ETH or more is an exit, not income.
+const FOLD_VERSION = 4;
 const CURRENCY = "EUR";
 const BATCH = 200;
 

@@ -4,6 +4,7 @@
  */
 export * from "./actions.js";
 export * from "./address-book/operations.js";
+export * from "./bundles/operations.js";
 export * from "./controller.js";
 export * from "./creators.js";
 export * from "./document-model.js";

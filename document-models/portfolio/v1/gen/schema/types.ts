@@ -71,6 +71,12 @@ export type AddAddressInput = {
   timestamp: Scalars["DateTime"]["input"];
 };
 
+export type AddBundleInput = {
+  addresses: Array<Scalars["String"]["input"]>;
+  id: Scalars["OID"]["input"];
+  name: Scalars["String"]["input"];
+};
+
 export type AddressEntry = {
   addedAt: Scalars["DateTime"]["output"];
   address: Scalars["String"]["output"];
@@ -97,6 +103,13 @@ export type AssetValueInput = {
 export type AutoSnapshot = {
   enabled: Scalars["Boolean"]["output"];
   intervalHours: Scalars["Int"]["output"];
+};
+
+/** A named group of the portfolio's wallets: every page can be filtered to it. */
+export type Bundle = {
+  addresses: Array<Scalars["String"]["output"]>;
+  id: Scalars["OID"]["output"];
+  name: Scalars["String"]["output"];
 };
 
 export type ClearGrantInput = {
@@ -147,6 +160,7 @@ export type PortfolioState = {
   addresses: Array<AddressEntry>;
   autoSnapshot: AutoSnapshot;
   baseCurrency: Scalars["String"]["output"];
+  bundles: Array<Bundle>;
   grant: Maybe<GrantInfo>;
   ignoredAssets: Array<Scalars["String"]["output"]>;
   lastCheck: Maybe<ReconcilerCheck>;
@@ -220,6 +234,10 @@ export type RecordResourcesInput = {
 };
 
 export type RemoveAddressInput = {
+  id: Scalars["OID"]["input"];
+};
+
+export type RemoveBundleInput = {
   id: Scalars["OID"]["input"];
 };
 
@@ -298,6 +316,12 @@ export type UpdateAddressInput = {
   id: Scalars["OID"]["input"];
   label?: InputMaybe<Scalars["String"]["input"]>;
   tags?: InputMaybe<Array<Scalars["String"]["input"]>>;
+};
+
+export type UpdateBundleInput = {
+  addresses?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  id: Scalars["OID"]["input"];
+  name?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type WalletPositions = {

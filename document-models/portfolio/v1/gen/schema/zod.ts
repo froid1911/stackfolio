@@ -3,10 +3,12 @@
 import * as z from "zod";
 import type {
   AddAddressInput,
+  AddBundleInput,
   AddressEntry,
   AssetValue,
   AssetValueInput,
   AutoSnapshot,
+  Bundle,
   ClearGrantInput,
   DeleteSnapshotInput,
   FixInput,
@@ -29,6 +31,7 @@ import type {
   RecordCheckInput,
   RecordResourcesInput,
   RemoveAddressInput,
+  RemoveBundleInput,
   RemovePriceOverrideInput,
   SetAddressIgnoredInput,
   SetAssetIgnoredInput,
@@ -41,6 +44,7 @@ import type {
   SnapshotLiabilityInput,
   TakeSnapshotInput,
   UpdateAddressInput,
+  UpdateBundleInput,
   WalletPositions,
 } from "./types.js";
 
@@ -71,6 +75,16 @@ export function AddAddressInputSchema(): z.ZodObject<
     id: z.string(),
     label: z.string().nullish(),
     timestamp: z.iso.datetime(),
+  });
+}
+
+export function AddBundleInputSchema(): z.ZodObject<
+  Properties<AddBundleInput>
+> {
+  return z.object({
+    addresses: z.array(z.string()),
+    id: z.string(),
+    name: z.string(),
   });
 }
 
@@ -112,6 +126,15 @@ export function AutoSnapshotSchema(): z.ZodObject<Properties<AutoSnapshot>> {
     __typename: z.literal("AutoSnapshot").optional(),
     enabled: z.boolean(),
     intervalHours: z.number(),
+  });
+}
+
+export function BundleSchema(): z.ZodObject<Properties<Bundle>> {
+  return z.object({
+    __typename: z.literal("Bundle").optional(),
+    addresses: z.array(z.string()),
+    id: z.string(),
+    name: z.string(),
   });
 }
 
@@ -192,6 +215,7 @@ export function PortfolioStateSchema(): z.ZodObject<
     addresses: z.array(z.lazy(() => AddressEntrySchema())),
     autoSnapshot: z.lazy(() => AutoSnapshotSchema()),
     baseCurrency: z.string(),
+    bundles: z.array(z.lazy(() => BundleSchema())),
     grant: z.lazy(() => GrantInfoSchema().nullish()),
     ignoredAssets: z.array(z.string()),
     lastCheck: z.lazy(() => ReconcilerCheckSchema().nullish()),
@@ -301,6 +325,14 @@ export function RecordResourcesInputSchema(): z.ZodObject<
 
 export function RemoveAddressInputSchema(): z.ZodObject<
   Properties<RemoveAddressInput>
+> {
+  return z.object({
+    id: z.string(),
+  });
+}
+
+export function RemoveBundleInputSchema(): z.ZodObject<
+  Properties<RemoveBundleInput>
 > {
   return z.object({
     id: z.string(),
@@ -429,6 +461,16 @@ export function UpdateAddressInputSchema(): z.ZodObject<
     id: z.string(),
     label: z.string().nullish(),
     tags: z.array(z.string()).nullish(),
+  });
+}
+
+export function UpdateBundleInputSchema(): z.ZodObject<
+  Properties<UpdateBundleInput>
+> {
+  return z.object({
+    addresses: z.array(z.string()).nullish(),
+    id: z.string(),
+    name: z.string().nullish(),
   });
 }
 

@@ -7,6 +7,11 @@ import type {
   SetAddressIgnoredAction,
   UpdateAddressAction,
 } from "./address-book/actions.js";
+import type {
+  AddBundleAction,
+  RemoveBundleAction,
+  UpdateBundleAction,
+} from "./bundles/actions.js";
 import type { SetPortfolioDetailsAction } from "./identity/actions.js";
 import type { SetPositionsAction } from "./positions/actions.js";
 import type {
@@ -26,6 +31,7 @@ import type {
 } from "./snapshots/actions.js";
 
 import { portfolioAddressBookOperations } from "../src/reducers/address-book.js";
+import { portfolioBundlesOperations } from "../src/reducers/bundles.js";
 import { portfolioIdentityOperations } from "../src/reducers/identity.js";
 import { portfolioPositionsOperations } from "../src/reducers/positions.js";
 import { portfolioPricingOperations } from "../src/reducers/pricing.js";
@@ -34,11 +40,13 @@ import { portfolioSnapshotsOperations } from "../src/reducers/snapshots.js";
 
 import {
   AddAddressInputSchema,
+  AddBundleInputSchema,
   ClearGrantInputSchema,
   DeleteSnapshotInputSchema,
   RecordCheckInputSchema,
   RecordResourcesInputSchema,
   RemoveAddressInputSchema,
+  RemoveBundleInputSchema,
   RemovePriceOverrideInputSchema,
   SetAddressIgnoredInputSchema,
   SetAssetIgnoredInputSchema,
@@ -48,6 +56,7 @@ import {
   SetPriceOverrideInputSchema,
   TakeSnapshotInputSchema,
   UpdateAddressInputSchema,
+  UpdateBundleInputSchema,
 } from "./schema/zod.js";
 
 const schemaMemo = new Map<() => unknown, unknown>();
@@ -244,6 +253,42 @@ const stateReducer: StateReducer<PortfolioPHState> = (
       portfolioPositionsOperations.setPositionsOperation(
         state.global,
         action as SetPositionsAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "ADD_BUNDLE": {
+      memoizedSchema(AddBundleInputSchema).parse(action.input);
+
+      portfolioBundlesOperations.addBundleOperation(
+        state.global,
+        action as AddBundleAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "UPDATE_BUNDLE": {
+      memoizedSchema(UpdateBundleInputSchema).parse(action.input);
+
+      portfolioBundlesOperations.updateBundleOperation(
+        state.global,
+        action as UpdateBundleAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "REMOVE_BUNDLE": {
+      memoizedSchema(RemoveBundleInputSchema).parse(action.input);
+
+      portfolioBundlesOperations.removeBundleOperation(
+        state.global,
+        action as RemoveBundleAction,
         dispatch,
       );
 

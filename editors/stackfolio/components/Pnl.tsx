@@ -19,6 +19,17 @@ import type {
 import { useHyperliquidAccounts, useIncomeByMonth, useOpenLots, usePnlReport, useRealizedEvents, useUnpricedSummary } from "../lib/graphql.js";
 import { fmtAmount, fmtFiat, unscale } from "../lib/format.js";
 import { money, short } from "./Dashboard.js";
+import { scoped } from "../lib/bundles.js";
+
+/** A per-wallet query narrowed to a bundle's wallets. */
+function inBundle<T extends { wallet: string }>(
+  query: QueryState<T[]>,
+  wallets: ReadonlySet<string> | null,
+): QueryState<T[]> {
+  return wallets === null || !query.data
+    ? query
+    : { ...query, data: scoped(wallets, query.data, (row) => row.wallet) };
+}
 
 const PERIODS: { id: string; label: string; months?: number; ytd?: boolean }[] = [
   { id: "1m", label: "1M", months: 1 },
@@ -55,12 +66,15 @@ export function Pnl({
   currency,
   assets,
   accounts,
+  wallets = null,
   onOpenEvents,
 }: {
   driveId: string;
   currency: string;
   assets: QueryState<Asset[]>;
   accounts: QueryState<AccountRow[]>;
+  /** A wallet bundle's wallets; null for every wallet. */
+  wallets?: ReadonlySet<string> | null;
   onOpenEvents: (eventIds: string[]) => void;
 }) {
   const [periodId, setPeriodId] = useState("12m");
@@ -74,11 +88,11 @@ export function Pnl({
   const period = PERIODS.find((p) => p.id === periodId) ?? PERIODS[4];
   const window = windowOf(period, now);
 
-  const report = usePnlReport(driveId, { ...window, wallet });
-  const realized = useRealizedEvents(driveId, { ...window, wallet });
-  const income = useIncomeByMonth(driveId, wallet);
-  const unpriced = useUnpricedSummary(driveId, wallet);
-  const lots = useOpenLots(driveId, wallet);
+  const report = inBundle(usePnlReport(driveId, { ...window, wallet }), wallets);
+  const realized = inBundle(useRealizedEvents(driveId, { ...window, wallet }), wallets);
+  const income = inBundle(useIncomeByMonth(driveId, wallet), wallets);
+  const unpriced = inBundle(useUnpricedSummary(driveId, wallet), wallets);
+  const lots = inBundle(useOpenLots(driveId, wallet), wallets);
   const hyperliquid = useHyperliquidAccounts(driveId);
 
   const symbol = new Map((assets.data ?? []).map((a) => [a.identifier, a]));

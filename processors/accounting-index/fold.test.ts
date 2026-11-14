@@ -415,6 +415,23 @@ describe("books by tax category", () => {
     overrides: new Map([...extra.overrides, [`${W1}|buy|0`, { category: "TRADE", giftCost: null, giftAcquiredAt: null }]]),
   });
 
+  it("leaves spam out of the books and books a known airdrop claim at cost 0", () => {
+    const spam = "eip155:1/erc20:0x9e2d266d6c90f6c0d80a88159b15958f7135b8af";
+    const uni = "eip155:1/erc20:0x1f9840a85d5af5bf1d1762f925bdaddc4201f984";
+    const state = foldAll(
+      [
+        event({ id: "s", asset: spam, counterparty: "0xd152f549545093347a162dce210e7293f1452150", valuation: null }),
+        event({ id: "u", asset: uni, amount: "400000000000000000000", counterparty: "0x090d4613473dee047c3f2706764f49e0821d256e" }),
+      ],
+      { ...ctx, decimals: new Map([...ctx.decimals, [spam, 18], [uni, 18]]) },
+    );
+    expect(state.categories.get(`${W1}|s|0`)?.category).toBe("SPAM");
+    expect(state.unpricedLegs).toEqual([]);
+    expect([...state.lots.values()].flat().some((lot) => lot.asset === spam)).toBe(false);
+    expect(state.categories.get(`${W1}|u|0`)?.category).toBe("AIRDROP_NON_TAXABLE");
+    expect([...state.lots.values()].flat().find((lot) => lot.sourceEventId === "u")?.cost).toBe(0n);
+  });
+
   it("does not book an unclassified transfer to a stranger", () => {
     const state = foldAll([event({ id: "x", type: "SPEND", counterparty: STRANGER })], ctx);
     expect(state.realized).toEqual([]);

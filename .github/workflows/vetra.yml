@@ -1,0 +1,54 @@
+name: Vetra
+on:
+  push:
+    # Every branch publishes builds; the production branch and the App's
+    # release branches also publish releases. release-please's branches only
+    # carry release PRs, which run as pull requests.
+    branches: ['**', '!release-please--**']
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions: {}
+concurrency:
+  # A push may be cutting a release: one group per commit, so a newer push
+  # never cancels it (nor a pending one). A pull request keeps only its newest run.
+  group: vetra-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  publish:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - uses: powerhouse-inc/vetra-publish@v1
+        with:
+          app-id: 986585cf-7202-4637-8cc7-a017d4be4639
+  # The production environment and PR previews, until releases replace them.
+  deploy:
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && !startsWith(github.head_ref, 'release-please--')
+    # Deploys go out in order: a newer push or PR commit supersedes a running one.
+    concurrency:
+      group: vetra-deploy-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - uses: powerhouse-inc/vetra-deploy-action@v1
+        with:
+          app-id: 986585cf-7202-4637-8cc7-a017d4be4639

@@ -145,6 +145,7 @@ export async function up(db: Kysely<DB>): Promise<void> {
     ["acc_events", "event_id"],
     ["acc_events", "event_identifier"],
     ["lots", "source_event_id"],
+    ["realized", "source_event_id"],
   ] as const) {
     await db.schema
       .alterTable(table)

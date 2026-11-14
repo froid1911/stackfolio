@@ -36,6 +36,8 @@ const EVENT = {
   priceUnit: null as string | null,
   priceSource: null as string | null,
   priceGap: "value" as "value" | "basis" | null,
+  category: "UNCLASSIFIED" as string | null,
+  categorySource: "unclassified" as string | null,
 };
 
 const ASSETS = ok([

@@ -5,6 +5,7 @@ import {
   buildBalances,
   driveFileIds,
   forwardEnsAddress,
+  attachCategories,
   attachGaps,
   attachValuations,
   holdingsFromRows,
@@ -199,6 +200,7 @@ export const getResolvers = (
           to?: string;
           query?: string;
           needsPrice?: boolean;
+          categories?: string[];
           first?: number;
           offset?: number;
         },
@@ -230,9 +232,24 @@ export const getResolvers = (
           unpricedIds = unpriced.map((r) => r.event_id);
           if (unpricedIds.length === 0) return { rows: [], total: 0 };
         }
+        let categoryIds: string[] | null = null;
+        if (args.categories?.length) {
+          const tagged = await acc
+            .selectFrom("acc_event_categories")
+            .where("wallet", "in", wallets)
+            .where("category", "in", args.categories)
+            .select("event_id")
+            .distinct()
+            .execute();
+          categoryIds = tagged.map((r) => r.event_id);
+          if (categoryIds.length === 0) return { rows: [], total: 0 };
+        }
         const filtered = query(args.driveId).selectFrom("events").where("document_id", "in", ids)
           .$if(unpricedIds !== null, (qb) =>
             qb.where("event_id", "in", unpricedIds as string[]),
+          )
+          .$if(categoryIds !== null, (qb) =>
+            qb.where("event_id", "in", categoryIds as string[]),
           )
           .$if(Boolean(args.ids?.length), (qb) =>
             qb.where("event_id", "in", args.ids as string[]),
@@ -327,8 +344,23 @@ export const getResolvers = (
                 .where("event_id", "in", rows.map((r) => r.eventId))
                 .select(["event_id as eventId", "sequence_index as sequenceIndex", "reason"])
                 .execute();
+        const categories =
+          rows.length === 0
+            ? []
+            : await acc
+                .selectFrom("acc_event_categories")
+                .where("wallet", "in", wallets)
+                .where("event_id", "in", rows.map((r) => r.eventId))
+                .select([
+                  "wallet",
+                  "event_id as eventId",
+                  "sequence_index as sequenceIndex",
+                  "category",
+                  "source",
+                ])
+                .execute();
         return {
-          rows: attachGaps(attachValuations(rows, valuations), gaps),
+          rows: attachCategories(attachGaps(attachValuations(rows, valuations), gaps), categories),
           total: Number(totalRow.total),
         };
       },

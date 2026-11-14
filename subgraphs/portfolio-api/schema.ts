@@ -21,6 +21,8 @@ export const schema: DocumentNode = gql`
       query: String
       "Only the events P&L counted as unpriced: a leg without a price, or a disposal without cost basis."
       needsPrice: Boolean
+      "Only these tax categories (CoinTracking's list, or UNCLASSIFIED)."
+      categories: [String!]
       first: Int
       offset: Int
     ): PortfolioApiEventPage!
@@ -122,6 +124,10 @@ export const schema: DocumentNode = gql`
     priceSource: String
     "Why the books could not value this leg: value (it has no price) or basis (no cost behind a disposal); null when they could."
     priceGap: String
+    "Tax category (CoinTracking's list) or UNCLASSIFIED; null when the books never saw the leg (an ignored one)."
+    category: String
+    "Where the category came from: override, rule, auto or unclassified."
+    categorySource: String
   }
 
   type PortfolioApiAddressLabel {

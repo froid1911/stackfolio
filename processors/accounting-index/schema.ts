@@ -34,6 +34,12 @@ export interface IgnoredAssetRow {
   asset: string;
 }
 
+/** An asset the portfolio marked "not spam". */
+export interface TrustedAssetRow {
+  document_id: string;
+  asset: string;
+}
+
 export interface AssetRow {
   document_id: string;
   asset: string;
@@ -129,6 +135,7 @@ export interface DB {
   acc_events: EventRow;
   acc_addresses: AddressRow;
   acc_ignored_assets: IgnoredAssetRow;
+  acc_trusted_assets: TrustedAssetRow;
   acc_assets: AssetRow;
   lots: LotRow;
   realized: RealizedRow;

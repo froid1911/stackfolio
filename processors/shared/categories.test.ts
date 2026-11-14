@@ -95,3 +95,51 @@ describe("classify", () => {
     });
   });
 });
+
+describe("spam and airdrop claims", () => {
+  const POL = "eip155:137/slip44:60";
+  const SPAM = "eip155:137/erc20:0x9e2d266d6c90f6c0d80a88159b15958f7135b8af";
+  const DISPERSE = "0xd152f549545093347a162dce210e7293f1452150";
+  const pushed = ev({ id: "a", eventIdentifier: `0x${"b".repeat(64)}`, type: "RECEIVE", asset: SPAM, amount: "923", counterparty: DISPERSE, chainId: 137 });
+  const planted = ev({ id: "b", eventIdentifier: `0x${"c".repeat(64)}`, type: "SPEND", asset: SPAM, counterparty: STRANGER, chainId: 137 });
+  const spamCtx = (over: Partial<Parameters<typeof classify>[1]> = {}) =>
+    ctx({ pricedAssets: new Set([POL]), trustedAssets: new Set<string>(), ...over });
+  const of = (events: ClassifyEvent[], c: Parameters<typeof classify>[1], id: string) =>
+    classify(events, c).get(overrideKey(W, id, 0));
+
+  it("calls an unsigned, unpriced token spam, planted outgoing transfers included", () => {
+    expect(of([pushed, planted], spamCtx(), "a")).toMatchObject({ category: "SPAM", source: "auto" });
+    expect(of([pushed, planted], spamCtx(), "b")).toMatchObject({ category: "SPAM", source: "auto" });
+  });
+
+  it("keeps a token a wallet moved in a transaction it paid gas for", () => {
+    const fee = ev({ id: "f", eventIdentifier: planted.eventIdentifier, sequenceIndex: 1, subtype: "FEE", asset: POL, counterparty: null, chainId: 137 });
+    expect(of([pushed, planted, fee], spamCtx(), "a")?.category).toBe("UNCLASSIFIED");
+  });
+
+  it("keeps a priced token and a trusted one", () => {
+    expect(of([pushed], spamCtx({ pricedAssets: new Set([SPAM]) }), "a")?.category).toBe("UNCLASSIFIED");
+    expect(of([pushed], spamCtx({ trustedAssets: new Set([SPAM]) }), "a")?.category).toBe("UNCLASSIFIED");
+  });
+
+  it("lets a rule beat the spam call", () => {
+    const rule = { id: "r", counterparty: DISPERSE, chainId: null, direction: "IN", asset: null, category: "AIRDROP", label: null };
+    expect(of([pushed], spamCtx({ rules: [rule] }), "a")).toMatchObject({ category: "AIRDROP", source: "rule" });
+  });
+
+  it("never calls a native asset spam, and stays off without a price list", () => {
+    const native = ev({ id: "n", type: "RECEIVE", asset: POL, counterparty: DISPERSE, chainId: 137 });
+    expect(of([native], spamCtx({ pricedAssets: new Set() }), "n")?.category).toBe("UNCLASSIFIED");
+    expect(of([pushed], ctx(), "a")?.category).toBe("UNCLASSIFIED");
+  });
+
+  it("books a claim from a known distributor as a non-taxable airdrop", () => {
+    const arb = ev({
+      id: "c", type: "RECEIVE", chainId: 42161, amount: "1000",
+      asset: "eip155:42161/erc20:0x912ce59144191c1204e64559fe8253a0e49e6548",
+      counterparty: "0x67A24CE4321aB3aF51c2D0a4801c3E111D88C9d9",
+    });
+    expect(of([arb], spamCtx({ pricedAssets: new Set([arb.asset]) }), "c")).toMatchObject({ category: "AIRDROP_NON_TAXABLE", source: "auto" });
+    expect(of([{ ...arb, chainId: 1 }], ctx(), "c")?.category).toBe("UNCLASSIFIED");
+  });
+});

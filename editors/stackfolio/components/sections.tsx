@@ -9,6 +9,7 @@ import {
 import {
   useAccounts,
   useAssets,
+  useClassificationQueue,
   useEventsPage,
   useIssues,
   useHoldings,
@@ -36,6 +37,9 @@ import { Dashboard, short } from "./Dashboard.js";
 import { Prices } from "./Prices.js";
 import { Staking } from "./Staking.js";
 import { Transactions } from "./Transactions.js";
+import { ReviewQueue } from "./ReviewQueue.js";
+import { UnclassifiedNotice } from "./UnclassifiedNotice.js";
+import { parseEventKey } from "../lib/categories.js";
 import { Pnl } from "./Pnl.js";
 import {
   DeFi,
@@ -151,7 +155,13 @@ export function PnlSection({
   const book = usePortfolioBook(list);
   const setSearchParams = useSetSearchParams();
   const { wallets } = useScope();
+  const queue = useClassificationQueue(driveId, addressesOf(wallets).addresses);
   return (
+    <>
+    <UnclassifiedNotice
+      queue={queue}
+      onOpen={() => setSearchParams((prev) => ({ ...prev, page: "history", sub: "queue" }))}
+    />
     <Pnl
       driveId={driveId}
       currency={book.currency}
@@ -162,6 +172,7 @@ export function PnlSection({
         setSearchParams({ tab: "transactions", ids: ids.join(",") })
       }
     />
+    </>
   );
 }
 
@@ -208,6 +219,8 @@ export function DashboardSection({
   const assets = useAssets(driveId);
   const { stack, walletHoldings } = useStack(driveId);
   const recent = useEventsPage(driveId, { first: 6, ...addressesOf(wallets) });
+  const queue = useClassificationQueue(driveId, addressesOf(wallets).addresses);
+  const setSearchParams = useSetSearchParams();
   // Issues name the wallet document; ones about no wallet stay in view.
   const accountAddress = new Map((accounts.data ?? []).map((a) => [a.documentId, a.address]));
   const allIssues = useIssues(driveId);
@@ -221,6 +234,11 @@ export function DashboardSection({
           ),
         };
   return (
+    <>
+    <UnclassifiedNotice
+      queue={queue}
+      onOpen={() => setSearchParams((prev) => ({ ...prev, page: "history", sub: "queue" }))}
+    />
     <Dashboard
       portfolioDocumentId={id}
       totals={totals}
@@ -241,6 +259,7 @@ export function DashboardSection({
           : undefined
       }
     />
+    </>
   );
 }
 
@@ -347,10 +366,12 @@ export function TransactionsSection({
   driveId,
   onOpenEvent,
   onOpenAccount,
+  actions,
 }: {
   driveId: string;
   onOpenEvent: (eventId: string) => void;
   onOpenAccount: (address: string) => void;
+  actions: ReturnType<typeof usePortfolioActions>;
 }) {
   const accounts = useAccounts(driveId);
   const assets = useAssets(driveId);
@@ -375,6 +396,13 @@ export function TransactionsSection({
     ...addressesOf(wallets),
   });
   const issues = useIssues(driveId);
+  const queue = useClassificationQueue(driveId, addressesOf(wallets).addresses);
+  const symbols = new Map((assets.data ?? []).map((a) => [a.identifier, a.symbol]));
+  const toSub = (next: "events" | "queue" | "issues") =>
+    setSearchParams(
+      (prev) => ({ ...prev, sub: next === "events" ? undefined : next }),
+      { replace: true },
+    );
   return (
     <Transactions
       accounts={scopedQuery(accounts, wallets, (a) => a.address)}
@@ -382,17 +410,28 @@ export function TransactionsSection({
       filter={filter}
       setFilter={setFilter}
       page={page}
-      sub={sub === "issues" ? "issues" : "events"}
+      sub={sub === "issues" || sub === "queue" ? sub : "events"}
       issues={issues}
       onOpenEvent={onOpenEvent}
       onOpenAccount={onOpenAccount}
       needsPriceCount={needsPrice.data?.total}
-      onSub={(next) =>
-        setSearchParams(
-          (prev) => ({ ...prev, ...(next === "issues" ? { sub: "issues" } : { sub: undefined }) }),
-          { replace: true },
-        )
+      queueCount={queue.data?.total}
+      queueView={
+        <ReviewQueue
+          queue={queue}
+          symbolOf={(asset) => symbols.get(asset) ?? short(asset.split(":").pop() ?? asset)}
+          actions={actions}
+          onOpenEvents={(keys) => {
+            setFilter({ ignored: false, first: 50, ids: keys.map((key) => parseEventKey(key).eventId) });
+            toSub("events");
+          }}
+          onChanged={() => {
+            // The books re-fold a moment after the portfolio changes.
+            setTimeout(queue.reload, 3000);
+          }}
+        />
       }
+      onSub={toSub}
     />
   );
 }

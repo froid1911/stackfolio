@@ -64,6 +64,21 @@ describe("RegistryOperations", () => {
     expect(asset.name).toBe("USD Coin");
   });
 
+  it("updates kind and underlying, leaving unnamed fields alone", () => {
+    const updatedDocument = reducer(
+      withAsset(),
+      updateAsset({ identifier: IDENTIFIER, name: "USD Coin v2", kind: "POSITION", underlying: "eip155:1/slip44:60" }),
+    );
+
+    expect(updatedDocument.operations.global[1].error).toBeUndefined();
+    expect(updatedDocument.state.global.assets[0]).toMatchObject({
+      name: "USD Coin v2",
+      kind: "POSITION",
+      underlying: "eip155:1/slip44:60",
+      symbol: "USDC",
+    });
+  });
+
   it("should handle setCoingeckoId operation", () => {
     const document = withAsset();
 

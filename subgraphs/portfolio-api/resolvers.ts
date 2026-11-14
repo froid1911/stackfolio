@@ -1,6 +1,8 @@
 import type { BaseSubgraph, Context } from "@powerhousedao/reactor-api";
 import { AccountingIndex } from "processors/accounting-index";
 import { PortfolioIndex } from "processors/portfolio-index";
+import { txHashOf } from "../../processors/shared/categories.js";
+import { queueGroups } from "./queue.js";
 import {
   buildBalances,
   driveFileIds,
@@ -362,6 +364,88 @@ export const getResolvers = (
         return {
           rows: attachCategories(attachGaps(attachValuations(rows, valuations), gaps), categories),
           total: Number(totalRow.total),
+        };
+      },
+
+      classificationQueue: async (
+        _parent: unknown,
+        args: { driveId: string; addresses?: string[] },
+        ctx: Context,
+      ) => {
+        const empty = { total: 0, value: null, groups: [] };
+        const ids = await driveFileIds(subgraph, args.driveId, ctx);
+        if (!ids || ids.length === 0) return empty;
+        const acc = accountingQuery(args.driveId);
+        const ignoredAssets = await ignoredAssetsOf(args.driveId);
+        const scope = (args.addresses ?? []).map((a) => a.toLowerCase());
+        const legs = await acc
+          .selectFrom("acc_event_categories as c")
+          .innerJoin("acc_events as e", (join) =>
+            join
+              .onRef("e.wallet", "=", "c.wallet")
+              .onRef("e.event_id", "=", "c.event_id")
+              .onRef("e.sequence_index", "=", "c.sequence_index"),
+          )
+          .where("c.category", "=", "UNCLASSIFIED")
+          .where("e.document_id", "in", ids)
+          .where("e.ignored", "=", false)
+          .$if(ignoredAssets.size > 0, (qb) => qb.where("e.asset", "not in", [...ignoredAssets]))
+          .$if(scope.length > 0, (qb) => qb.where("e.wallet", "in", scope))
+          .select([
+            "e.wallet as wallet",
+            "e.event_id as eventId",
+            "e.sequence_index as sequenceIndex",
+            "e.event_identifier as eventIdentifier",
+            "e.timestamp as timestamp",
+            "e.type as type",
+            "e.asset as asset",
+            "e.amount as amount",
+            "e.counterparty as counterparty",
+            "e.price as price",
+            "e.price_unit as priceUnit",
+          ])
+          .execute();
+        if (legs.length === 0) return empty;
+        const fees = await acc
+          .selectFrom("acc_events")
+          .where("document_id", "in", ids)
+          .where("subtype", "=", "FEE")
+          .select(["wallet", "event_identifier as eventIdentifier"])
+          .execute();
+        const signed = new Set(fees.map((f) => `${f.wallet}|${txHashOf(f.eventIdentifier)}`));
+        const decimals = new Map(
+          (await acc.selectFrom("acc_assets").select(["asset", "decimals"]).execute()).map(
+            (a) => [a.asset, a.decimals] as const,
+          ),
+        );
+        const labels = new Map(
+          (
+            await query(args.driveId)
+              .selectFrom("address_labels")
+              .where("document_id", "in", ids)
+              .select(["address", "label"])
+              .execute()
+          )
+            .filter((row) => row.label)
+            .map((row) => [row.address.toLowerCase(), row.label as string] as const),
+        );
+        const firsts = await acc
+          .selectFrom("acc_events")
+          .where("document_id", "in", ids)
+          .where("asset", "in", [...new Set(legs.map((leg) => leg.asset))])
+          .select((eb) => ["wallet", "asset", eb.fn.min("timestamp").as("first")])
+          .groupBy(["wallet", "asset"])
+          .execute();
+        const firstSeen = new Map(firsts.map((f) => [`${f.wallet}|${f.asset}`, String(f.first)]));
+        const queue = queueGroups(legs, signed, decimals, firstSeen);
+        return {
+          ...queue,
+          groups: queue.groups.map((group) => ({
+            ...group,
+            counterpartyLabel: group.counterparty
+              ? (labels.get(group.counterparty) ?? null)
+              : null,
+          })),
         };
       },
 

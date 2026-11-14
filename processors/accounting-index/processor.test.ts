@@ -486,4 +486,47 @@ describe("accounting-index", () => {
     expect(await db.selectFrom("acc_category_overrides").selectAll().execute()).toHaveLength(0);
     expect(await db.selectFrom("realized").selectAll().execute()).toHaveLength(1);
   });
+
+  it("calls an unsigned, unpriced token spam until the portfolio trusts it", async () => {
+    const SPAM = "eip155:1/erc20:0x9e2d266d6c90f6c0d80a88159b15958f7135b8af";
+    const { db, processor } = await harness();
+    const pushed = walletReducer(
+      walletDocument(),
+      walletActions.importEvents({
+        batchId: "b2",
+        importedAt: "2026-11-11T00:00:00.000Z",
+        events: [
+          {
+            id: "ev-spam",
+            eventIdentifier: "0xcc:0",
+            timestamp: "2026-03-10T10:00:00.000Z",
+            type: "RECEIVE",
+            subtype: "NONE",
+            asset: SPAM,
+            amount: "923000000000000000000000",
+            counterparty: "0xd152f549545093347a162dce210e7293f1452150",
+            sequenceIndex: 0,
+          },
+        ],
+      }),
+    );
+    await indexAll(processor, pushed);
+    const categoryOf = async () =>
+      (
+        await db
+          .selectFrom("acc_event_categories")
+          .select("category")
+          .where("event_id", "=", "ev-spam")
+          .executeTakeFirstOrThrow()
+      ).category;
+    expect(await categoryOf()).toBe("SPAM");
+
+    const trusting = portfolioReducer(
+      portfolioDocument(),
+      portfolioActions.setAssetTrusted({ asset: SPAM, trusted: true }),
+    );
+    await processor.onOperations(replay(trusting));
+    expect(await db.selectFrom("acc_trusted_assets").selectAll().execute()).toHaveLength(1);
+    expect(await categoryOf()).toBe("UNCLASSIFIED");
+  });
 });

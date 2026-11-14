@@ -54,6 +54,8 @@ export interface FoldContext {
   rules: CategoryRuleLike[];
   /** overrideKey(wallet, eventId, sequenceIndex) -> hand-chosen category. */
   overrides: Map<string, CategoryOverrideLike>;
+  /** Assets the user marked "not spam". */
+  trustedAssets?: ReadonlySet<string>;
 }
 
 export interface Lot {
@@ -498,17 +500,24 @@ export function groupEvents(events: FoldEvent[]): FoldEvent[][] {
 
 export function foldAll(events: FoldEvent[], ctx: FoldContext): FoldState {
   const state = emptyFoldState();
+  const live = events.filter((event) => !event.ignored);
+  // A token priced anywhere is not spam, however it arrived.
+  const pricedAssets = new Set(
+    live
+      .filter((event) => event.valuation && event.valuation.source !== "UNPRICED")
+      .map((event) => event.asset),
+  );
   state.categories = classify(
-    events
-      .filter((event) => !event.ignored)
-      .map((event) => ({
-        ...event,
-        chainId: Number(/^eip155:(\d+)\//.exec(event.asset)?.[1] ?? 1),
-      })),
+    live.map((event) => ({
+      ...event,
+      chainId: Number(/^eip155:(\d+)\//.exec(event.asset)?.[1] ?? 1),
+    })),
     {
       knownAddresses: ctx.knownAddresses,
       rules: ctx.rules,
       overrides: ctx.overrides,
+      pricedAssets,
+      trustedAssets: ctx.trustedAssets ?? new Set(),
     },
   );
   for (const group of groupEvents(events)) foldGroup(state, group, ctx);

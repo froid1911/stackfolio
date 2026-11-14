@@ -7,6 +7,7 @@ import {
   AddCategoryRuleInputSchema,
   ClearEventCategoriesInputSchema,
   RemoveCategoryRuleInputSchema,
+  SetAssetTrustedInputSchema,
   SetEventCategoriesInputSchema,
   UpdateCategoryRuleInputSchema,
 } from "../schema/zod.js";
@@ -14,6 +15,7 @@ import type {
   AddCategoryRuleInput,
   ClearEventCategoriesInput,
   RemoveCategoryRuleInput,
+  SetAssetTrustedInput,
   SetEventCategoriesInput,
   UpdateCategoryRuleInput,
 } from "../types.js";
@@ -21,6 +23,7 @@ import type {
   AddCategoryRuleAction,
   ClearEventCategoriesAction,
   RemoveCategoryRuleAction,
+  SetAssetTrustedAction,
   SetEventCategoriesAction,
   UpdateCategoryRuleAction,
 } from "./actions.js";
@@ -67,5 +70,14 @@ export const clearEventCategories = (input: ClearEventCategoriesInput) =>
     { ...input },
     undefined,
     ClearEventCategoriesInputSchema,
+    "global",
+  );
+
+export const setAssetTrusted = (input: SetAssetTrustedInput) =>
+  createAction<SetAssetTrustedAction>(
+    "SET_ASSET_TRUSTED",
+    { ...input },
+    undefined,
+    SetAssetTrustedInputSchema,
     "global",
   );

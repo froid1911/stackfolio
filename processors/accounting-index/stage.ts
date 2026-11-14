@@ -90,6 +90,18 @@ export function portfolioIgnoredAssetRows(
   );
 }
 
+/** Assets the user marked "not spam": the spam call never flags them. */
+export function portfolioTrustedAssetRows(
+  documentId: string,
+  state: unknown,
+): { document_id: string; asset: string }[] {
+  const global = asRecord(unwrapState(state));
+  const assets = global && Array.isArray(global.trustedAssets) ? global.trustedAssets : [];
+  return [...new Set(assets.filter((a): a is string => typeof a === "string" && a !== ""))].map(
+    (asset) => ({ document_id: documentId, asset }),
+  );
+}
+
 /** The portfolio's tax category rules (in order) and overrides, as JSON. */
 export function portfolioCategoryRows(
   documentId: string,
@@ -185,6 +197,7 @@ export function foldInputHash(
   decimals: Array<[string, number]>,
   ignoredAssets: string[] = [],
   categories = "",
+  trustedAssets: string[] = [],
 ): { inputHash: string; ctxHash: string } {
   const ordered = [...events].sort(
     (a, b) =>
@@ -206,6 +219,7 @@ export function foldInputHash(
     // Appended only when present: an unchanged context hashes as before.
     ...(ignoredAssets.length > 0 ? [[...ignoredAssets].sort().join(",")] : []),
     ...(categories ? [categories] : []),
+    ...(trustedAssets.length > 0 ? [`trusted:${[...trustedAssets].sort().join(",")}`] : []),
   ].join("|");
   return { inputHash: fnv1a(input), ctxHash: fnv1a(context) };
 }

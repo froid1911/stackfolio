@@ -178,6 +178,7 @@ export default function Editor({ children }: EditorProps) {
           {active === "history" && (
             <TransactionsSection
               driveId={driveId}
+              actions={portfolioActions}
               onOpenEvent={(eventId) =>
                 setSearchParams(
                   { page: "history", detail: `event:${slug(eventId)}` },
@@ -197,6 +198,7 @@ export default function Editor({ children }: EditorProps) {
               {eventDetail.id ? (
                 <EventDetail
                   driveId={driveId}
+                  actions={portfolioActions}
                   currency={currency}
                   eventId={eventDetail.id}
                   onClose={closeDetail}

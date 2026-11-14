@@ -8,6 +8,7 @@
 import { useAddressLabels, useAssets, useEventsPage, useRealizedEvents } from "../lib/graphql.js";
 import { fmtAmount } from "../lib/format.js";
 import { EventReview } from "./EventReview.js";
+import { CategoryReview, type CategoryActions } from "./CategoryReview.js";
 
 export function EventDetail({
   driveId,
@@ -17,6 +18,7 @@ export function EventDetail({
   onOpenHistory,
   onOpenPnl,
   currency = "EUR",
+  actions,
 }: {
   driveId: string;
   /** The portfolio's base currency: the unit a manual price is pinned in. */
@@ -27,6 +29,8 @@ export function EventDetail({
   onOpenAccount: (address: string) => void;
   onOpenHistory: (ids: string[]) => void;
   onOpenPnl: () => void;
+  /** The portfolio's category actions; absent, the category is read-only. */
+  actions?: CategoryActions;
 }) {
   const page = useEventsPage(driveId, { ids: [eventId], first: 1 });
   const assets = useAssets(driveId);
@@ -115,6 +119,17 @@ export function EventDetail({
             )}
           </div>
 
+          {actions && (
+            <section aria-label="Tax category" className="mt-4 border-t border-border pt-4 text-xs">
+              <CategoryReview
+                key={`${event.eventId}:${event.sequenceIndex}:${event.category ?? ""}`}
+                event={event}
+                actions={actions}
+                currency={currency}
+                onChanged={() => setTimeout(page.reload, 3000)}
+              />
+            </section>
+          )}
           <EventReview
             key={`${event.eventId}:${event.sequenceIndex}`}
             driveId={driveId}

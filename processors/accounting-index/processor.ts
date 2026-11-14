@@ -30,6 +30,7 @@ import {
   portfolioAddressRows,
   portfolioCategoryRows,
   portfolioIgnoredAssetRows,
+  portfolioTrustedAssetRows,
   registryAssetRows,
   rowKey,
   toFoldEvents,
@@ -58,7 +59,8 @@ const FOLLOWED = new Set<string>(ACCOUNTING_DOCUMENT_TYPES);
 // withdrawals stay off the books.
 // 4: a beacon withdrawal of 16 ETH or more is an exit, not income.
 // 5: books by tax category; lots carry their acquisition date.
-const FOLD_VERSION = 5;
+// 6: spam tokens and known airdrop claims classify automatically.
+const FOLD_VERSION = 6;
 const CURRENCY = "EUR";
 const BATCH = 200;
 
@@ -182,9 +184,15 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
             documentId,
             portfolioAddressRows(documentId, parsed),
           );
-          await this.writeIgnoredAssets(
+          await this.writeAssetList(
+            "acc_ignored_assets",
             documentId,
             portfolioIgnoredAssetRows(documentId, parsed),
+          );
+          await this.writeAssetList(
+            "acc_trusted_assets",
+            documentId,
+            portfolioTrustedAssetRows(documentId, parsed),
           );
           await this.writeCategories(
             documentId,
@@ -274,26 +282,28 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
     }
   }
 
-  private async writeIgnoredAssets(
+  /** An asset list of the portfolio (ignored, trusted): diffed per asset. */
+  private async writeAssetList(
+    table: "acc_ignored_assets" | "acc_trusted_assets",
     documentId: string,
     rows: { document_id: string; asset: string }[],
   ): Promise<void> {
     const stored = await this.relationalDb
-      .selectFrom("acc_ignored_assets")
+      .selectFrom(table)
       .selectAll()
       .where("document_id", "=", documentId)
       .execute();
     const { deletes, writes } = planDiff(stored, rows, (row) => row.asset);
     for (const asset of deletes) {
       await this.relationalDb
-        .deleteFrom("acc_ignored_assets")
+        .deleteFrom(table)
         .where("document_id", "=", documentId)
         .where("asset", "=", asset)
         .execute();
     }
     for (let at = 0; at < writes.length; at += BATCH) {
       await this.relationalDb
-        .insertInto("acc_ignored_assets")
+        .insertInto(table)
         .values(writes.slice(at, at + BATCH))
         .onConflict((oc) => oc.columns(["document_id", "asset"]).doNothing())
         .execute();
@@ -364,6 +374,9 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
     const ignored = (
       await this.relationalDb.selectFrom("acc_ignored_assets").select("asset").execute()
     ).map((row) => row.asset);
+    const trusted = (
+      await this.relationalDb.selectFrom("acc_trusted_assets").select("asset").execute()
+    ).map((row) => row.asset);
     const rules = (
       await this.relationalDb
         .selectFrom("acc_category_rules")
@@ -392,6 +405,7 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       rules.length > 0 || overrideRows.length > 0
         ? JSON.stringify([rules, overrideRows.map((row) => [row.key, row.override])])
         : "",
+      trusted,
     );
     const checkpoint = await this.relationalDb
       .selectFrom("fold_checkpoint")
@@ -421,6 +435,7 @@ export class AccountingIndex extends RelationalDbProcessor<DB> {
       decimals,
       rules,
       overrides,
+      trustedAssets: new Set(trusted),
     };
     const state: FoldState = foldAll(toFoldEvents(events, new Set(ignored)), ctx);
     // One transaction: readers never see the tables mid-rewrite, and a

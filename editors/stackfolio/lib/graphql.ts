@@ -223,6 +223,25 @@ const EVENTS_ROWS = `
   chainId label price priceUnit priceSource priceGap category categorySource
 `;
 
+export interface QueueGroup {
+  counterparty: string | null;
+  counterpartyLabel: string | null;
+  direction: "IN" | "OUT";
+  count: number;
+  /** EUR value of the priced legs; null when none is priced. */
+  value: string | null;
+  assets: string[];
+  suspectedAirdrop: boolean;
+  /** Event keys "wallet|eventId|sequenceIndex", at most 500. */
+  events: string[];
+}
+
+export interface Queue {
+  total: number;
+  value: string | null;
+  groups: QueueGroup[];
+}
+
 /** Everything `portfolioApi` answers, so a hook is one field name. */
 export interface PortfolioApi {
   totals: Totals;
@@ -245,6 +264,7 @@ export interface PortfolioApi {
   unpricedSummary: Unpriced[];
   hyperliquidAccounts: HyperliquidAccount[];
   holdings: BalancesData;
+  classificationQueue: Queue;
 }
 
 function usePortfolioField<K extends keyof PortfolioApi>(
@@ -282,6 +302,15 @@ export function useIssues(driveId: string): QueryState<Issue[]> {
     `query ($driveId: String!) { portfolioApi { issues(driveId: $driveId) { documentId seq code severity message accountId at } } }`,
     { driveId },
     "issues",
+  );
+}
+
+/** UNCLASSIFIED legs grouped by counterparty: the "Needs a type" queue. */
+export function useClassificationQueue(driveId: string, addresses?: string[]): QueryState<Queue> {
+  return usePortfolioField(
+    `query ($driveId: String! $addresses: [String!]) { portfolioApi { classificationQueue(driveId: $driveId addresses: $addresses) { total value groups { counterparty counterpartyLabel direction count value assets suspectedAirdrop events } } } }`,
+    { driveId, ...(addresses?.length ? { addresses } : {}) },
+    "classificationQueue",
   );
 }
 

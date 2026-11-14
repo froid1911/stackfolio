@@ -61,7 +61,9 @@ describe("ignore-unlisted-tokens", () => {
     expect(result).toEqual({ checked: 2, ignored: 1, unanswered: 0 });
     const [id, , actions] = execute.mock.calls[0] as [string, string, { type: string; input: unknown }[]];
     expect(id).toBe("p");
-    expect(actions).toEqual([{ type: "SET_ASSET_IGNORED", input: { asset: SPAM, ignored: true }, scope: "global" }].map((a) => expect.objectContaining({ type: a.type, input: a.input })));
+    expect(actions).toEqual([
+      expect.objectContaining({ type: "SET_ASSET_IGNORED", input: { asset: SPAM, ignored: true } }) as unknown,
+    ]);
   });
 
   it("ignores nothing when DefiLlama does not answer", async () => {

@@ -16,6 +16,7 @@ import type {
   AddCategoryRuleAction,
   ClearEventCategoriesAction,
   RemoveCategoryRuleAction,
+  SetAssetTrustedAction,
   SetEventCategoriesAction,
   UpdateCategoryRuleAction,
 } from "./categories/actions.js";
@@ -61,6 +62,7 @@ import {
   RemovePriceOverrideInputSchema,
   SetAddressIgnoredInputSchema,
   SetAssetIgnoredInputSchema,
+  SetAssetTrustedInputSchema,
   SetEventCategoriesInputSchema,
   SetGrantInputSchema,
   SetPortfolioDetailsInputSchema,
@@ -362,6 +364,18 @@ const stateReducer: StateReducer<PortfolioPHState> = (
       portfolioCategoriesOperations.clearEventCategoriesOperation(
         state.global,
         action as ClearEventCategoriesAction,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "SET_ASSET_TRUSTED": {
+      memoizedSchema(SetAssetTrustedInputSchema).parse(action.input);
+
+      portfolioCategoriesOperations.setAssetTrustedOperation(
+        state.global,
+        action as SetAssetTrustedAction,
         dispatch,
       );
 

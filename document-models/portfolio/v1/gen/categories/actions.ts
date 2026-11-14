@@ -7,6 +7,7 @@ import type {
   AddCategoryRuleInput,
   ClearEventCategoriesInput,
   RemoveCategoryRuleInput,
+  SetAssetTrustedInput,
   SetEventCategoriesInput,
   UpdateCategoryRuleInput,
 } from "../types.js";
@@ -31,10 +32,15 @@ export type ClearEventCategoriesAction = Action & {
   type: "CLEAR_EVENT_CATEGORIES";
   input: ClearEventCategoriesInput;
 };
+export type SetAssetTrustedAction = Action & {
+  type: "SET_ASSET_TRUSTED";
+  input: SetAssetTrustedInput;
+};
 
 export type PortfolioCategoriesAction =
   | AddCategoryRuleAction
   | UpdateCategoryRuleAction
   | RemoveCategoryRuleAction
   | SetEventCategoriesAction
-  | ClearEventCategoriesAction;
+  | ClearEventCategoriesAction
+  | SetAssetTrustedAction;

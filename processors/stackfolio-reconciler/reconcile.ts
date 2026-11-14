@@ -376,7 +376,12 @@ export async function reconcilePortfolio(
           .map((w) => w.state.address),
       }),
     );
-    specs.push(withdrawalsSpec(staking.id));
+    specs.push(
+      withdrawalsSpec(
+        staking.id,
+        wallets.filter((w) => !w.state.ignored).map((w) => w.id),
+      ),
+    );
   }
   if (hyperliquid) {
     specs.push(hyperliquidSpec(hyperliquid.id));
